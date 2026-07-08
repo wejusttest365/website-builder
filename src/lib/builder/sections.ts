@@ -363,6 +363,41 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   </div>
 </section>`,
   },
+  {
+    id: "button-primary",
+    name: "Primary Button",
+    category: "Buttons",
+    thumbBg: grad("#4f46e5", "#6366f1"),
+    html: `<section class="w-full bg-white"><div class="max-w-4xl mx-auto px-6 py-12 flex justify-center"><a href="#" class="px-6 py-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700">Primary</a></div></section>`,
+  },
+  {
+    id: "button-secondary",
+    name: "Secondary Button",
+    category: "Buttons",
+    thumbBg: grad("#e5e7eb", "#9ca3af"),
+    html: `<section class="w-full bg-white"><div class="max-w-4xl mx-auto px-6 py-12 flex justify-center"><a href="#" class="px-6 py-3 rounded-lg border border-gray-300 text-gray-800 font-medium hover:bg-gray-50">Secondary</a></div></section>`,
+  },
+  {
+    id: "button-gradient",
+    name: "Gradient Button",
+    category: "Buttons",
+    thumbBg: grad("#a855f7", "#ec4899"),
+    html: `<section class="w-full bg-white"><div class="max-w-4xl mx-auto px-6 py-12 flex justify-center"><a href="#" class="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium">Gradient</a></div></section>`,
+  },
+  {
+    id: "button-dark",
+    name: "Dark Button",
+    category: "Buttons",
+    thumbBg: grad("#111827", "#374151"),
+    html: `<section class="w-full bg-white"><div class="max-w-4xl mx-auto px-6 py-12 flex justify-center"><a href="#" class="px-6 py-3 rounded-lg bg-gray-900 text-white font-medium">Dark</a></div></section>`,
+  },
+  {
+    id: "button-outline",
+    name: "Outline Button",
+    category: "Buttons",
+    thumbBg: grad("#6366f1", "#a5b4fc"),
+    html: `<section class="w-full bg-white"><div class="max-w-4xl mx-auto px-6 py-12 flex justify-center"><a href="#" class="px-6 py-3 rounded-lg border-2 border-indigo-600 text-indigo-600 font-medium">Outline</a></div></section>`,
+  },
 
   // CTA
   {

@@ -8,13 +8,53 @@ export const RUNTIME_SCRIPT = `
 (function(){
   const send = (type, payload) => parent.postMessage({ __wto: true, type, payload }, '*');
 
+  // Assign a stable index to every element inside each section so the parent
+  // can address any element (including decorative gradient boxes) by index.
+  function indexAll() {
+    document.querySelectorAll('[data-wto-section]').forEach(sec => {
+      let i = 0;
+      sec.querySelectorAll('*').forEach(el => {
+        el.setAttribute('data-wto-idx', String(i++));
+      });
+    });
+  }
+  indexAll();
+
+  function isBoxLike(el) {
+    if (!el || el.tagName === 'IMG') return false;
+    const cls = el.className && el.className.baseVal !== undefined ? el.className.baseVal : (el.className || '');
+    // Treat elements whose primary purpose looks like a decorative image slot
+    // (gradient, background-image, or empty aspect/rounded box) as image targets.
+    if (/\\bbg-gradient/.test(cls)) return true;
+    if (/\\baspect-\\[?[\\w/.-]+\\]?/.test(cls) && !el.querySelector('img')) return true;
+    const style = el.getAttribute('style') || '';
+    if (/background-image\\s*:/.test(style)) return true;
+    return false;
+  }
+
   function onClick(e) {
     const section = e.target.closest('[data-wto-section]');
     if (!section) return;
     const img = e.target.closest('img');
     if (img) {
       e.preventDefault(); e.stopPropagation();
-      send('image-click', { sectionId: section.dataset.wtoSection, src: img.getAttribute('src') || '' });
+      send('image-click', {
+        sectionId: section.dataset.wtoSection,
+        idx: img.getAttribute('data-wto-idx'),
+        src: img.getAttribute('src') || '',
+        kind: 'img',
+      });
+      return;
+    }
+    const box = e.target.closest('[data-wto-idx]');
+    if (box && isBoxLike(box) && !e.target.closest('a,button,h1,h2,h3,h4,h5,h6,p,li,input,textarea')) {
+      e.preventDefault(); e.stopPropagation();
+      send('image-click', {
+        sectionId: section.dataset.wtoSection,
+        idx: box.getAttribute('data-wto-idx'),
+        src: '',
+        kind: 'box',
+      });
       return;
     }
     if (e.target.closest('a')) e.preventDefault();

@@ -15,18 +15,51 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
   const setSectionHtml = useBuilder((s) => s.setSectionHtml);
   const updateSection = useBuilder((s) => s.updateSection);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [imageEditor, setImageEditor] = useState<{ sectionId: string; src: string } | null>(null);
+  const [imageEditor, setImageEditor] = useState<{
+    sectionId: string;
+    src: string;
+    idx: string | null;
+    kind: "img" | "box";
+  } | null>(null);
+  const skipRebuildRef = useRef(false);
+  const [srcDoc, setSrcDoc] = useState("");
 
-  const srcDoc = useMemo(() => {
+  // Rebuild srcDoc for structural changes OR html changes that did NOT come from
+  // inside the iframe. This prevents scroll jumps while inline-editing text.
+  const structuralKey = useMemo(() => {
     if (!project) return "";
-    return buildPreviewHTML({
-      sections: project.sections,
-      globalCss: project.globalCss,
-      globalJs: project.globalJs,
+    return JSON.stringify({
+      ids: project.sections.map((s) => s.id + ":" + (s.collapsed ? 1 : 0)),
+      styles: project.sections.map((s) => s.style),
+      classes: project.sections.map((s) => s.className),
+      domIds: project.sections.map((s) => s.domId),
+      css: project.globalCss,
+      js: project.globalJs,
       editable,
-      selectedId: null,
     });
   }, [project, editable]);
+  const htmlKey = useMemo(
+    () => project?.sections.map((s) => s.html).join("\u0001") ?? "",
+    [project],
+  );
+
+  useEffect(() => {
+    if (!project) return;
+    if (skipRebuildRef.current) {
+      skipRebuildRef.current = false;
+      return;
+    }
+    setSrcDoc(
+      buildPreviewHTML({
+        sections: project.sections,
+        globalCss: project.globalCss,
+        globalJs: project.globalJs,
+        editable,
+        selectedId: null,
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [structuralKey, htmlKey]);
 
   useEffect(() => {
     const doc = iframeRef.current?.contentDocument;
@@ -43,12 +76,17 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
       const data = e.data as { __wto?: boolean; type?: string; payload?: Record<string, unknown> };
       if (!data || !data.__wto) return;
       if (data.type === "select") select(String(data.payload?.sectionId ?? ""));
-      if (data.type === "section-html")
+      if (data.type === "section-html") {
+        // Iframe already has the updated DOM — skip srcDoc rebuild to preserve scroll.
+        skipRebuildRef.current = true;
         setSectionHtml(String(data.payload?.sectionId ?? ""), String(data.payload?.html ?? ""));
+      }
       if (data.type === "image-click")
         setImageEditor({
           sectionId: String(data.payload?.sectionId ?? ""),
           src: String(data.payload?.src ?? ""),
+          idx: data.payload?.idx != null ? String(data.payload.idx) : null,
+          kind: (data.payload?.kind as "img" | "box") ?? "img",
         });
       if (data.type === "console") {
         window.dispatchEvent(new CustomEvent("wto-console", { detail: data.payload }));
@@ -81,10 +119,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
             if (!project) return;
             const section = project.sections.find((s) => s.id === imageEditor.sectionId);
             if (!section) return;
-            const nextHtml = section.html.replace(
-              new RegExp(`(src=["'])${escapeRegExp(imageEditor.src)}(["'])`),
-              `$1${newSrc}$2`,
-            );
+            const nextHtml = replaceImageAt(section.html, imageEditor, newSrc);
             updateSection(section.id, { html: nextHtml });
             setImageEditor(null);
           }}
@@ -92,10 +127,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
             if (!project) return;
             const section = project.sections.find((s) => s.id === imageEditor.sectionId);
             if (!section) return;
-            const nextHtml = section.html.replace(
-              new RegExp(`<img[^>]*src=["']${escapeRegExp(imageEditor.src)}["'][^>]*>`),
-              "",
-            );
+            const nextHtml = removeImageAt(section.html, imageEditor);
             updateSection(section.id, { html: nextHtml });
             setImageEditor(null);
           }}
@@ -105,8 +137,86 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
   );
 }
 
-function escapeRegExp(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function findByIdx(root: ParentNode, idx: string): Element | null {
+  return root.querySelector(`[data-wto-idx="${CSS.escape(idx)}"]`);
+}
+
+function parseSection(html: string) {
+  return new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+}
+
+// Strip gradient / background color utility classes so the replacement image
+// isn't tinted; keep sizing / rounding / aspect classes.
+function cleanGradientClasses(cls: string) {
+  return cls
+    .split(/\s+/)
+    .filter(
+      (c) =>
+        !/^bg-gradient/.test(c) &&
+        !/^from-/.test(c) &&
+        !/^via-/.test(c) &&
+        !/^to-/.test(c) &&
+        !/^bg-\[/.test(c),
+    )
+    .join(" ");
+}
+
+function replaceImageAt(
+  html: string,
+  target: { idx: string | null; src: string; kind: "img" | "box" },
+  newSrc: string,
+): string {
+  const doc = parseSection(html);
+  let el: Element | null = null;
+  if (target.idx) el = findByIdx(doc.body, target.idx);
+  if (!el && target.src && target.kind === "img") {
+    el = doc.body.querySelector(`img[src="${cssAttr(target.src)}"]`);
+  }
+  if (!el) return html;
+
+  if (el.tagName === "IMG") {
+    el.setAttribute("src", newSrc);
+  } else {
+    // Convert decorative box → <img> while preserving sizing/rounding classes.
+    const img = doc.createElement("img");
+    const cls = cleanGradientClasses(el.getAttribute("class") ?? "");
+    img.setAttribute("class", (cls + " object-cover w-full h-full").trim());
+    img.setAttribute("src", newSrc);
+    img.setAttribute("alt", "");
+    // Wrap the img in a container that preserves original box sizing.
+    const wrapper = doc.createElement("div");
+    wrapper.setAttribute("class", el.getAttribute("class") ?? "");
+    wrapper.setAttribute("style", (el.getAttribute("style") ?? "") + ";overflow:hidden");
+    wrapper.appendChild(img);
+    el.replaceWith(wrapper);
+  }
+  return doc.body.innerHTML;
+}
+
+function removeImageAt(
+  html: string,
+  target: { idx: string | null; src: string; kind: "img" | "box" },
+): string {
+  const doc = parseSection(html);
+  let el: Element | null = null;
+  if (target.idx) el = findByIdx(doc.body, target.idx);
+  if (!el && target.src && target.kind === "img") {
+    el = doc.body.querySelector(`img[src="${cssAttr(target.src)}"]`);
+  }
+  if (!el) return html;
+  if (el.tagName === "IMG") {
+    el.remove();
+  } else {
+    // Reset a box back to a neutral gradient placeholder.
+    const cls = cleanGradientClasses(el.getAttribute("class") ?? "");
+    el.setAttribute("class", (cls + " bg-gradient-to-br from-slate-300 to-slate-500").trim());
+    el.innerHTML = "";
+  }
+  return doc.body.innerHTML;
+}
+
+function cssAttr(s: string) {
+  return s.replace(/"/g, '\\"');
 }
 
 function ImageEditorModal({

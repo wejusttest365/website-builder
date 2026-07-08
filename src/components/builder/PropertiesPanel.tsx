@@ -1,5 +1,5 @@
 import { useBuilder } from "@/lib/builder/store";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Copy } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function PropertiesPanel() {
@@ -22,6 +22,8 @@ export function PropertiesPanel() {
   const style = section.style ?? {};
   const textItems = getEditableTextItems(section.html);
   const menuItems = getMenuItems(section.html);
+  const linkItems = getLinkItems(section.html);
+  const repeater = getRepeater(section.html);
 
   const set = (k: string, v: string) => {
     const next = { ...style };
@@ -86,6 +88,131 @@ export function PropertiesPanel() {
               >
                 <Plus className="h-3.5 w-3.5" /> Add menu item
               </button>
+            </div>
+          </Group>
+        )}
+
+        {repeater && repeater.items.length > 1 && (
+          <Group title={`Items (${repeater.items.length})`}>
+            <div className="space-y-3">
+              {repeater.items.map((it, i) => (
+                <div key={i} className="rounded-md border border-input p-2 space-y-1.5 bg-background">
+                  <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                    <span>Item {i + 1}</span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        title="Duplicate"
+                        className="p-1 hover:bg-accent rounded"
+                        onClick={() => {
+                          updateHtml(duplicateRepeaterItem(section.html, i));
+                          pushHistory();
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete"
+                        disabled={repeater.items.length <= 1}
+                        className="p-1 hover:bg-destructive/10 text-destructive rounded disabled:opacity-30"
+                        onClick={() => {
+                          updateHtml(removeRepeaterItem(section.html, i));
+                          pushHistory();
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    className={inputCls}
+                    placeholder="Image URL"
+                    value={it.image}
+                    onChange={(e) => updateHtml(setRepeaterItemImage(section.html, i, e.target.value))}
+                    onBlur={pushHistory}
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="block w-full text-xs"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      const r = new FileReader();
+                      r.onload = () => {
+                        updateHtml(setRepeaterItemImage(section.html, i, String(r.result)));
+                        pushHistory();
+                      };
+                      r.readAsDataURL(f);
+                    }}
+                  />
+                  {it.hasTitle && (
+                    <input
+                      className={inputCls}
+                      placeholder="Title"
+                      value={it.title}
+                      onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "title", e.target.value))}
+                      onBlur={pushHistory}
+                    />
+                  )}
+                  {it.hasBody && (
+                    <textarea
+                      className={inputCls}
+                      rows={2}
+                      placeholder="Body"
+                      value={it.body}
+                      onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "body", e.target.value))}
+                      onBlur={pushHistory}
+                    />
+                  )}
+                  {it.hasLink && (
+                    <input
+                      className={inputCls}
+                      placeholder="Link URL"
+                      value={it.href}
+                      onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "href", e.target.value))}
+                      onBlur={pushHistory}
+                    />
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-xs font-medium hover:bg-accent"
+                onClick={() => {
+                  updateHtml(addRepeaterItem(section.html));
+                  pushHistory();
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add item
+              </button>
+            </div>
+          </Group>
+        )}
+
+        {linkItems.length > 0 && (
+          <Group title="Links & Buttons">
+            <div className="space-y-2">
+              {linkItems.map((item, index) => (
+                <div key={index} className="grid grid-cols-[1fr_1fr] gap-1.5">
+                  <input
+                    className={inputCls}
+                    value={item.text}
+                    aria-label={`Link ${index + 1} label`}
+                    onChange={(e) => updateHtml(updateLinkItem(section.html, index, { text: e.target.value }))}
+                    onBlur={pushHistory}
+                  />
+                  <input
+                    className={inputCls}
+                    value={item.href}
+                    aria-label={`Link ${index + 1} URL`}
+                    placeholder="https://…"
+                    onChange={(e) => updateHtml(updateLinkItem(section.html, index, { href: e.target.value }))}
+                    onBlur={pushHistory}
+                  />
+                </div>
+              ))}
             </div>
           </Group>
         )}
@@ -336,4 +463,224 @@ function labelForElement(el: HTMLElement) {
   if (tag === "a") return "Link";
   if (tag === "button") return "Button";
   return "Text";
+}
+
+// ------------------------ Links & Buttons ------------------------
+
+function getLinkItems(html: string): MenuItem[] {
+  const doc = parseHtml(html);
+  if (!doc) return [];
+  return Array.from(doc.body.querySelectorAll<HTMLElement>("a, button")).map((el) => ({
+    text: (el.textContent ?? "").replace(/\s+/g, " ").trim(),
+    href:
+      el.tagName === "A"
+        ? el.getAttribute("href") ?? "#"
+        : el.getAttribute("data-href") ?? "",
+  }));
+}
+
+function updateLinkItem(html: string, index: number, patch: Partial<MenuItem>) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const items = Array.from(doc.body.querySelectorAll<HTMLElement>("a, button"));
+  const el = items[index];
+  if (!el) return html;
+  if (patch.text !== undefined) el.textContent = patch.text;
+  if (patch.href !== undefined) {
+    if (el.tagName === "A") el.setAttribute("href", patch.href || "#");
+    else el.setAttribute("data-href", patch.href);
+  }
+  return serialize(doc);
+}
+
+// ------------------------ Repeater ------------------------
+
+type RepeaterItem = {
+  image: string;
+  title: string;
+  body: string;
+  href: string;
+  hasTitle: boolean;
+  hasBody: boolean;
+  hasLink: boolean;
+};
+
+// Path from doc.body → target element as array of child indexes.
+function pathTo(el: Element, root: Element): number[] {
+  const p: number[] = [];
+  let cur: Element | null = el;
+  while (cur && cur !== root) {
+    const parentEl: Element | null = cur.parentElement;
+    if (!parentEl) break;
+    p.unshift(Array.from(parentEl.children).indexOf(cur));
+    cur = parentEl;
+  }
+  return p;
+}
+
+function nodeAtPath(root: Element, path: number[]): Element | null {
+  let cur: Element | null = root;
+  for (const i of path) {
+    if (!cur) return null;
+    cur = cur.children[i] ?? null;
+  }
+  return cur;
+}
+
+// Find the "best" repeating container: element with the most direct children
+// that share the same tag (>=2). Prefer non-<ul>/<ol> (those are menu items).
+function findRepeater(doc: Document): { container: Element; path: number[] } | null {
+  const all = Array.from(doc.body.querySelectorAll("*"));
+  let best: { el: Element; count: number; score: number } | null = null;
+  for (const el of all) {
+    const kids = Array.from(el.children);
+    if (kids.length < 2) continue;
+    const firstTag = kids[0].tagName;
+    const same = kids.every((k) => k.tagName === firstTag);
+    if (!same) continue;
+    // Skip navigation lists — those are handled by "Menu Items".
+    if (el.tagName === "UL" || el.tagName === "OL") continue;
+    // Prefer containers that look like grids/columns/space-y or where
+    // children are non-inline blocks.
+    const cls = el.getAttribute("class") ?? "";
+    let score = kids.length;
+    if (/grid|columns-|space-y|flex/.test(cls)) score += 10;
+    if (firstTag === "DETAILS" || firstTag === "ARTICLE") score += 20;
+    if (!best || score > best.score) best = { el, count: kids.length, score };
+  }
+  if (!best) return null;
+  return { container: best.el, path: pathTo(best.el, doc.body) };
+}
+
+function describeItem(item: Element): RepeaterItem {
+  const img = item.querySelector("img");
+  const box = !img
+    ? (Array.from(item.querySelectorAll<HTMLElement>("*")).find((e) =>
+        /bg-gradient/.test(e.className),
+      ) ?? null)
+    : null;
+  const heading = item.querySelector("h1,h2,h3,h4,h5,h6,summary,strong,.font-bold");
+  const bodyEl = item.querySelector("p");
+  const link = item.querySelector("a");
+  return {
+    image: img?.getAttribute("src") ?? "",
+    title: (heading?.textContent ?? "").replace(/\s+/g, " ").trim(),
+    body: (bodyEl?.textContent ?? "").replace(/\s+/g, " ").trim(),
+    href: link?.getAttribute("href") ?? "",
+    hasTitle: !!heading,
+    hasBody: !!bodyEl,
+    hasLink: !!link,
+    // Track box for image swap logic (not returned in type but used indirectly).
+    ...(box ? {} : {}),
+  };
+}
+
+function getRepeater(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return null;
+  const info = findRepeater(doc);
+  if (!info) return null;
+  const items = Array.from(info.container.children).map((c) => describeItem(c));
+  return { path: info.path, items };
+}
+
+function withRepeater(
+  html: string,
+  fn: (doc: Document, container: Element) => void,
+): string {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const info = findRepeater(doc);
+  if (!info) return html;
+  const container = nodeAtPath(doc.body, info.path);
+  if (!container) return html;
+  fn(doc, container);
+  return serialize(doc);
+}
+
+function setRepeaterItemImage(html: string, index: number, src: string) {
+  return withRepeater(html, (doc, container) => {
+    const item = container.children[index];
+    if (!item) return;
+    const existing = item.querySelector("img");
+    if (existing) {
+      if (src) existing.setAttribute("src", src);
+      else existing.remove();
+      return;
+    }
+    // Find first gradient/decorative box and convert it to an <img>.
+    const box = Array.from(item.querySelectorAll<HTMLElement>("*")).find((e) =>
+      /bg-gradient|aspect-/.test(e.className),
+    );
+    const target: Element = box ?? item;
+    if (!src) return;
+    const img = doc.createElement("img");
+    const cls = (target.getAttribute("class") ?? "")
+      .split(/\s+/)
+      .filter(
+        (c) =>
+          !/^bg-gradient/.test(c) &&
+          !/^from-/.test(c) &&
+          !/^via-/.test(c) &&
+          !/^to-/.test(c),
+      )
+      .join(" ");
+    img.setAttribute("class", (cls + " object-cover w-full h-full").trim());
+    img.setAttribute("src", src);
+    img.setAttribute("alt", "");
+    const wrapper = doc.createElement("div");
+    wrapper.setAttribute("class", target.getAttribute("class") ?? "");
+    wrapper.setAttribute("style", "overflow:hidden");
+    wrapper.appendChild(img);
+    target.replaceWith(wrapper);
+  });
+}
+
+function setRepeaterItemField(
+  html: string,
+  index: number,
+  field: "title" | "body" | "href",
+  value: string,
+) {
+  return withRepeater(html, (_doc, container) => {
+    const item = container.children[index];
+    if (!item) return;
+    if (field === "title") {
+      const el = item.querySelector("h1,h2,h3,h4,h5,h6,summary,strong,.font-bold");
+      if (el) el.textContent = value;
+    } else if (field === "body") {
+      const el = item.querySelector("p");
+      if (el) el.textContent = value;
+    } else if (field === "href") {
+      const el = item.querySelector("a");
+      if (el) el.setAttribute("href", value || "#");
+    }
+  });
+}
+
+function duplicateRepeaterItem(html: string, index: number) {
+  return withRepeater(html, (_doc, container) => {
+    const item = container.children[index];
+    if (!item) return;
+    const clone = item.cloneNode(true) as Element;
+    if (item.nextSibling) container.insertBefore(clone, item.nextSibling);
+    else container.appendChild(clone);
+  });
+}
+
+function removeRepeaterItem(html: string, index: number) {
+  return withRepeater(html, (_doc, container) => {
+    if (container.children.length <= 1) return;
+    const item = container.children[index];
+    if (item) item.remove();
+  });
+}
+
+function addRepeaterItem(html: string) {
+  return withRepeater(html, (_doc, container) => {
+    const last = container.children[container.children.length - 1];
+    if (!last) return;
+    const clone = last.cloneNode(true) as Element;
+    container.appendChild(clone);
+  });
 }

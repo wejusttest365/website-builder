@@ -1,64 +1,65 @@
+# Builder deep-edit overhaul
 
-This is a very large product (roughly a small Webflow/Elementor clone). To ship something solid rather than a shallow demo of everything, I'll build it in focused phases. Phase 1 will already be a usable builder; later phases layer polish.
+Nine related issues all come down to three underlying gaps in the current
+builder:
 
-## Phase 1 — Core builder (this build)
+- The iframe fully reloads on every text edit (scroll jumps to top, #5).
+- Only real `<img>` tags open the image editor, so decorative gradient boxes
+  in Gallery/Portfolio/Blog/Team/Services can't get images (#2, #6, #7, #8).
+- The Properties panel exposes text but has no add/remove for repeating items
+  (FAQ, blog posts, team members, portfolio items, services, #4, #6, #7, #8, #9)
+  and no `href` control for buttons/links (#1). The Button Showcase is one
+  section, so buttons can't be selected individually (#1).
 
-Layout
-- Full-viewport 4-pane shell: left sidebar, center canvas, right properties panel, bottom code editor. Resizable dividers, light/dark mode.
-- Top toolbar: logo, project name, New, Save, Undo, Redo, Desktop/Tablet/Mobile toggle, Preview, Export menu, Settings.
+## What I'll change
 
-Left Sidebar — Section Library
-- ~20 categories (Navigation, Hero, About, Features, Services, Portfolio, Gallery, Pricing, Testimonials, FAQ, Team, Contact, Footer, Cards, Forms, Buttons, CTA, Blog, Login, Signup).
-- Seeded with 2–3 ready-made HTML sections per category (Tailwind-based markup) so the builder is usable immediately. Each item: thumbnail, title, drag handle, copy, preview.
-- Search bar filters across categories.
+1. **Stop the scroll jump (#5)** — `PreviewFrame`
+   - Compute `srcDoc` only when structural things change (sections added /
+     removed / reordered / collapsed, style / class / id / global CSS/JS, or
+     an HTML change that did NOT come from the iframe itself).
+   - Track the last html we sent up from the iframe in a ref; when
+     `setSectionHtml` fires from inside, skip re-generating `srcDoc` so the
+     iframe keeps its scroll position and DOM.
 
-Center Canvas
-- Iframe-based preview so section CSS/JS is sandboxed.
-- Drag from library, drop between sections, reorder (dnd-kit), duplicate, delete, collapse/expand, select.
-- Device frame switch (Desktop 100%, Tablet 768, Mobile 390).
+2. **Color-box images (#2, #6, #7, #8, #9)** — `preview.ts` runtime + `PreviewFrame`
+   - In the iframe runtime, also treat clicks on "decorative" boxes
+     (elements whose classes include `bg-gradient`, `bg-` color, or fixed
+     aspect / rounded box shapes with no children) as image-target clicks:
+     send `image-click` with the element's outer selector so the parent can
+     replace it with an `<img>`.
+   - Image editor: when applying, if there was no `src` (decorative box),
+     convert that element into `<img src="…" class="… object-cover">` while
+     preserving sizing/rounding classes. Remove clears back to a gradient.
 
-Inline editing
-- Click headings, paragraphs, buttons, links inside the iframe to edit text in place (contentEditable bridge, writes back to section HTML).
+3. **Per-item editing + add/remove (#4, #6, #7, #8, #9)** — `PropertiesPanel`
+   - Add a generic "Items" repeater that detects repeating children of the
+     section (grid/columns/`space-y` container's direct children, `<details>`
+     for FAQ, `<article>` for Blog, testimonial/team/service/portfolio cards).
+   - For each item show: image URL (with upload), heading, subtext, link href
+     (if it contains an `<a>`), Duplicate, Delete. Plus an "Add item" button
+     that clones the last one.
 
-Image editing
-- Click an image → modal with Upload (file → data URL), Paste URL, Replace, Resize (width/height), Remove.
+4. **Buttons — individual editing + href (#1)**
+   - Split "Button Showcase" into 5 separate single-button sections under
+     Buttons (Primary, Secondary, Gradient, Dark, Outline) so each is its
+     own selectable section.
+   - In Properties, add a "Links & Buttons" group listing every `<a>` /
+     `<button>` in the section with a label + `href` input (buttons get a
+     `data-href` that the runtime turns into navigation).
 
-Right Properties Panel
-- Per-selected-section: background color, background image, padding, margin, border radius, shadow, width, height, text align, font family, font size, line height, section ID, custom class. Applied as inline styles / classes on the section wrapper.
-
-Bottom Code Editor
-- Monaco with tabs: HTML (current page composed markup, read-only reflection + editable override), CSS (global), JS (global), Console (captures iframe console.*).
-- Live update on change (debounced), no refresh.
-
-Export
-- Copy HTML / CSS / JS / Complete Website; Download HTML; Download ZIP (jszip) with index.html + style.css + script.js.
-
-Projects
-- LocalStorage-backed. Create, rename, duplicate, delete, save, load, autosave (debounced).
-
-Undo/Redo
-- History stack of page state; Ctrl+Z / Ctrl+Y.
-
-Preview mode
-- "Preview" opens `/preview/:projectId` in a new tab rendering only the composed site.
-
-Live share
-- `/demo/:projectId` route reads from LocalStorage and renders the site clean.
-
-Design
-- Clean modern UI: rounded cards, soft shadows, light gray canvas bg, white panels, Lucide icons (Bootstrap Icons not in stack — swap to Lucide for consistency), Tailwind v4 tokens, dark mode.
-
-## Phase 2 (not in this build, follow-ups)
-- Crop image tool, richer typography controls, per-element (not just per-section) property editing, publishing beyond localStorage, AI section generation, cloud sync, templates, user accounts.
+5. **Everything editable (#3)** — small polish
+   - Runtime already makes text contenteditable on dblclick; extend to allow
+     single-click selection of decorative boxes so they show up in Properties
+     and can be swapped to an image via the modal (covered by #2 above).
 
 ## Technical notes
-- Stack: existing TanStack Start + React + TS + Tailwind v4. dnd-kit, Monaco (`@monaco-editor/react`), jszip, nanoid.
-- Preview iframe uses `srcdoc` rebuilt from `{sections[], globalCss, globalJs}`; a small runtime script inside handles selection, inline text edits, image clicks via `postMessage` to the parent.
-- All builder state in a Zustand store with history middleware.
-- Routes: `/` (redirect to `/builder`), `/builder`, `/preview/$projectId`, `/demo/$projectId`.
-- Since LocalStorage is per-browser, "Live Share" links only work in the same browser — I'll note this in the UI. True shareable links require Lovable Cloud (can add later).
 
-## What I need from you
-1. Confirm Phase 1 scope above (or tell me what to drop / add first).
-2. Bootstrap Icons isn't in the stack — OK to use Lucide icons throughout for a consistent modern look?
-3. OK that Live Share is local-browser only for now, with a follow-up to add Cloud-backed sharing?
+- Files touched: `src/lib/builder/preview.ts`,
+  `src/components/builder/PreviewFrame.tsx`,
+  `src/components/builder/PropertiesPanel.tsx`,
+  `src/lib/builder/sections.ts` (button split only).
+- No store schema changes — repeater edits just rewrite `section.html` via
+  the existing `updateSection`/`setSectionHtml` path.
+- No backend / data changes.
+
+Approve and I'll implement all five in one pass.
