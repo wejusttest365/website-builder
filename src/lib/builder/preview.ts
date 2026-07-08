@@ -192,17 +192,22 @@ export function buildExportBundle(opts: {
   globalCss: string;
   globalJs: string;
   title?: string;
+  assets?: Record<string, string>;
+  // When true, `images/…` paths are inlined as data URLs so the resulting
+  // single-file HTML is fully self-contained (used by preview/demo iframes).
+  inlineAssets?: boolean;
 }) {
-  const { sections, globalCss, globalJs, title = "My Website" } = opts;
+  const { sections, globalCss, globalJs, title = "My Website", assets, inlineAssets } = opts;
   const body = sections
     .map((s) => {
       const styleStr = styleToString(s.style);
-      return applyRootAttributes(s.html, {
+      const raw = applyRootAttributes(s.html, {
         className: s.className,
         domId: s.domId,
         style: styleStr,
         fallbackTag: "section",
       });
+      return inlineAssets ? resolveAssetPaths(raw, assets) : raw;
     })
     .join("\n");
 
@@ -231,7 +236,7 @@ ${body}
 <style>${globalCss}</style>
 </head>
 <body>
-${body}
+${inlineAssets ? body : resolveAssetPaths(body, assets)}
 <script>${globalJs}</script>
 </body>
 </html>`;
