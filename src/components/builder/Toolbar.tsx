@@ -86,6 +86,12 @@ ${bundle.body}
     zip.file("index.html", indexHtml);
     zip.file("style.css", bundle.css);
     zip.file("script.js", bundle.js);
+    // Write each uploaded image into the `images/` folder so the exported
+    // site can reference them via simple `images/<filename>` paths.
+    for (const [name, dataUrl] of Object.entries(project.assets ?? {})) {
+      const m = /^data:[^;]+;base64,(.*)$/.exec(dataUrl);
+      if (m) zip.file(`images/${name}`, m[1], { base64: true });
+    }
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
