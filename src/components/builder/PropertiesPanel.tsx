@@ -7,6 +7,7 @@ export function PropertiesPanel() {
   const selectedId = useBuilder((s) => s.selectedSectionId);
   const updateSection = useBuilder((s) => s.updateSection);
   const pushHistory = useBuilder((s) => s.pushHistory);
+  const addAsset = useBuilder((s) => s.addAsset);
 
   const section = project?.sections.find((s) => s.id === selectedId) ?? null;
 
@@ -20,10 +21,13 @@ export function PropertiesPanel() {
   }
 
   const style = section.style ?? {};
+  const isFooter = /^\s*<footer\b/i.test(section.html);
   const textItems = getEditableTextItems(section.html);
-  const menuItems = getMenuItems(section.html);
+  const menuItems = isFooter ? [] : getMenuItems(section.html);
   const linkItems = getLinkItems(section.html);
-  const repeater = getRepeater(section.html);
+  const repeater = isFooter ? null : getRepeater(section.html);
+  const footerCols = isFooter ? getFooterColumns(section.html) : [];
+  const assets = project?.assets;
 
   const set = (k: string, v: string) => {
     const next = { ...style };
@@ -46,6 +50,93 @@ export function PropertiesPanel() {
         />
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-5 text-sm">
+        {isFooter && (
+          <Group title={`Footer Columns (${footerCols.length})`}>
+            <div className="space-y-3">
+              {footerCols.map((col, ci) => (
+                <div key={ci} className="rounded-md border border-input p-2 space-y-1.5 bg-background">
+                  <div className="flex items-center justify-between gap-2">
+                    <input
+                      className={inputCls}
+                      value={col.heading}
+                      placeholder="Column heading"
+                      onChange={(e) => updateHtml(setFooterColumnHeading(section.html, ci, e.target.value))}
+                      onBlur={pushHistory}
+                    />
+                    <button
+                      type="button"
+                      title="Delete column"
+                      className="p-1.5 hover:bg-destructive/10 text-destructive rounded disabled:opacity-30"
+                      disabled={footerCols.length <= 1}
+                      onClick={() => {
+                        updateHtml(removeFooterColumn(section.html, ci));
+                        pushHistory();
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    {col.items.map((it, ii) => (
+                      <div key={ii} className="grid grid-cols-[1fr_1fr_28px] gap-1.5">
+                        <input
+                          className={inputCls}
+                          value={it.text}
+                          placeholder="Label"
+                          onChange={(e) =>
+                            updateHtml(updateFooterColumnItem(section.html, ci, ii, { text: e.target.value }))
+                          }
+                          onBlur={pushHistory}
+                        />
+                        <input
+                          className={inputCls}
+                          value={it.href}
+                          placeholder="#"
+                          onChange={(e) =>
+                            updateHtml(updateFooterColumnItem(section.html, ci, ii, { href: e.target.value }))
+                          }
+                          onBlur={pushHistory}
+                        />
+                        <button
+                          type="button"
+                          className="inline-flex h-8 items-center justify-center rounded-md border border-input text-destructive hover:bg-destructive/10"
+                          title="Remove item"
+                          onClick={() => {
+                            updateHtml(removeFooterColumnItem(section.html, ci, ii));
+                            pushHistory();
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-input bg-background text-[11px] font-medium hover:bg-accent"
+                      onClick={() => {
+                        updateHtml(addFooterColumnItem(section.html, ci));
+                        pushHistory();
+                      }}
+                    >
+                      <Plus className="h-3 w-3" /> Add menu item
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-xs font-medium hover:bg-accent"
+                onClick={() => {
+                  updateHtml(addFooterColumn(section.html));
+                  pushHistory();
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" /> Add column
+              </button>
+            </div>
+          </Group>
+        )}
+
         {menuItems.length > 0 && (
           <Group title="Menu Items">
             <div className="space-y-2">
@@ -141,7 +232,8 @@ export function PropertiesPanel() {
                       if (!f) return;
                       const r = new FileReader();
                       r.onload = () => {
-                        updateHtml(setRepeaterItemImage(section.html, i, String(r.result)));
+                        const path = addAsset(String(r.result), f.name.split(".").pop());
+                        updateHtml(setRepeaterItemImage(section.html, i, path));
                         pushHistory();
                       };
                       r.readAsDataURL(f);
@@ -248,6 +340,34 @@ export function PropertiesPanel() {
               onChange={(e) => set("background-image", e.target.value ? `url("${e.target.value}")` : "")}
               onBlur={pushHistory}
               placeholder="https://…"
+            />
+          </Field>
+          <Field label="Upload">
+            <input
+              type="file"
+              accept="image/*"
+              className="block w-full text-xs"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const r = new FileReader();
+                r.onload = () => {
+                  const path = addAsset(String(r.result), f.name.split(".").pop());
+                  set("background-image", `url("${path}")`);
+                  pushHistory();
+                };
+                r.readAsDataURL(f);
+              }}
+            />
+          </Field>
+        </Group>
+
+        <Group title="Text">
+          <Field label="Text color">
+            <ColorInput
+              value={style["color"] ?? ""}
+              onChange={(v) => set("color", v)}
+              onBlur={pushHistory}
             />
           </Field>
         </Group>
@@ -682,5 +802,155 @@ function addRepeaterItem(html: string) {
     if (!last) return;
     const clone = last.cloneNode(true) as Element;
     container.appendChild(clone);
+  });
+}
+
+// ------------------------ Footer Columns ------------------------
+
+type FooterCol = { heading: string; items: MenuItem[] };
+
+function getFooterGrid(doc: Document): Element | null {
+  const footer = doc.body.querySelector("footer");
+  if (!footer) return null;
+  // The column grid is the descendant with the most direct <div> children
+  // that each contain an <h4>/<h3> or a <ul>.
+  const all = Array.from(footer.querySelectorAll("*"));
+  let best: { el: Element; score: number } | null = null;
+  for (const el of all) {
+    const kids = Array.from(el.children).filter((c) => c.tagName === "DIV");
+    if (kids.length < 2) continue;
+    const cls = el.getAttribute("class") ?? "";
+    const looksLikeGrid = /grid|flex/.test(cls);
+    if (!looksLikeGrid) continue;
+    const score = kids.length + (/grid-cols/.test(cls) ? 5 : 0);
+    if (!best || score > best.score) best = { el, score };
+  }
+  return best?.el ?? null;
+}
+
+function columnsOf(grid: Element): Element[] {
+  return Array.from(grid.children).filter((c) => c.tagName === "DIV");
+}
+
+function updateGridColCount(grid: Element, count: number) {
+  const cls = (grid.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
+  const next = cls
+    .filter((c) => !/^(md:|lg:|sm:)?grid-cols-\d+$/.test(c))
+    .concat([`md:grid-cols-${Math.max(1, Math.min(6, count))}`]);
+  grid.setAttribute("class", next.join(" "));
+}
+
+function getFooterColumns(html: string): FooterCol[] {
+  const doc = parseHtml(html);
+  if (!doc) return [];
+  const grid = getFooterGrid(doc);
+  if (!grid) return [];
+  return columnsOf(grid).map((col) => {
+    const h = col.querySelector("h1,h2,h3,h4,h5,h6");
+    const links = Array.from(col.querySelectorAll<HTMLAnchorElement>("ul li a"));
+    return {
+      heading: (h?.textContent ?? "").trim(),
+      items: links.map((a) => ({
+        text: (a.textContent ?? "").trim(),
+        href: a.getAttribute("href") ?? "#",
+      })),
+    };
+  });
+}
+
+function withFooterGrid(html: string, fn: (doc: Document, grid: Element) => void): string {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const grid = getFooterGrid(doc);
+  if (!grid) return html;
+  fn(doc, grid);
+  return serialize(doc);
+}
+
+function setFooterColumnHeading(html: string, ci: number, value: string) {
+  return withFooterGrid(html, (_doc, grid) => {
+    const col = columnsOf(grid)[ci];
+    if (!col) return;
+    let h = col.querySelector("h1,h2,h3,h4,h5,h6");
+    if (!h) {
+      h = _doc.createElement("h4");
+      h.setAttribute("class", "font-semibold text-white");
+      col.insertBefore(h, col.firstChild);
+    }
+    h.textContent = value;
+  });
+}
+
+function updateFooterColumnItem(html: string, ci: number, ii: number, patch: Partial<MenuItem>) {
+  return withFooterGrid(html, (_doc, grid) => {
+    const col = columnsOf(grid)[ci];
+    if (!col) return;
+    const link = col.querySelectorAll<HTMLAnchorElement>("ul li a")[ii];
+    if (!link) return;
+    if (patch.text !== undefined) link.textContent = patch.text;
+    if (patch.href !== undefined) link.setAttribute("href", patch.href || "#");
+  });
+}
+
+function removeFooterColumnItem(html: string, ci: number, ii: number) {
+  return withFooterGrid(html, (_doc, grid) => {
+    const col = columnsOf(grid)[ci];
+    if (!col) return;
+    const link = col.querySelectorAll<HTMLAnchorElement>("ul li a")[ii];
+    const li = link?.closest("li");
+    if (li) li.remove();
+  });
+}
+
+function addFooterColumnItem(html: string, ci: number) {
+  return withFooterGrid(html, (doc, grid) => {
+    const col = columnsOf(grid)[ci];
+    if (!col) return;
+    let ul = col.querySelector("ul");
+    if (!ul) {
+      ul = doc.createElement("ul");
+      ul.setAttribute("class", "mt-3 space-y-2 text-sm");
+      col.appendChild(ul);
+    }
+    const sample = ul.querySelector("li a");
+    const linkClass = sample?.getAttribute("class") ?? "hover:text-white";
+    const li = doc.createElement("li");
+    const a = doc.createElement("a");
+    a.setAttribute("href", "#");
+    a.setAttribute("class", linkClass);
+    a.textContent = "New Link";
+    li.appendChild(a);
+    ul.appendChild(li);
+  });
+}
+
+function removeFooterColumn(html: string, ci: number) {
+  return withFooterGrid(html, (_doc, grid) => {
+    const cols = columnsOf(grid);
+    if (cols.length <= 1) return;
+    cols[ci]?.remove();
+    updateGridColCount(grid, columnsOf(grid).length);
+  });
+}
+
+function addFooterColumn(html: string) {
+  return withFooterGrid(html, (doc, grid) => {
+    const cols = columnsOf(grid);
+    // Prefer cloning a column that has heading + ul; fall back to last.
+    const template =
+      cols.find((c) => c.querySelector("ul") && c.querySelector("h1,h2,h3,h4,h5,h6")) ??
+      cols[cols.length - 1];
+    if (!template) {
+      const div = doc.createElement("div");
+      div.innerHTML =
+        '<h4 class="font-semibold text-white">New Category</h4><ul class="mt-3 space-y-2 text-sm"><li><a href="#" class="hover:text-white">Link</a></li></ul>';
+      grid.appendChild(div);
+    } else {
+      const clone = template.cloneNode(true) as Element;
+      const h = clone.querySelector("h1,h2,h3,h4,h5,h6");
+      if (h) h.textContent = "New Category";
+      grid.appendChild(clone);
+    }
+    updateGridColCount(grid, columnsOf(grid).length);
   });
 }

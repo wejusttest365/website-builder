@@ -1,5 +1,20 @@
 import type { PageSection } from "./store";
 
+// Rewrite `images/<filename>` references (src, href, url(...)) to data URLs
+// from the project assets map, so the preview iframe and self-contained
+// export can render locally-uploaded images.
+export function resolveAssetPaths(html: string, assets?: Record<string, string>) {
+  if (!assets) return html;
+  let out = html;
+  for (const [name, data] of Object.entries(assets)) {
+    const path = `images/${name}`;
+    // Escape regex specials in filename.
+    const esc = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp(esc, "g"), data);
+  }
+  return out;
+}
+
 // Runtime script injected into preview iframe.
 // - Wraps each section as [data-wto-section="id"]
 // - Handles click to select, dblclick to edit text, image click for image modal
@@ -121,8 +136,9 @@ export function buildPreviewHTML(opts: {
   globalJs: string;
   editable: boolean;
   selectedId?: string | null;
+  assets?: Record<string, string>;
 }) {
-  const { sections, globalCss, globalJs, editable, selectedId } = opts;
+  const { sections, globalCss, globalJs, editable, selectedId, assets } = opts;
 
   const sectionHTML = sections
     .map((s) => {
@@ -137,7 +153,7 @@ export function buildPreviewHTML(opts: {
         domId: s.domId,
         style: styleStr,
       });
-      return `<div data-wto-section="${s.id}" class="wto-section" style="${outline}">${visibleHtml}</div>`;
+      return `<div data-wto-section="${s.id}" class="wto-section" style="${outline}">${resolveAssetPaths(visibleHtml, assets)}</div>`;
     })
     .join("\n");
 
@@ -176,17 +192,22 @@ export function buildExportBundle(opts: {
   globalCss: string;
   globalJs: string;
   title?: string;
+  assets?: Record<string, string>;
+  // When true, `images/…` paths are inlined as data URLs so the resulting
+  // single-file HTML is fully self-contained (used by preview/demo iframes).
+  inlineAssets?: boolean;
 }) {
-  const { sections, globalCss, globalJs, title = "My Website" } = opts;
+  const { sections, globalCss, globalJs, title = "My Website", assets, inlineAssets } = opts;
   const body = sections
     .map((s) => {
       const styleStr = styleToString(s.style);
-      return applyRootAttributes(s.html, {
+      const raw = applyRootAttributes(s.html, {
         className: s.className,
         domId: s.domId,
         style: styleStr,
         fallbackTag: "section",
       });
+      return inlineAssets ? resolveAssetPaths(raw, assets) : raw;
     })
     .join("\n");
 
@@ -215,7 +236,7 @@ ${body}
 <style>${globalCss}</style>
 </head>
 <body>
-${body}
+${inlineAssets ? body : resolveAssetPaths(body, assets)}
 <script>${globalJs}</script>
 </body>
 </html>`;

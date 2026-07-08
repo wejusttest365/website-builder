@@ -22,6 +22,9 @@ export interface Project {
   globalJs: string;
   createdAt: number;
   updatedAt: number;
+  // Uploaded images: filename (without folder) -> data URL.
+  // Referenced from HTML as `images/<filename>`.
+  assets?: Record<string, string>;
 }
 
 interface HistoryEntry {
@@ -64,6 +67,8 @@ interface BuilderState {
 
   setDevice: (d: "desktop" | "tablet" | "mobile") => void;
   toggleDark: () => void;
+
+  addAsset: (dataUrl: string, extHint?: string) => string;
 
   undo: () => void;
   redo: () => void;
@@ -288,6 +293,26 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
 
   selectSection: (id) => set({ selectedSectionId: id }),
+
+  addAsset: (dataUrl, extHint) => {
+    const p = get().currentProject();
+    if (!p) return "";
+    const mimeMatch = /^data:([^;]+);/.exec(dataUrl);
+    const mime = mimeMatch?.[1] ?? "image/png";
+    const ext =
+      extHint?.replace(/^\./, "").toLowerCase() ||
+      (mime.split("/")[1] || "png").replace("jpeg", "jpg");
+    const assets = { ...(p.assets ?? {}) };
+    let n = Object.keys(assets).length + 1;
+    let filename = `image-${n}.${ext}`;
+    while (assets[filename]) {
+      n += 1;
+      filename = `image-${n}.${ext}`;
+    }
+    assets[filename] = dataUrl;
+    updateCurrent(set, get, { assets });
+    return `images/${filename}`;
+  },
 
   setGlobalCss: (v) => {
     updateCurrent(set, get, { globalCss: v });

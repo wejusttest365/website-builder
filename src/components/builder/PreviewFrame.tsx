@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBuilder } from "@/lib/builder/store";
-import { buildPreviewHTML } from "@/lib/builder/preview";
+import { buildPreviewHTML, resolveAssetPaths } from "@/lib/builder/preview";
 
 interface Props {
   editable?: boolean;
@@ -14,6 +14,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
   const select = useBuilder((s) => s.selectSection);
   const setSectionHtml = useBuilder((s) => s.setSectionHtml);
   const updateSection = useBuilder((s) => s.updateSection);
+  const addAsset = useBuilder((s) => s.addAsset);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [imageEditor, setImageEditor] = useState<{
     sectionId: string;
@@ -36,6 +37,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
       css: project.globalCss,
       js: project.globalJs,
       editable,
+      assets: project.assets ? Object.keys(project.assets).join(",") : "",
     });
   }, [project, editable]);
   const htmlKey = useMemo(
@@ -56,6 +58,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
         globalJs: project.globalJs,
         editable,
         selectedId: null,
+        assets: project.assets,
       }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,6 +117,8 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
       {imageEditor && (
         <ImageEditorModal
           initialSrc={imageEditor.src}
+          resolvedPreview={resolveAssetPaths(imageEditor.src, project?.assets)}
+          onUpload={(dataUrl, ext) => addAsset(dataUrl, ext)}
           onClose={() => setImageEditor(null)}
           onApply={(newSrc) => {
             if (!project) return;
@@ -221,24 +226,29 @@ function cssAttr(s: string) {
 
 function ImageEditorModal({
   initialSrc,
+  resolvedPreview,
+  onUpload,
   onClose,
   onApply,
   onRemove,
 }: {
   initialSrc: string;
+  resolvedPreview: string;
+  onUpload: (dataUrl: string, ext?: string) => string;
   onClose: () => void;
   onApply: (src: string) => void;
   onRemove: () => void;
 }) {
   const [url, setUrl] = useState(initialSrc);
+  const [previewUrl, setPreviewUrl] = useState(resolvedPreview);
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg p-6">
         <h3 className="text-lg font-bold">Edit Image</h3>
         <div className="mt-4 aspect-video bg-muted rounded-lg overflow-hidden flex items-center justify-center">
-          {url ? (
+          {previewUrl || url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={url} alt="preview" className="max-w-full max-h-full object-contain" />
+            <img src={previewUrl || url} alt="preview" className="max-w-full max-h-full object-contain" />
           ) : (
             <span className="text-muted-foreground text-sm">No image</span>
           )}
@@ -248,8 +258,8 @@ function ImageEditorModal({
           <input
             className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://…"
+            onChange={(e) => { setUrl(e.target.value); setPreviewUrl(e.target.value); }}
+            placeholder="https://..."
           />
           <label className="block">
             <span className="text-sm font-medium">Upload from device</span>
@@ -261,7 +271,13 @@ function ImageEditorModal({
                 const f = e.target.files?.[0];
                 if (!f) return;
                 const r = new FileReader();
-                r.onload = () => setUrl(String(r.result));
+                r.onload = () => {
+                  const dataUrl = String(r.result);
+                  const ext = f.name.split(".").pop();
+                  const path = onUpload(dataUrl, ext);
+                  setUrl(path);
+                  setPreviewUrl(dataUrl);
+                };
                 r.readAsDataURL(f);
               }}
             />

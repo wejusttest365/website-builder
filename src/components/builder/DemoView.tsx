@@ -38,6 +38,8 @@ export function DemoView({ projectId }: { projectId: string }) {
     globalCss: proj.globalCss,
     globalJs: proj.globalJs,
     title: proj.name,
+    assets: proj.assets,
+    inlineAssets: true,
   });
 
   return (
