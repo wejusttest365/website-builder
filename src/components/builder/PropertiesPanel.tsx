@@ -510,10 +510,10 @@ function pathTo(el: Element, root: Element): number[] {
   const p: number[] = [];
   let cur: Element | null = el;
   while (cur && cur !== root) {
-    const parent = cur.parentElement;
-    if (!parent) break;
-    p.unshift(Array.from(parent.children).indexOf(cur));
-    cur = parent;
+    const parentEl: Element | null = cur.parentElement;
+    if (!parentEl) break;
+    p.unshift(Array.from(parentEl.children).indexOf(cur));
+    cur = parentEl;
   }
   return p;
 }
