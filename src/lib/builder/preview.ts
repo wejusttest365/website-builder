@@ -1,5 +1,20 @@
 import type { PageSection } from "./store";
 
+// Rewrite `images/<filename>` references (src, href, url(...)) to data URLs
+// from the project assets map, so the preview iframe and self-contained
+// export can render locally-uploaded images.
+export function resolveAssetPaths(html: string, assets?: Record<string, string>) {
+  if (!assets) return html;
+  let out = html;
+  for (const [name, data] of Object.entries(assets)) {
+    const path = `images/${name}`;
+    // Escape regex specials in filename.
+    const esc = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp(esc, "g"), data);
+  }
+  return out;
+}
+
 // Runtime script injected into preview iframe.
 // - Wraps each section as [data-wto-section="id"]
 // - Handles click to select, dblclick to edit text, image click for image modal
@@ -121,8 +136,9 @@ export function buildPreviewHTML(opts: {
   globalJs: string;
   editable: boolean;
   selectedId?: string | null;
+  assets?: Record<string, string>;
 }) {
-  const { sections, globalCss, globalJs, editable, selectedId } = opts;
+  const { sections, globalCss, globalJs, editable, selectedId, assets } = opts;
 
   const sectionHTML = sections
     .map((s) => {
@@ -137,7 +153,7 @@ export function buildPreviewHTML(opts: {
         domId: s.domId,
         style: styleStr,
       });
-      return `<div data-wto-section="${s.id}" class="wto-section" style="${outline}">${visibleHtml}</div>`;
+      return `<div data-wto-section="${s.id}" class="wto-section" style="${outline}">${resolveAssetPaths(visibleHtml, assets)}</div>`;
     })
     .join("\n");
 
