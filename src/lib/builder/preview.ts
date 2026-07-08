@@ -1,0 +1,251 @@
+import type { PageSection } from "./store";
+
+// Runtime script injected into preview iframe.
+// - Wraps each section as [data-wto-section="id"]
+// - Handles click to select, dblclick to edit text, image click for image modal
+// - Sends messages to parent via postMessage
+export const RUNTIME_SCRIPT = `
+(function(){
+  const send = (type, payload) => parent.postMessage({ __wto: true, type, payload }, '*');
+
+  function onClick(e) {
+    const section = e.target.closest('[data-wto-section]');
+    if (!section) return;
+    const img = e.target.closest('img');
+    if (img) {
+      e.preventDefault(); e.stopPropagation();
+      send('image-click', { sectionId: section.dataset.wtoSection, src: img.getAttribute('src') || '' });
+      return;
+    }
+    if (e.target.closest('a')) e.preventDefault();
+    send('select', { sectionId: section.dataset.wtoSection });
+  }
+
+  function startTextEdit(e) {
+    const el = e.target.closest('h1,h2,h3,h4,h5,h6,p,span,a,button,li');
+    const section = e.target.closest('[data-wto-section]');
+    if (!el || !section) return;
+    e.preventDefault();
+    e.stopPropagation();
+    el.setAttribute('contenteditable', 'true');
+    el.setAttribute('spellcheck', 'false');
+    el.focus();
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } catch(_) {}
+    const onKey = (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); el.blur(); }
+      if (event.key === 'Escape') { event.preventDefault(); el.blur(); }
+    };
+    const onBlur = () => {
+      el.removeAttribute('contenteditable');
+      el.removeAttribute('spellcheck');
+      el.removeEventListener('keydown', onKey);
+      el.removeEventListener('blur', onBlur);
+      send('section-html', { sectionId: section.dataset.wtoSection, html: section.innerHTML });
+    };
+    el.addEventListener('keydown', onKey);
+    el.addEventListener('blur', onBlur);
+  }
+
+  function onDblClick(e) { startTextEdit(e); }
+  function onPointerDown(e) {
+    if (e.detail >= 2) startTextEdit(e);
+  }
+
+  document.addEventListener('pointerdown', onPointerDown, true);
+  document.addEventListener('click', onClick, true);
+  document.addEventListener('dblclick', onDblClick, true);
+
+  // Console bridge
+  ['log','warn','error','info'].forEach(k => {
+    const orig = console[k];
+    console[k] = function() {
+      try { send('console', { level: k, args: Array.from(arguments).map(a => {
+        try { return typeof a === 'string' ? a : JSON.stringify(a); } catch(_) { return String(a); }
+      }) }); } catch(_) {}
+      orig.apply(console, arguments);
+    };
+  });
+  window.addEventListener('error', (e) => send('console', { level:'error', args:[String(e.message)] }));
+})();
+`;
+
+export function buildPreviewHTML(opts: {
+  sections: PageSection[];
+  globalCss: string;
+  globalJs: string;
+  editable: boolean;
+  selectedId?: string | null;
+}) {
+  const { sections, globalCss, globalJs, editable, selectedId } = opts;
+
+  const sectionHTML = sections
+    .map((s) => {
+      if (s.collapsed) return "";
+      const styleStr = styleToString(s.style);
+      const outline =
+        editable && selectedId === s.id
+          ? "outline:2px solid #6366f1;outline-offset:-2px;"
+          : "";
+      const visibleHtml = applyRootAttributes(s.html, {
+        className: s.className,
+        domId: s.domId,
+        style: styleStr,
+      });
+      return `<div data-wto-section="${s.id}" class="wto-section" style="${outline}">${visibleHtml}</div>`;
+    })
+    .join("\n");
+
+  const editableStyles = editable
+    ? `
+    .wto-section { position: relative; }
+    .wto-section:hover { outline: 1px dashed #94a3b8; outline-offset: -1px; cursor: pointer; }
+    .wto-section.wto-selected { outline: 2px solid #6366f1 !important; outline-offset: -2px; }
+    [contenteditable="true"] { outline: 2px solid #f59e0b !important; }
+    `
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  ${editableStyles}
+  ${globalCss || ""}
+</style>
+</head>
+<body>
+${sectionHTML || (editable ? '<div style="padding:80px;text-align:center;color:#94a3b8;font-family:system-ui">Drag sections from the left to start building →</div>' : "")}
+<script>${editable ? RUNTIME_SCRIPT : ""}</script>
+<script>try{${globalJs || ""}}catch(e){console.error(e)}</script>
+</body>
+</html>`;
+}
+
+export function buildExportBundle(opts: {
+  sections: PageSection[];
+  globalCss: string;
+  globalJs: string;
+  title?: string;
+}) {
+  const { sections, globalCss, globalJs, title = "My Website" } = opts;
+  const body = sections
+    .map((s) => {
+      const styleStr = styleToString(s.style);
+      return applyRootAttributes(s.html, {
+        className: s.className,
+        domId: s.domId,
+        style: styleStr,
+        fallbackTag: "section",
+      });
+    })
+    .join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(title)}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+${body}
+<script src="./script.js"></script>
+</body>
+</html>`;
+
+  const complete = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(title)}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>${globalCss}</style>
+</head>
+<body>
+${body}
+<script>${globalJs}</script>
+</body>
+</html>`;
+
+  return { html, css: globalCss, js: globalJs, complete, body };
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] as string);
+}
+
+function styleToString(style?: Record<string, string>) {
+  if (!style) return "";
+  return Object.entries(style)
+    .filter(([, v]) => v.trim())
+    .map(([k, v]) => `${k}:${v}`)
+    .join(";");
+}
+
+function applyRootAttributes(
+  html: string,
+  opts: { className?: string; domId?: string; style?: string; fallbackTag?: "div" | "section" },
+) {
+  const openingTag = html.match(/^\s*<([a-zA-Z][\w:-]*)(\s[^>]*)?>/);
+  if (!openingTag) {
+    const tag = opts.fallbackTag ?? "div";
+    return `<${tag}${attrsToString(opts)}>${html}</${tag}>`;
+  }
+
+  const full = openingTag[0];
+  const attrText = openingTag[2] ?? "";
+  let nextAttrs = attrText;
+
+  if (opts.className?.trim()) {
+    nextAttrs = mergeAttr(nextAttrs, "class", opts.className.trim(), " ");
+  }
+  if (opts.domId?.trim()) {
+    nextAttrs = setAttr(nextAttrs, "id", opts.domId.trim());
+  }
+  if (opts.style?.trim()) {
+    nextAttrs = mergeAttr(nextAttrs, "style", opts.style.trim(), ";");
+  }
+
+  const replacement = full.replace(attrText, nextAttrs);
+  return html.replace(full, replacement);
+}
+
+function attrsToString(opts: { className?: string; domId?: string; style?: string }) {
+  return [
+    opts.className?.trim() ? ` class="${escapeAttribute(opts.className.trim())}"` : "",
+    opts.domId?.trim() ? ` id="${escapeAttribute(opts.domId.trim())}"` : "",
+    opts.style?.trim() ? ` style="${escapeAttribute(opts.style.trim())}"` : "",
+  ].join("");
+}
+
+function mergeAttr(attrs: string, name: string, value: string, separator: string) {
+  const pattern = new RegExp(`\\s${name}=(['\"])(.*?)\\1`, "i");
+  if (!pattern.test(attrs)) return `${attrs} ${name}="${escapeAttribute(value)}"`;
+  return attrs.replace(pattern, (_match, quote: string, current: string) => {
+    const sep = current.trim().endsWith(separator) ? "" : separator === ";" ? ";" : separator;
+    return ` ${name}=${quote}${current}${sep}${escapeAttribute(value)}${quote}`;
+  });
+}
+
+function setAttr(attrs: string, name: string, value: string) {
+  const pattern = new RegExp(`\\s${name}=(['\"])(.*?)\\1`, "i");
+  if (!pattern.test(attrs)) return `${attrs} ${name}="${escapeAttribute(value)}"`;
+  return attrs.replace(pattern, (_match, quote: string) => ` ${name}=${quote}${escapeAttribute(value)}${quote}`);
+}
+
+function escapeAttribute(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}

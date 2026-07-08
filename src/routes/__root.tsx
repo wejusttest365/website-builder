@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { Toaster } from "sonner";
 
 function NotFoundComponent() {
   return (
@@ -77,14 +78,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Nimbus — Ship calmer software" },
-      { name: "description", content: "Nimbus helps small teams plan, build, and ship without the chaos. A calmer way to move fast." },
+      { title: "WebToolOcean — Drag & Drop Website Builder" },
+      { name: "description", content: "Build beautiful, responsive websites without code. Drag pre-built HTML sections, edit inline, and export production-ready HTML, CSS, and JavaScript." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Nimbus — Ship calmer software" },
-      { property: "og:description", content: "A calmer way to plan, build, and ship." },
+      { property: "og:title", content: "WebToolOcean — Drag & Drop Website Builder" },
+      { property: "og:description", content: "Build beautiful, responsive websites without code. Drag pre-built HTML sections, edit inline, and export production-ready HTML, CSS, and JavaScript." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "WebToolOcean — Drag & Drop Website Builder" },
+      { name: "twitter:description", content: "Build beautiful, responsive websites without code. Drag pre-built HTML sections, edit inline, and export production-ready HTML, CSS, and JavaScript." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d85a05a9-c71b-4775-88b8-cb73c6849803/id-preview-56fcb52b--36d1ad9a-6d64-4ba7-ae4f-8fde04af296f.lovable.app-1783423688753.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d85a05a9-c71b-4775-88b8-cb73c6849803/id-preview-56fcb52b--36d1ad9a-6d64-4ba7-ae4f-8fde04af296f.lovable.app-1783423688753.png" },
     ],
     links: [
       {
@@ -102,11 +107,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         {children}
         <Scripts />
       </body>
@@ -121,6 +126,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <Toaster richColors position="bottom-right" />
     </QueryClientProvider>
   );
 }
