@@ -11,10 +11,10 @@ export const Route = createFileRoute("/")({
         content:
           "Build beautiful, responsive websites without code. Drag pre-built HTML sections, edit inline, and export production-ready HTML, CSS, and JavaScript.",
       },
-      { property: "og:title", content: "WebToolOcean Website Builder" },
+      { property: "og:title", content: "WebToolOcean — Drag & Drop Website Builder" },
       {
         property: "og:description",
-        content: "Beginner-friendly website builder with a full HTML section library.",
+        content: "Build beautiful, responsive websites without code. Drag pre-built HTML sections, edit inline, and export production-ready HTML, CSS, and JavaScript.",
       },
     ],
   }),
