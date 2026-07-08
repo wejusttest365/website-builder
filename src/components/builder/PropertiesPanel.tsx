@@ -1,7 +1,6 @@
 import { useBuilder } from "@/lib/builder/store";
 import { Plus, Trash2, Copy } from "lucide-react";
 import type { ReactNode } from "react";
-import { resolveAssetPaths } from "@/lib/builder/preview";
 
 export function PropertiesPanel() {
   const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
