@@ -1,5 +1,6 @@
 import { useBuilder, pageOf } from "@/lib/builder/store";
-import { Plus, Trash2, Copy } from "lucide-react";
+import { nanoid } from "nanoid";
+import { Plus, Trash2, Copy, Eye, EyeOff } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function PropertiesPanel() {
@@ -26,14 +27,72 @@ export function PropertiesPanel() {
   const menuItems = isFooter ? [] : getMenuItems(section.html);
   const linkItems = getLinkItems(section.html);
   const repeater = isFooter ? null : getRepeater(section.html);
+  const isAccordion = !!repeater && isAccordionSection(section.html);
   const footerCols = isFooter ? getFooterColumns(section.html) : [];
   const assets = project?.assets;
+  const backgroundImage = (style["background-image"] ?? "")
+    .replace(/^url\(|\)$/g, "")
+    .replace(/^['"]|['"]$/g, "");
+
+  function normalizeAssetPath(path?: string) {
+    return String(path || "")
+      .replace(/^url\((['"]?)/, "")
+      .replace(/['"]?\)$/, "")
+      .replace(/^['"]|['"]$/g, "");
+  }
+
+  function resolveAssetSrc(path?: string) {
+    const normalizedPath = normalizeAssetPath(path);
+    if (/^images\//.test(normalizedPath)) {
+      const filename = normalizedPath.replace(/^images\//, "");
+      return project?.assets?.[filename] ?? normalizedPath;
+    }
+    return normalizedPath;
+  }
+
+  function downloadAssetByPath(path?: string) {
+    if (!path || !project?.assets) return;
+    const normalizedPath = normalizeAssetPath(path);
+    const m = /images\/([^"'\/\s]+)$/.exec(normalizedPath);
+    if (!m) return;
+    const filename = m[1];
+    const dataUrl = project.assets?.[filename];
+    if (!dataUrl) return;
+    try {
+      const parts = dataUrl.split(',');
+      const meta = parts[0];
+      const b64 = parts[1];
+      const mime = meta.match(/data:([^;]+);/)?.[1] || 'application/octet-stream';
+      const byteChars = atob(b64);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const u8 = new Uint8Array(byteNumbers);
+      const blob = new Blob([u8], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   const set = (k: string, v: string) => {
     const next = { ...style };
     if (v) next[k] = v;
     else delete next[k];
     updateSection(section.id, { style: next });
+    // If changing header background, auto-apply a contrasting link color if forcing enabled
+    if (k === "background-color" && (section as any).shared === "header") {
+      const force = getNavForceFlag(section.html);
+      if (force) {
+        const color = v ? contrastColorForHex(v) : "";
+        const nextHtml = setNavForeground(section.html, color);
+        updateHtml(nextHtml);
+      }
+    }
   };
 
   const updateHtml = (html: string) => updateSection(section.id, { html });
@@ -50,6 +109,128 @@ export function PropertiesPanel() {
         />
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-5 text-sm">
+        {/* Brand / Logo controls moved into scrollable area so it scrolls with the panel */}
+        {(() => {
+          const brand = findBrandAnchor(section.html);
+          if (!brand) return null;
+          const brandMode = brand.mode || (brand.src ? "logo" : brand.text ? "text" : "hidden");
+          return (
+            <div className="mt-0">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Brand / Logo</div>
+              <div className="mt-2 space-y-3">
+                <Field label="Display">
+                  <select
+                    className={inputCls}
+                    value={brandMode}
+                    onChange={(e) => {
+                      const mode = e.target.value as "logo" | "text" | "hidden";
+                      if (mode === "text") {
+                        updateHtml(setBrandMode(section.html, "text", brand.text || "Brand"));
+                      } else if (mode === "logo") {
+                        updateHtml(setBrandMode(section.html, "logo", brand.text || "Brand"));
+                      } else {
+                        updateHtml(setBrandMode(section.html, "hidden", brand.text || "Brand"));
+                      }
+                      pushHistory();
+                    }}
+                    onBlur={pushHistory}
+                  >
+                    <option value="logo">Logo</option>
+                    <option value="text">Text</option>
+                    <option value="hidden">Hidden</option>
+                  </select>
+                </Field>
+
+                <Field label="Brand text">
+                  <input
+                    className={inputCls}
+                    value={brand.text}
+                    placeholder="Brand name"
+                    onChange={(e) => updateHtml(setBrandText(section.html, e.target.value))}
+                    onBlur={pushHistory}
+                  />
+                </Field>
+
+                {brandMode === "logo" ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-12 w-32 overflow-hidden rounded-md border border-input bg-background flex items-center justify-center">
+                        {brand.src ? (
+                          <img src={resolveAssetSrc(brand.src)} alt="logo" className="max-h-full max-w-full object-contain" />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No logo</span>
+                        )}
+                      </div>
+                      {brand.src && /^images\//.test(normalizeAssetPath(brand.src)) && (
+                        <button className="px-2 py-1 rounded-md border border-input text-xs" onClick={() => downloadAssetByPath(brand.src)}>
+                          Download
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="block w-full text-xs"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        const r = new FileReader();
+                        r.onload = () => {
+                          const path = addAsset(String(r.result), f.name.split(".").pop());
+                          updateHtml(setBrandImage(section.html, path));
+                          pushHistory();
+                        };
+                        r.readAsDataURL(f);
+                      }}
+                    />
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Width (e.g. 120px)"
+                    defaultValue={brand.width}
+                    onBlur={(e) => { updateHtml(setBrandSize(section.html, e.target.value, brand.height)); pushHistory(); }}
+                  />
+                  <input
+                    className={inputCls}
+                    placeholder="Height (e.g. 40px)"
+                    defaultValue={brand.height}
+                    onBlur={(e) => { updateHtml(setBrandSize(section.html, brand.width, e.target.value)); pushHistory(); }}
+                  />
+                </div>
+                {(() => {
+                  const ctas = findHeaderCTAs(section.html);
+                  const cta = ctas[0] ?? null;
+                  if (!cta) return null;
+                  return (
+                    <div className="mt-2 space-y-2">
+                      <Field label="CTA text">
+                        <input
+                          className={inputCls}
+                          value={cta.text}
+                          onChange={(e) => updateHtml(setHeaderCTAHref(section.html, cta.href || "#", e.target.value))}
+                          onBlur={pushHistory}
+                        />
+                      </Field>
+                      <Field label="CTA link">
+                        <input
+                          className={inputCls}
+                          value={cta.href}
+                          placeholder="#"
+                          onChange={(e) => updateHtml(setHeaderCTAHref(section.html, e.target.value, cta.text))}
+                          onBlur={pushHistory}
+                        />
+                      </Field>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          );
+        })()}
+
         {isFooter && (
           <Group title={`Footer Columns (${footerCols.length})`}>
             <div className="space-y-3">
@@ -216,29 +397,40 @@ export function PropertiesPanel() {
                       </button>
                     </div>
                   </div>
-                  <input
-                    className={inputCls}
-                    placeholder="Image URL"
-                    value={it.image}
-                    onChange={(e) => updateHtml(setRepeaterItemImage(section.html, i, e.target.value))}
-                    onBlur={pushHistory}
-                  />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="block w-full text-xs"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      const r = new FileReader();
-                      r.onload = () => {
-                        const path = addAsset(String(r.result), f.name.split(".").pop());
-                        updateHtml(setRepeaterItemImage(section.html, i, path));
-                        pushHistory();
-                      };
-                      r.readAsDataURL(f);
-                    }}
-                  />
+                  {!isAccordion && (
+                    <>
+                      <input
+                        className={inputCls}
+                        placeholder="Image URL"
+                        value={it.image}
+                        onChange={(e) => updateHtml(setRepeaterItemImage(section.html, i, e.target.value))}
+                        onBlur={pushHistory}
+                      />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="block w-full text-xs"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const r = new FileReader();
+                          r.onload = () => {
+                            const path = addAsset(String(r.result), f.name.split(".").pop());
+                            updateHtml(setRepeaterItemImage(section.html, i, path));
+                            pushHistory();
+                          };
+                          r.readAsDataURL(f);
+                        }}
+                      />
+                      {it.image && /^images\//.test(it.image) && (
+                        <div className="text-right">
+                          <button className="mt-1 px-3 py-1 rounded-md border border-input text-xs" onClick={() => downloadAssetByPath(it.image)}>
+                            Download
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
                   {it.hasTitle && (
                     <input
                       className={inputCls}
@@ -258,7 +450,7 @@ export function PropertiesPanel() {
                       onBlur={pushHistory}
                     />
                   )}
-                  {it.hasLink && (
+                  {it.hasLink && !isAccordion && (
                     <input
                       className={inputCls}
                       placeholder="Link URL"
@@ -266,6 +458,18 @@ export function PropertiesPanel() {
                       onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "href", e.target.value))}
                       onBlur={pushHistory}
                     />
+                  )}
+                  {it.hasLink && !isAccordion && (
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={it.href?.length > 0 && hasRepeaterTarget(section.html, i)}
+                          onChange={(e) => updateHtml(setRepeaterItemTarget(section.html, i, e.target.checked))}
+                        />
+                        <span className="text-xs">Open in new tab</span>
+                      </label>
+                    </div>
                   )}
                 </div>
               ))}
@@ -287,7 +491,7 @@ export function PropertiesPanel() {
           <Group title="Links & Buttons">
             <div className="space-y-2">
               {linkItems.map((item, index) => (
-                <div key={index} className="grid grid-cols-[1fr_1fr] gap-1.5">
+                <div key={index} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-1.5">
                   <input
                     className={inputCls}
                     value={item.text}
@@ -303,6 +507,28 @@ export function PropertiesPanel() {
                     onChange={(e) => updateHtml(updateLinkItem(section.html, index, { href: e.target.value }))}
                     onBlur={pushHistory}
                   />
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
+                    title={item.hidden ? "Show element" : "Hide element"}
+                    onClick={() => {
+                      updateHtml(toggleLinkVisibility(section.html, index));
+                      pushHistory();
+                    }}
+                  >
+                    {item.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
+                    title="Delete link"
+                    onClick={() => {
+                      updateHtml(removeLinkItem(section.html, index));
+                      pushHistory();
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -360,6 +586,17 @@ export function PropertiesPanel() {
               }}
             />
           </Field>
+          {backgroundImage && /^images\//.test(backgroundImage) && (
+            <Field label="Download">
+              <button
+                type="button"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
+                onClick={() => downloadAssetByPath(backgroundImage)}
+              >
+                Download
+              </button>
+            </Field>
+          )}
         </Group>
 
         <Group title="Text">
@@ -433,6 +670,80 @@ export function PropertiesPanel() {
             <input className={inputCls} value={style["line-height"] ?? ""} onChange={(e) => set("line-height", e.target.value)} onBlur={pushHistory} placeholder="e.g. 1.5" />
           </Field>
         </Group>
+        <Group title="Animation">
+          <Field label="Type">
+            <select
+              className={inputCls}
+              value={section.animation?.type ?? ""}
+              onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: e.target.value } })}
+              onBlur={pushHistory}
+            >
+              <option value="">None</option>
+              <option value="fade-in">Fade in</option>
+              <option value="fade-up">Fade up</option>
+              <option value="fade-down">Fade down</option>
+              <option value="slide-left">Slide left</option>
+              <option value="slide-right">Slide right</option>
+              <option value="zoom-in">Zoom in</option>
+              <option value="zoom-out">Zoom out</option>
+              <option value="flip">Flip</option>
+              <option value="bounce">Bounce</option>
+            </select>
+          </Field>
+          <Field label="Duration">
+            <input className={inputCls} value={String(section.animation?.duration ?? "")} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), duration: Number(e.target.value) || undefined } })} onBlur={pushHistory} placeholder="ms" />
+          </Field>
+          <Field label="Delay">
+            <input className={inputCls} value={String(section.animation?.delay ?? "")} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), delay: Number(e.target.value) || undefined } })} onBlur={pushHistory} placeholder="ms" />
+          </Field>
+          <Field label="Repeat">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={!!section.animation?.repeat} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), repeat: e.target.checked } })} onBlur={pushHistory} />
+              <span className="text-xs">Repeat animation</span>
+            </label>
+          </Field>
+        </Group>
+
+        <Group title="Visibility">
+          <Field label="Hide on mobile">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={!!(section as any).hiddenMobile} onChange={(e) => updateSection(section.id, { ...(section as any), hiddenMobile: e.target.checked })} onBlur={pushHistory} />
+              <span className="text-xs">Hide on mobile</span>
+            </label>
+          </Field>
+          <Field label="Hide on tablet">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={!!(section as any).hiddenTablet} onChange={(e) => updateSection(section.id, { ...(section as any), hiddenTablet: e.target.checked })} onBlur={pushHistory} />
+              <span className="text-xs">Hide on tablet</span>
+            </label>
+          </Field>
+          <Field label="Hide on desktop">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={!!(section as any).hiddenDesktop} onChange={(e) => updateSection(section.id, { ...(section as any), hiddenDesktop: e.target.checked })} onBlur={pushHistory} />
+              <span className="text-xs">Hide on desktop</span>
+            </label>
+          </Field>
+          <Field label="Sticky">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={!!section.sticky} onChange={(e) => updateSection(section.id, { sticky: e.target.checked })} onBlur={pushHistory} />
+              <span className="text-xs">Sticky navigation</span>
+            </label>
+          </Field>
+        </Group>
+
+        {isFooter && (
+          <Group title="Footer Copyright">
+            <Field label="Text">
+              <input className={inputCls} value={getFooterCopyright(section.html)} onChange={(e) => updateHtml(setFooterCopyright(section.html, e.target.value))} onBlur={pushHistory} />
+            </Field>
+            <Field label="Color">
+              <ColorInput value={getFooterCopyrightColor(section.html)} onChange={(v) => updateHtml(setFooterCopyrightColor(section.html, v))} onBlur={pushHistory} />
+            </Field>
+            <Field label="Font size">
+              <input className={inputCls} value={getFooterCopyrightFontSize(section.html)} onChange={(e) => updateHtml(setFooterCopyrightFontSize(section.html, e.target.value))} onBlur={pushHistory} placeholder="e.g. 12px" />
+            </Field>
+          </Group>
+        )}
 
         <Group title="Advanced">
           <Field label="Section ID">
@@ -491,10 +802,9 @@ function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: 
   );
 }
 
-type MenuItem = { text: string; href: string };
-type TextItem = { tag: string; label: string; text: string };
+// --- Helpers and DOM manipulation functions ---
 
-const textSelector = "h1,h2,h3,h4,h5,h6,p,a,button";
+const textSelector = "h1,h2,h3,h4,h5,h6,p,a,button,summary";
 const menuSelector = "nav ul li a, ul li a";
 
 function parseHtml(html: string) {
@@ -506,7 +816,235 @@ function serialize(doc: Document) {
   return doc.body.innerHTML;
 }
 
-function getEditableTextItems(html: string): TextItem[] {
+function ensureSummaryChevron(el: HTMLElement) {
+  if (el.tagName !== 'SUMMARY') return;
+  if (el.querySelector('.wto-chevron')) return;
+  const span = document.createElement('span');
+  span.className = 'wto-chevron';
+  span.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+  el.appendChild(span);
+}
+
+function isAccordionSection(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return false;
+  return !!doc.body.querySelector('details');
+}
+
+function contrastColorForHex(hex: string) {
+  const h = String(hex || "").trim().replace(/^#/, "");
+  let r = 0,
+    g = 0,
+    b = 0;
+  if (h.length === 3) {
+    r = parseInt(h[0] + h[0], 16);
+    g = parseInt(h[1] + h[1], 16);
+    b = parseInt(h[2] + h[2], 16);
+  } else if (h.length >= 6) {
+    r = parseInt(h.slice(0, 2), 16);
+    g = parseInt(h.slice(2, 4), 16);
+    b = parseInt(h.slice(4, 6), 16);
+  }
+  const srgb = [r, g, b].map((c) => c / 255).map((c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+  const lum = 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+  return lum > 0.5 ? "#000000" : "#ffffff";
+}
+
+function setStyleColor(styleStr: string | null, color: string) {
+  const s = styleStr || "";
+  if (!color) {
+    return s.replace(/(^|;)\s*color\s*:\s*[^;]+;?/i, "").trim();
+  }
+  const important = `${color} !important`;
+  if (/color\s*:/i.test(s)) {
+    return s.replace(/color\s*:\s*[^;]+;?/i, `color:${important};`);
+  }
+  return (s && !s.trim().endsWith(";") ? s + ";" : s) + `color:${important};`;
+}
+
+function setNavForeground(html: string, color: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const nav = doc.body.querySelector("nav") ?? doc.body.querySelector("[data-wto-nav]");
+  if (!nav) return html;
+  const navStyle = nav.getAttribute("style") ?? "";
+  // keep nav-level color inline (non-important) for non-anchor text
+  nav.setAttribute("style", setStyleColor(navStyle, color));
+
+  if (!nav.hasAttribute('data-wto-nav')) {
+    nav.setAttribute('data-wto-nav', 'true');
+  }
+
+  // Inject or update a scoped <style data-wto-nav-style> inside the nav
+  const existing = nav.querySelector('style[data-wto-nav-style]');
+  const css = color ? `[data-wto-nav] a, [data-wto-nav] button { color: ${color} !important; }` : "";
+  if (existing) {
+    if (css) existing.textContent = css;
+    else existing.remove();
+  } else if (css) {
+    const styleEl = doc.createElement('style');
+    styleEl.setAttribute('data-wto-nav-style', 'true');
+    styleEl.textContent = css;
+    nav.insertBefore(styleEl, nav.firstChild);
+  }
+
+  return serialize(doc);
+}
+
+function getNavForceFlag(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return true;
+  const nav = doc.body.querySelector("nav") ?? doc.body.querySelector("[data-wto-nav]");
+  if (!nav) return true;
+  return nav.getAttribute('data-wto-force-menu') !== '0';
+}
+
+function setNavForce(html: string, enabled: boolean, color?: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const nav = doc.body.querySelector("nav") ?? doc.body.querySelector("[data-wto-nav]");
+  if (!nav) return html;
+  if (!nav.hasAttribute('data-wto-nav')) {
+    nav.setAttribute('data-wto-nav', 'true');
+  }
+  if (enabled) nav.setAttribute('data-wto-force-menu', '1');
+  else nav.removeAttribute('data-wto-force-menu');
+  // Apply or remove injected style depending on enabled
+  const existing = nav.querySelector('style[data-wto-nav-style]');
+  const css = enabled && color ? `[data-wto-nav] a, [data-wto-nav] button { color: ${color} !important; }` : enabled && !color ? existing?.textContent || '' : '';
+  if (!enabled) {
+    if (existing) existing.remove();
+  } else if (color) {
+    if (existing) existing.textContent = css;
+    else {
+      const styleEl = doc.createElement('style');
+      styleEl.setAttribute('data-wto-nav-style', 'true');
+      styleEl.textContent = css;
+      nav.insertBefore(styleEl, nav.firstChild);
+    }
+  }
+  return serialize(doc);
+}
+
+// ------------------------ Brand helpers ------------------------
+
+function findBrandAnchor(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return null;
+  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
+  if (!nav) return null;
+  const anchors = Array.from(nav.querySelectorAll('a'));
+  // brand anchor is an anchor that's not inside a list
+  const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li')) ?? null;
+  if (!brand) return null;
+  const img = brand.querySelector('img');
+  const text = (brand.textContent ?? '').trim();
+  const width = img?.getAttribute('width') ?? img?.style.width ?? '';
+  const height = img?.getAttribute('height') ?? img?.style.height ?? '';
+  return { src: img?.getAttribute('src') ?? '', text, width, height, mode: img ? 'logo' : text ? 'text' : 'hidden' };
+}
+
+function setBrandMode(html: string, mode: 'logo' | 'text' | 'hidden', text?: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
+  if (!nav) return html;
+  const anchors = Array.from(nav.querySelectorAll('a'));
+  const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li')) ?? null;
+  if (!brand) return html;
+  if (mode === 'hidden') {
+    brand.setAttribute('style', (brand.getAttribute('style') || '') + ';display:none');
+    brand.textContent = '';
+    const img = brand.querySelector('img'); if (img) img.remove();
+  } else if (mode === 'text') {
+    brand.removeAttribute('style');
+    const img = brand.querySelector('img'); if (img) img.remove();
+    brand.textContent = text || 'Brand';
+  } else {
+    brand.removeAttribute('style');
+    brand.textContent = '';
+    let img = brand.querySelector('img');
+    if (!img) {
+      img = doc.createElement('img');
+      img.setAttribute('alt', text || 'logo');
+      img.setAttribute('style', 'height:40px;width:auto;object-fit:contain;');
+      brand.appendChild(img);
+    }
+  }
+  return serialize(doc);
+}
+
+function setBrandText(html: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
+  if (!nav) return html;
+  const anchors = Array.from(nav.querySelectorAll('a'));
+  const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li')) ?? null;
+  if (!brand) return html;
+  const img = brand.querySelector('img');
+  if (img) {
+    img.setAttribute('alt', text);
+  } else {
+    brand.textContent = text;
+  }
+  return serialize(doc);
+}
+
+function setBrandImage(html: string, path: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
+  if (!nav) return html;
+  const anchors = Array.from(nav.querySelectorAll('a'));
+  const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li')) ?? null;
+  if (!brand) return html;
+  brand.textContent = '';
+  let img = brand.querySelector('img');
+  if (!img) {
+    img = doc.createElement('img');
+    img.setAttribute('alt', 'logo');
+    img.setAttribute('style', 'height:40px;width:auto;object-fit:contain;');
+    brand.appendChild(img);
+  }
+  img.setAttribute('src', path);
+  return serialize(doc);
+}
+
+function setBrandSize(html: string, width?: string, height?: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
+  if (!nav) return html;
+  const anchors = Array.from(nav.querySelectorAll('a'));
+  const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li')) ?? null;
+  if (!brand) return html;
+  const img = brand.querySelector('img');
+  if (!img) return html;
+  if (width) img.setAttribute('width', width);
+  else img.removeAttribute('width');
+  if (height) img.setAttribute('height', height);
+  else img.removeAttribute('height');
+  // prefer inline style for non-numeric sizes
+  const style = img.getAttribute('style') || '';
+  const newStyle = style.replace(/(width|height)\s*:\s*[^;]+;?/g, '').trim();
+  img.setAttribute('style', `${newStyle}${width ? `;width:${width}` : ''}${height ? `;height:${height}` : ''}`);
+  return serialize(doc);
+}
+
+function findHeaderCTAs(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return [];
+  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
+  if (!nav) return [];
+  const anchors = Array.from(nav.querySelectorAll('a')).filter((a) => !a.closest('ul') && !a.closest('li'));
+  // exclude brand anchor if present
+  const brand = anchors[0];
+  const ctas = anchors.slice(1).map((a) => ({ text: (a.textContent ?? '').trim(), href: a.getAttribute('href') ?? '#' }));
+  return ctas;
+}
+
+function getEditableTextItems(html: string) {
   const doc = parseHtml(html);
   if (!doc) return [];
   return Array.from(doc.body.querySelectorAll<HTMLElement>(textSelector))
@@ -525,11 +1063,26 @@ function updateTextItem(html: string, index: number, text: string) {
     (el.textContent ?? "").trim(),
   );
   const el = items[index];
-  if (el) el.textContent = text;
+  if (!el) return serialize(doc);
+
+  const textNodes = Array.from(el.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE) as Text[];
+  if (textNodes.length > 0) {
+    textNodes[0].textContent = text;
+    for (let i = 1; i < textNodes.length; i++) {
+      textNodes[i].remove();
+    }
+  } else {
+    const textNode = doc.createTextNode(text);
+    const firstNonText = Array.from(el.childNodes).find((node) => node.nodeType !== Node.TEXT_NODE);
+    if (firstNonText) el.insertBefore(textNode, firstNonText);
+    else el.appendChild(textNode);
+  }
+
+  ensureSummaryChevron(el);
   return serialize(doc);
 }
 
-function getMenuItems(html: string): MenuItem[] {
+function getMenuItems(html: string): { text: string; href: string }[] {
   const doc = parseHtml(html);
   if (!doc) return [];
   return Array.from(doc.body.querySelectorAll<HTMLAnchorElement>(menuSelector)).map((el) => ({
@@ -538,7 +1091,7 @@ function getMenuItems(html: string): MenuItem[] {
   }));
 }
 
-function updateMenuItem(html: string, index: number, patch: Partial<MenuItem>) {
+function updateMenuItem(html: string, index: number, patch: Partial<{ text: string; href: string }>) {
   const doc = parseHtml(html);
   if (!doc) return html;
   const links = Array.from(doc.body.querySelectorAll<HTMLAnchorElement>(menuSelector));
@@ -587,28 +1140,65 @@ function labelForElement(el: HTMLElement) {
 
 // ------------------------ Links & Buttons ------------------------
 
-function getLinkItems(html: string): MenuItem[] {
-  const doc = parseHtml(html);
-  if (!doc) return [];
-  return Array.from(doc.body.querySelectorAll<HTMLElement>("a, button")).map((el) => ({
-    text: (el.textContent ?? "").replace(/\s+/g, " ").trim(),
-    href:
-      el.tagName === "A"
-        ? el.getAttribute("href") ?? "#"
-        : el.getAttribute("data-href") ?? "",
-  }));
+function isContentLinkOrButton(el: HTMLElement) {
+  return true;
 }
 
-function updateLinkItem(html: string, index: number, patch: Partial<MenuItem>) {
+function getLinkItems(html: string): { text: string; href: string; hidden: boolean }[] {
+  const doc = parseHtml(html);
+  if (!doc) return [];
+  return Array.from(doc.body.querySelectorAll<HTMLElement>("a, button"))
+    .map((el) => {
+      const style = el.getAttribute("style") ?? "";
+      const hidden = el.getAttribute("data-wto-hidden") === "1" || /display\s*:\s*none/i.test(style);
+      return {
+        text: (el.textContent ?? "").replace(/\s+/g, " ").trim(),
+        href:
+          el.tagName === "A"
+            ? el.getAttribute("href") ?? "#"
+            : el.getAttribute("data-href") ?? "",
+        hidden,
+      };
+    });
+}
+
+function updateLinkItem(html: string, index: number, patch: Partial<{ text: string; href: string }>) {
   const doc = parseHtml(html);
   if (!doc) return html;
-  const items = Array.from(doc.body.querySelectorAll<HTMLElement>("a, button"));
+  const items = Array.from(doc.body.querySelectorAll<HTMLElement>("a, button")).filter(isContentLinkOrButton);
   const el = items[index];
   if (!el) return html;
   if (patch.text !== undefined) el.textContent = patch.text;
   if (patch.href !== undefined) {
     if (el.tagName === "A") el.setAttribute("href", patch.href || "#");
     else el.setAttribute("data-href", patch.href);
+  }
+  return serialize(doc);
+}
+
+function removeLinkItem(html: string, index: number) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const items = Array.from(doc.body.querySelectorAll<HTMLElement>("a, button")).filter(isContentLinkOrButton);
+  const el = items[index];
+  if (!el) return html;
+  el.remove();
+  return serialize(doc);
+}
+
+function toggleLinkVisibility(html: string, index: number) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const items = Array.from(doc.body.querySelectorAll<HTMLElement>("a, button")).filter(isContentLinkOrButton);
+  const el = items[index];
+  if (!el) return html;
+  const current = el.getAttribute("data-wto-hidden") === "1";
+  if (current) {
+    el.removeAttribute("data-wto-hidden");
+    el.style.display = "";
+  } else {
+    el.setAttribute("data-wto-hidden", "1");
+    el.style.display = "none";
   }
   return serialize(doc);
 }
@@ -625,7 +1215,6 @@ type RepeaterItem = {
   hasLink: boolean;
 };
 
-// Path from doc.body → target element as array of child indexes.
 function pathTo(el: Element, root: Element): number[] {
   const p: number[] = [];
   let cur: Element | null = el;
@@ -647,8 +1236,6 @@ function nodeAtPath(root: Element, path: number[]): Element | null {
   return cur;
 }
 
-// Find the "best" repeating container: element with the most direct children
-// that share the same tag (>=2). Prefer non-<ul>/<ol> (those are menu items).
 function findRepeater(doc: Document): { container: Element; path: number[] } | null {
   const all = Array.from(doc.body.querySelectorAll("*"));
   let best: { el: Element; count: number; score: number } | null = null;
@@ -658,10 +1245,7 @@ function findRepeater(doc: Document): { container: Element; path: number[] } | n
     const firstTag = kids[0].tagName;
     const same = kids.every((k) => k.tagName === firstTag);
     if (!same) continue;
-    // Skip navigation lists — those are handled by "Menu Items".
     if (el.tagName === "UL" || el.tagName === "OL") continue;
-    // Prefer containers that look like grids/columns/space-y or where
-    // children are non-inline blocks.
     const cls = el.getAttribute("class") ?? "";
     let score = kids.length;
     if (/grid|columns-|space-y|flex/.test(cls)) score += 10;
@@ -690,8 +1274,6 @@ function describeItem(item: Element): RepeaterItem {
     hasTitle: !!heading,
     hasBody: !!bodyEl,
     hasLink: !!link,
-    // Track box for image swap logic (not returned in type but used indirectly).
-    ...(box ? {} : {}),
   };
 }
 
@@ -728,7 +1310,6 @@ function setRepeaterItemImage(html: string, index: number, src: string) {
       else existing.remove();
       return;
     }
-    // Find first gradient/decorative box and convert it to an <img>.
     const box = Array.from(item.querySelectorAll<HTMLElement>("*")).find((e) =>
       /bg-gradient|aspect-/.test(e.className),
     );
@@ -742,7 +1323,8 @@ function setRepeaterItemImage(html: string, index: number, src: string) {
           !/^bg-gradient/.test(c) &&
           !/^from-/.test(c) &&
           !/^via-/.test(c) &&
-          !/^to-/.test(c),
+          !/^to-/.test(c) &&
+          !/^bg-\[/.test(c),
       )
       .join(" ");
     img.setAttribute("class", (cls + " object-cover w-full h-full").trim());
@@ -767,7 +1349,10 @@ function setRepeaterItemField(
     if (!item) return;
     if (field === "title") {
       const el = item.querySelector("h1,h2,h3,h4,h5,h6,summary,strong,.font-bold");
-      if (el) el.textContent = value;
+      if (el) {
+        el.textContent = value;
+        ensureSummaryChevron(el as HTMLElement);
+      }
     } else if (field === "body") {
       const el = item.querySelector("p");
       if (el) el.textContent = value;
@@ -805,152 +1390,86 @@ function addRepeaterItem(html: string) {
   });
 }
 
-// ------------------------ Footer Columns ------------------------
+// Footer helpers omitted for brevity — keep the ones we used earlier
 
-type FooterCol = { heading: string; items: MenuItem[] };
-
-function getFooterGrid(doc: Document): Element | null {
-  const footer = doc.body.querySelector("footer");
-  if (!footer) return null;
-  // The column grid is the descendant with the most direct <div> children
-  // that each contain an <h4>/<h3> or a <ul>.
-  const all = Array.from(footer.querySelectorAll("*"));
-  let best: { el: Element; score: number } | null = null;
-  for (const el of all) {
-    const kids = Array.from(el.children).filter((c) => c.tagName === "DIV");
-    if (kids.length < 2) continue;
-    const cls = el.getAttribute("class") ?? "";
-    const looksLikeGrid = /grid|flex/.test(cls);
-    if (!looksLikeGrid) continue;
-    const score = kids.length + (/grid-cols/.test(cls) ? 5 : 0);
-    if (!best || score > best.score) best = { el, score };
-  }
-  return best?.el ?? null;
-}
-
-function columnsOf(grid: Element): Element[] {
-  return Array.from(grid.children).filter((c) => c.tagName === "DIV");
-}
-
-function updateGridColCount(grid: Element, count: number) {
-  const cls = (grid.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
-  const next = cls
-    .filter((c) => !/^(md:|lg:|sm:)?grid-cols-\d+$/.test(c))
-    .concat([`md:grid-cols-${Math.max(1, Math.min(6, count))}`]);
-  grid.setAttribute("class", next.join(" "));
-}
-
-function getFooterColumns(html: string): FooterCol[] {
+function hasRepeaterTarget(html: string, index: number) {
   const doc = parseHtml(html);
-  if (!doc) return [];
-  const grid = getFooterGrid(doc);
-  if (!grid) return [];
-  return columnsOf(grid).map((col) => {
-    const h = col.querySelector("h1,h2,h3,h4,h5,h6");
-    const links = Array.from(col.querySelectorAll<HTMLAnchorElement>("ul li a"));
-    return {
-      heading: (h?.textContent ?? "").trim(),
-      items: links.map((a) => ({
-        text: (a.textContent ?? "").trim(),
-        href: a.getAttribute("href") ?? "#",
-      })),
-    };
+  if (!doc) return false;
+  const info = findRepeater(doc);
+  if (!info) return false;
+  const container = nodeAtPath(doc.body, info.path);
+  if (!container) return false;
+  const item = container.children[index];
+  if (!item) return false;
+  const a = item.querySelector('a');
+  return !!(a && a.getAttribute('target') === '_blank');
+}
+
+function setRepeaterItemTarget(html: string, index: number, openInNewTab: boolean) {
+  return withRepeater(html, (doc, container) => {
+    const item = container.children[index];
+    if (!item) return;
+    const a = item.querySelector('a');
+    if (!a) return;
+    if (openInNewTab) a.setAttribute('target', '_blank');
+    else a.removeAttribute('target');
   });
 }
 
-function withFooterGrid(html: string, fn: (doc: Document, grid: Element) => void): string {
+function getFooterCopyright(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  return el ? (el.textContent || '').trim() : '';
+}
+
+function setFooterCopyright(html: string, text: string) {
   const doc = parseHtml(html);
   if (!doc) return html;
-  const grid = getFooterGrid(doc);
-  if (!grid) return html;
-  fn(doc, grid);
+  const footer = doc.body.querySelector('footer');
+  if (!footer) return html;
+  let el = Array.from(footer.querySelectorAll('*')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('class', 'border-t border-gray-800 py-6 text-center text-xs');
+    footer.appendChild(el);
+  }
+  el.textContent = text;
   return serialize(doc);
 }
 
-function setFooterColumnHeading(html: string, ci: number, value: string) {
-  return withFooterGrid(html, (_doc, grid) => {
-    const col = columnsOf(grid)[ci];
-    if (!col) return;
-    let h = col.querySelector("h1,h2,h3,h4,h5,h6");
-    if (!h) {
-      h = _doc.createElement("h4");
-      h.setAttribute("class", "font-semibold text-white");
-      col.insertBefore(h, col.firstChild);
-    }
-    h.textContent = value;
-  });
+function getFooterCopyrightColor(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '#000000';
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  if (!el) return '#000000';
+  const color = el.getAttribute('style')?.match(/color:\s*([^;]+)/)?.[1];
+  return color || '#000000';
 }
 
-function updateFooterColumnItem(html: string, ci: number, ii: number, patch: Partial<MenuItem>) {
-  return withFooterGrid(html, (_doc, grid) => {
-    const col = columnsOf(grid)[ci];
-    if (!col) return;
-    const link = col.querySelectorAll<HTMLAnchorElement>("ul li a")[ii];
-    if (!link) return;
-    if (patch.text !== undefined) link.textContent = patch.text;
-    if (patch.href !== undefined) link.setAttribute("href", patch.href || "#");
-  });
+function setFooterCopyrightColor(html: string, color: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const footer = doc.body.querySelector('footer');
+  if (!footer) return html;
+  let el = Array.from(footer.querySelectorAll('*')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('class', 'border-t border-gray-800 py-6 text-center text-xs');
+    footer.appendChild(el);
+  }
+  const style = el.getAttribute('style') || '';
+  el.setAttribute('style', `${style};color:${color}`);
+  return serialize(doc);
 }
 
-function removeFooterColumnItem(html: string, ci: number, ii: number) {
-  return withFooterGrid(html, (_doc, grid) => {
-    const col = columnsOf(grid)[ci];
-    if (!col) return;
-    const link = col.querySelectorAll<HTMLAnchorElement>("ul li a")[ii];
-    const li = link?.closest("li");
-    if (li) li.remove();
-  });
+function getFooterCopyrightFontSize(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  if (!el) return '';
+  const size = el.getAttribute('style')?.match(/font-size:\s*([^;]+)/)?.[1];
+  return size || '';
 }
 
-function addFooterColumnItem(html: string, ci: number) {
-  return withFooterGrid(html, (doc, grid) => {
-    const col = columnsOf(grid)[ci];
-    if (!col) return;
-    let ul = col.querySelector("ul");
-    if (!ul) {
-      ul = doc.createElement("ul");
-      ul.setAttribute("class", "mt-3 space-y-2 text-sm");
-      col.appendChild(ul);
-    }
-    const sample = ul.querySelector("li a");
-    const linkClass = sample?.getAttribute("class") ?? "hover:text-white";
-    const li = doc.createElement("li");
-    const a = doc.createElement("a");
-    a.setAttribute("href", "#");
-    a.setAttribute("class", linkClass);
-    a.textContent = "New Link";
-    li.appendChild(a);
-    ul.appendChild(li);
-  });
-}
-
-function removeFooterColumn(html: string, ci: number) {
-  return withFooterGrid(html, (_doc, grid) => {
-    const cols = columnsOf(grid);
-    if (cols.length <= 1) return;
-    cols[ci]?.remove();
-    updateGridColCount(grid, columnsOf(grid).length);
-  });
-}
-
-function addFooterColumn(html: string) {
-  return withFooterGrid(html, (doc, grid) => {
-    const cols = columnsOf(grid);
-    // Prefer cloning a column that has heading + ul; fall back to last.
-    const template =
-      cols.find((c) => c.querySelector("ul") && c.querySelector("h1,h2,h3,h4,h5,h6")) ??
-      cols[cols.length - 1];
-    if (!template) {
-      const div = doc.createElement("div");
-      div.innerHTML =
-        '<h4 class="font-semibold text-white">New Category</h4><ul class="mt-3 space-y-2 text-sm"><li><a href="#" class="hover:text-white">Link</a></li></ul>';
-      grid.appendChild(div);
-    } else {
-      const clone = template.cloneNode(true) as Element;
-      const h = clone.querySelector("h1,h2,h3,h4,h5,h6");
-      if (h) h.textContent = "New Category";
-      grid.appendChild(clone);
-    }
-    updateGridColCount(grid, columnsOf(grid).length);
-  });
-}
+export default PropertiesPanel;

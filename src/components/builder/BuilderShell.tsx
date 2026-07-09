@@ -13,6 +13,7 @@ export function BuilderShell() {
   const redo = useBuilder((s) => s.redo);
   const persist = useBuilder((s) => s.persist);
   const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
+  const leftPanelOpen = useBuilder((s) => s.leftPanelOpen);
 
   useEffect(() => {
     hydrate();
@@ -60,8 +61,11 @@ export function BuilderShell() {
   return (
     <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">
       <Toolbar />
-      <div className="flex-1 min-h-0 grid grid-cols-[260px_1fr_320px]">
-        <div className="border-r border-border min-h-0 overflow-hidden">
+      <div
+        className="flex-1 min-h-0 grid"
+        style={{ gridTemplateColumns: `${leftPanelOpen ? 260 : 44}px 1fr 320px`, transition: "grid-template-columns 220ms ease" }}
+      >
+        <div className={`border-r border-border min-h-0 overflow-hidden ${leftPanelOpen ? '' : 'flex items-center justify-center'}`}>
           <LibraryPanel />
         </div>
         <div className="min-h-0 overflow-hidden">

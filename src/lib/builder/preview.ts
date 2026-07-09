@@ -64,6 +64,14 @@ details[open] > summary .wto-chevron { transform: rotate(180deg); }
 @keyframes wto-flip { from{opacity:0;transform:rotateY(90deg)} to{opacity:1;transform:none} }
 @keyframes wto-bounce { 0%{opacity:0;transform:translateY(20px)} 60%{opacity:1;transform:translateY(-8px)} 100%{transform:none} }
 @keyframes wto-slide-down { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
+
+/* Visibility helpers for responsive hide toggles */
+[data-wto-hidden-mobile="1"] { display: none !important; }
+@media (min-width: 640px) { [data-wto-hidden-mobile="1"] { display: block !important; } }
+[data-wto-hidden-tablet="1"] { display: none !important; }
+@media (min-width: 820px) { [data-wto-hidden-tablet="1"] { display: block !important; } }
+[data-wto-hidden-desktop="1"] { display: none !important; }
+@media (min-width: 1180px) { [data-wto-hidden-desktop="1"] { display: block !important; } }
 `;
 
 export const RUNTIME_SCRIPT = `
@@ -76,15 +84,27 @@ export const RUNTIME_SCRIPT = `
       sec.querySelectorAll('*').forEach(el => { el.setAttribute('data-wto-idx', String(i++)); });
     });
   }
+  function pathFrom(el, root) {
+    const parts = [];
+    let cur = el;
+    while (cur && cur !== root) {
+      const p = Array.prototype.indexOf.call(cur.parentElement?.children || [], cur);
+      if (p < 0) break;
+      parts.unshift(p);
+      cur = cur.parentElement;
+    }
+    return parts.join(',');
+  }
   indexAll();
 
   function isBoxLike(el) {
     if (!el || el.tagName === 'IMG') return false;
     const cls = el.className && el.className.baseVal !== undefined ? el.className.baseVal : (el.className || '');
     if (/\\bbg-gradient/.test(cls)) return true;
-    if (/\\baspect-\\[?[\\w/.-]+\\]?/.test(cls) && !el.querySelector('img')) return true;
+    if (/\bbg-[^\s]+/.test(cls) && !el.querySelector('img')) return true;
+    if (/\baspect-\[?[\w/.-]+\]?/.test(cls) && !el.querySelector('img')) return true;
     const style = el.getAttribute('style') || '';
-    if (/background-image\\s*:/.test(style)) return true;
+    if (/background-image\s*:/i.test(style) || /background-color\s*:/i.test(style)) return true;
     return false;
   }
 
@@ -95,8 +115,7 @@ export const RUNTIME_SCRIPT = `
   const btns = [
     ['up','↑','Move up'], ['down','↓','Move down'],
     ['top','⤒','Move to top'], ['bottom','⤓','Move to bottom'],
-    ['dup','⧉','Duplicate'], ['hide','◐','Hide'],
-    ['settings','⚙','Settings'], ['del','🗑','Delete'],
+    ['dup','⧉','Duplicate'], ['del','🗑','Delete'],
   ];
   tb.innerHTML = btns.map(b => '<button data-act="'+b[0]+'" title="'+b[2]+'" style="all:unset;padding:4px 8px;border-radius:4px;cursor:pointer;color:#fff;">'+b[1]+'</button>').join('');
   document.body.appendChild(tb);
@@ -104,9 +123,16 @@ export const RUNTIME_SCRIPT = `
   function positionToolbar(sec) {
     if (!sec) { tb.style.display = 'none'; return; }
     const r = sec.getBoundingClientRect();
-    tb.style.left = Math.max(4, r.left + 8) + 'px';
-    tb.style.top = Math.max(4, r.top + 8) + 'px';
     tb.style.display = 'flex';
+    const tbw = tb.offsetWidth || 220;
+    const tbh = tb.offsetHeight || 40;
+    const vw = window.innerWidth;
+    const pad = 8;
+    const left = r.left + (r.width - tbw) / 2;
+    tb.style.left = Math.max(pad, Math.min(vw - tbw - pad, left)) + 'px';
+    let top = r.top - tbh - pad;
+    if (top < pad) top = Math.min(window.innerHeight - tbh - pad, r.bottom + pad);
+    tb.style.top = top + 'px';
   }
   tb.addEventListener('mousedown', e => e.stopPropagation());
   tb.addEventListener('click', e => {
@@ -122,64 +148,89 @@ export const RUNTIME_SCRIPT = `
   document.querySelectorAll('[data-wto-section]').forEach(sec => sec.setAttribute('draggable','true'));
   let dragId = null;
   document.addEventListener('dragstart', e => {
-    const sec = e.target.closest && e.target.closest('[data-wto-section]');
-    if (!sec) return;
-    dragId = sec.dataset.wtoSection;
-    try { e.dataTransfer.setData('text/plain', dragId); } catch(_){}
-    e.dataTransfer.effectAllowed = 'move';
-    sec.style.opacity = '0.4';
+    try {
+      const sec = e.target.closest && e.target.closest('[data-wto-section]');
+      if (!sec) return;
+      dragId = sec.dataset.wtoSection;
+      try { e.dataTransfer.setData('text/plain', dragId); } catch(_){ }
+      e.dataTransfer.effectAllowed = 'move';
+      sec.style.opacity = '0.4';
+    } catch (err) {
+      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
+      console.error('wto-runtime dragstart error', err);
+    }
   });
   document.addEventListener('dragend', e => {
-    const sec = e.target.closest && e.target.closest('[data-wto-section]');
-    if (sec) sec.style.opacity = '';
-    const l = document.getElementById('__wto_line'); if (l) l.remove();
+    try {
+      const sec = e.target.closest && e.target.closest('[data-wto-section]');
+      if (sec) sec.style.opacity = '';
+      const l = document.getElementById('__wto_line'); if (l) l.remove();
+    } catch (err) {
+      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
+      console.error('wto-runtime dragend error', err);
+    }
   });
   document.addEventListener('dragover', e => {
-    const sec = e.target.closest && e.target.closest('[data-wto-section]');
-    if (!sec || !dragId) return;
-    e.preventDefault();
-    const r = sec.getBoundingClientRect();
-    const before = e.clientY < r.top + r.height/2;
-    let line = document.getElementById('__wto_line');
-    if (!line) { line = document.createElement('div'); line.id='__wto_line'; line.style.cssText='position:absolute;left:0;right:0;height:3px;background:#6366f1;z-index:9999;pointer-events:none;'; document.body.appendChild(line); }
-    const top = before ? sec.offsetTop : sec.offsetTop + sec.offsetHeight;
-    line.style.top = top + 'px';
-    sec.dataset.wtoDropBefore = before ? '1' : '0';
+    try {
+      const sec = e.target.closest && e.target.closest('[data-wto-section]');
+      if (!sec || !dragId) return;
+      e.preventDefault();
+      const r = sec.getBoundingClientRect();
+      const before = e.clientY < r.top + r.height/2;
+      let line = document.getElementById('__wto_line');
+      if (!line) { line = document.createElement('div'); line.id='__wto_line'; line.style.cssText='position:absolute;left:0;right:0;height:3px;background:#6366f1;z-index:9999;pointer-events:none;'; document.body.appendChild(line); }
+      const top = before ? sec.offsetTop : sec.offsetTop + sec.offsetHeight;
+      line.style.top = top + 'px';
+      sec.dataset.wtoDropBefore = before ? '1' : '0';
+    } catch (err) {
+      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
+      console.error('wto-runtime dragover error', err);
+    }
   });
   document.addEventListener('drop', e => {
-    const sec = e.target.closest && e.target.closest('[data-wto-section]');
-    if (!sec || !dragId) return;
-    e.preventDefault();
-    const before = sec.dataset.wtoDropBefore === '1';
-    send('section-move', { fromId: dragId, toId: sec.dataset.wtoSection, before });
-    const l = document.getElementById('__wto_line'); if (l) l.remove();
-    dragId = null;
+    try {
+      const sec = e.target.closest && e.target.closest('[data-wto-section]');
+      if (!sec || !dragId) return;
+      e.preventDefault();
+      const before = sec.dataset.wtoDropBefore === '1';
+      send('section-move', { fromId: dragId, toId: sec.dataset.wtoSection, before });
+      const l = document.getElementById('__wto_line'); if (l) l.remove();
+      dragId = null;
+    } catch (err) {
+      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
+      console.error('wto-runtime drop error', err);
+    }
   });
 
   function onClick(e) {
-    if (e.target.closest('#__wto_tb')) return;
-    const section = e.target.closest('[data-wto-section]');
-    if (!section) return;
-    const img = e.target.closest('img');
-    if (img) {
-      e.preventDefault(); e.stopPropagation();
-      send('image-click', { sectionId: section.dataset.wtoSection, idx: img.getAttribute('data-wto-idx'), src: img.getAttribute('src') || '', kind: 'img' });
-      return;
+    try {
+      if (e.target.closest('#__wto_tb')) return;
+      const section = e.target.closest('[data-wto-section]');
+      if (!section) return;
+      const img = e.target.closest('img');
+      if (img) {
+        e.preventDefault(); e.stopPropagation();
+        send('image-click', { sectionId: section.dataset.wtoSection, idx: img.getAttribute('data-wto-idx'), path: pathFrom(img, section), src: img.getAttribute('src') || '', kind: 'img' });
+        return;
+      }
+      const box = e.target.closest('[data-wto-idx]');
+      if (box && isBoxLike(box) && !e.target.closest('a,button,h1,h2,h3,h4,h5,h6,p,li,input,textarea')) {
+        e.preventDefault(); e.stopPropagation();
+        send('image-click', { sectionId: section.dataset.wtoSection, idx: box.getAttribute('data-wto-idx'), path: pathFrom(box, section), src: '', kind: 'box' });
+        return;
+      }
+      if (e.target.closest('a')) e.preventDefault();
+      currentSection = section;
+      positionToolbar(section);
+      send('select', { sectionId: section.dataset.wtoSection });
+    } catch (err) {
+      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
+      console.error('wto-runtime onClick error', err);
     }
-    const box = e.target.closest('[data-wto-idx]');
-    if (box && isBoxLike(box) && !e.target.closest('a,button,h1,h2,h3,h4,h5,h6,p,li,input,textarea')) {
-      e.preventDefault(); e.stopPropagation();
-      send('image-click', { sectionId: section.dataset.wtoSection, idx: box.getAttribute('data-wto-idx'), src: '', kind: 'box' });
-      return;
-    }
-    if (e.target.closest('a')) e.preventDefault();
-    currentSection = section;
-    positionToolbar(section);
-    send('select', { sectionId: section.dataset.wtoSection });
   }
 
   function startTextEdit(e) {
-    const el = e.target.closest('h1,h2,h3,h4,h5,h6,p,span,a,button,li');
+    const el = e.target.closest('h1,h2,h3,h4,h5,h6,p,summary,span,a,button,li');
     const section = e.target.closest('[data-wto-section]');
     if (!el || !section) return;
     e.preventDefault(); e.stopPropagation();
@@ -191,6 +242,15 @@ export const RUNTIME_SCRIPT = `
     const onBlur = () => {
       el.removeAttribute('contenteditable'); el.removeAttribute('spellcheck');
       el.removeEventListener('keydown', onKey); el.removeEventListener('blur', onBlur);
+      if (el.tagName === 'SUMMARY') {
+        const chevron = el.querySelector('.wto-chevron');
+        if (!chevron) {
+          const span = document.createElement('span');
+          span.className = 'wto-chevron';
+          span.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+          el.appendChild(span);
+        }
+      }
       send('section-html', { sectionId: section.dataset.wtoSection, html: section.innerHTML });
     };
     el.addEventListener('keydown', onKey);
@@ -214,6 +274,27 @@ export const RUNTIME_SCRIPT = `
     if (!btn || !menu) return;
     btn.addEventListener('click', () => menu.classList.toggle('wto-nav-open'));
     menu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => menu.classList.remove('wto-nav-open')));
+  });
+
+  // Brand upload overlay: add a small upload button near the brand anchor in nav
+  document.querySelectorAll('nav, [data-wto-nav]').forEach(nav => {
+    try {
+      const anchors = Array.from(nav.querySelectorAll('a'));
+      const brand = anchors.find(a => !a.closest('ul') && !a.closest('li'));
+      if (!brand) return;
+      brand.style.position = brand.style.position || 'relative';
+      const up = document.createElement('button');
+      up.setAttribute('aria-label', 'Upload logo');
+      up.style.cssText = 'position:absolute;right:-8px;top:50%;transform:translateY(-50%);background:rgba(15,23,42,0.95);color:#fff;border-radius:6px;padding:6px;z-index:2147483001;border:0;cursor:pointer;';
+      up.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 5 17 10"/><line x1="12" y1="5" x2="12" y2="17"/></svg>';
+      up.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const sec = brand.closest('[data-wto-section]');
+        const sid = sec ? sec.getAttribute('data-wto-section') : null;
+        send('brand-upload', { sectionId: sid });
+      });
+      brand.appendChild(up);
+    } catch (_) {}
   });
 
   ['log','warn','error','info'].forEach(k => {
@@ -262,6 +343,9 @@ function sectionAttrs(s: PageSection) {
     if (s.animation.repeat) parts.push('data-anim-repeat="1"');
   }
   if (s.sticky) parts.push('data-wto-sticky="1"');
+  if ((s as any).hiddenMobile) parts.push('data-wto-hidden-mobile="1"');
+  if ((s as any).hiddenTablet) parts.push('data-wto-hidden-tablet="1"');
+  if ((s as any).hiddenDesktop) parts.push('data-wto-hidden-desktop="1"');
   if (styleParts.length) parts.push(`style="${styleParts.join(";")}"`);
   return parts.join(" ");
 }

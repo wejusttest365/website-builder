@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useBuilder, pageOf } from "@/lib/builder/store";
-import { buildExportBundle } from "@/lib/builder/preview";
+import { buildExportBundle, buildSiteExport } from "@/lib/builder/preview";
 import JSZip from "jszip";
 import { toast } from "sonner";
 import {
@@ -22,6 +22,7 @@ import {
   ChevronDown,
   Share2,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 
 export function Toolbar() {
   const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
@@ -38,9 +39,24 @@ export function Toolbar() {
   const persist = useBuilder((s) => s.persist);
   const dark = useBuilder((s) => s.dark);
   const toggleDark = useBuilder((s) => s.toggleDark);
+  // Pages
+  const pages = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId]?.pages ?? [] : []));
+  const addPage = useBuilder((s) => s.addPage);
+  const renamePage = useBuilder((s) => s.renamePage);
+  const setPageSlug = useBuilder((s) => s.setPageSlug);
+  const duplicatePage = useBuilder((s) => s.duplicatePage);
+  const deletePage = useBuilder((s) => s.deletePage);
+  const selectPage = useBuilder((s) => s.selectPage);
+  const currentPageId = useBuilder((s) => s.currentProject() ? s.currentProject()!.currentPageId : null);
 
   const [exportOpen, setExportOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [pagesOpen, setPagesOpen] = useState(false);
+  const [pageModalOpen, setPageModalOpen] = useState(false);
+  const [editingPage, setEditingPage] = useState<{ id: string; name: string; slug: string } | null>(null);
+  const [slugEdited, setSlugEdited] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<{ kind: "project" | "page"; id: string; name: string } | null>(null);
 
   const bundle = project
     ? buildExportBundle({
@@ -48,6 +64,7 @@ export function Toolbar() {
         globalCss: project.globalCss,
         globalJs: project.globalJs,
         title: project.name,
+        pages: project.pages?.map((p) => ({ id: p.id, slug: p.slug })) ?? [],
       })
     : null;
 
@@ -66,31 +83,26 @@ export function Toolbar() {
     URL.revokeObjectURL(url);
   }
 
+  function slugify(text: string) {
+    return (
+      text
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "page"
+    );
+  }
+
   async function downloadZip() {
-    if (!bundle || !project) return;
+    if (!project) return;
     const zip = new JSZip();
-    const indexHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${project.name}</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="./style.css" />
-</head>
-<body>
-${bundle.body}
-<script src="./script.js"></script>
-</body>
-</html>`;
-    zip.file("index.html", indexHtml);
-    zip.file("style.css", bundle.css);
-    zip.file("script.js", bundle.js);
-    // Write each uploaded image into the `images/` folder so the exported
-    // site can reference them via simple `images/<filename>` paths.
-    for (const [name, dataUrl] of Object.entries(project.assets ?? {})) {
-      const m = /^data:[^;]+;base64,(.*)$/.exec(dataUrl);
-      if (m) zip.file(`images/${name}`, m[1], { base64: true });
+    const exportData = buildSiteExport(project);
+    for (const f of exportData.files) {
+      if (f.base64) {
+        zip.file(f.path, f.base64, { base64: true });
+      } else {
+        zip.file(f.path, f.content);
+      }
     }
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
@@ -154,9 +166,7 @@ ${bundle.body}
                     <button
                       className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/20 text-destructive"
                       title="Delete"
-                      onClick={() => {
-                        if (confirm(`Delete "${p.name}"?`)) del(p.id);
-                      }}
+                      onClick={() => { setConfirmTarget({ kind: "project", id: p.id, name: p.name }); setConfirmOpen(true); }}
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -181,6 +191,103 @@ ${bundle.body}
           onChange={(e) => project && rename(project.id, e.target.value)}
           className="w-40 h-8 px-2 rounded-md border border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-ring"
         />
+        <button
+          className="h-8 px-2 rounded-md hover:bg-accent flex items-center gap-1.5 text-xs"
+          onClick={() => setPagesOpen((v) => !v)}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span className="max-w-[120px] truncate">Pages</span>
+          <ChevronDown className="w-3 h-3 opacity-60" />
+        </button>
+        {pagesOpen && (
+          <div className="absolute top-full left-0 mt-1 z-40 w-80 bg-popover text-popover-foreground rounded-lg shadow-xl border border-border p-1">
+            <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Pages</div>
+            <div className="max-h-56 overflow-y-auto">
+              {pages.map((pg) => (
+                <div key={pg.id} className={`group flex items-center gap-1 px-2 py-1.5 rounded-md hover:bg-accent text-sm ${pg.id === currentPageId ? "bg-accent" : ""}`}>
+                  <button className="flex-1 text-left truncate" onClick={() => { selectPage(pg.id); setPagesOpen(false); }}>{pg.name}</button>
+                  <button title="Rename / Edit" className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-background" onClick={() => { setEditingPage({ id: pg.id, name: pg.name, slug: pg.slug }); setSlugEdited(false); setPageModalOpen(true); setPagesOpen(false); }}><Copy className="w-3 h-3" /></button>
+                  <div className="opacity-0 group-hover:opacity-100 text-xs px-2">/{pg.slug}</div>
+                  <button title="Duplicate" className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-background" onClick={() => duplicatePage(pg.id)}><Copy className="w-3 h-3" /></button>
+                  <button title="Delete" className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/20 text-destructive" onClick={() => { setConfirmTarget({ kind: "page", id: pg.id, name: pg.name }); setConfirmOpen(true); }}><Trash2 className="w-3 h-3" /></button>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-border mt-1 pt-1">
+              <button className="w-full text-left px-2 py-1.5 rounded-md hover:bg-accent text-sm flex items-center gap-2" onClick={() => { addPage(); setPagesOpen(false); }}><Plus className="w-3.5 h-3.5" /> New page</button>
+            </div>
+          </div>
+        )}
+
+        {editingPage && (
+          <Dialog open={pageModalOpen} onOpenChange={(v) => { setPageModalOpen(v); if (!v) setEditingPage(null); }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Page</DialogTitle>
+                <DialogDescription>Change page name and slug.</DialogDescription>
+              </DialogHeader>
+              <div className="mt-2 space-y-2">
+                <label className="text-xs text-muted-foreground">Page name:</label>
+                <input
+                  className="w-full px-2 py-2 rounded-md border border-input"
+                  value={editingPage.name}
+                  onChange={(e) => {
+                    const nextName = e.target.value;
+                    setEditingPage((prev) => {
+                      if (!prev) return prev;
+                      return {
+                        ...prev,
+                        name: nextName,
+                        slug: slugEdited ? prev.slug : slugify(nextName),
+                      };
+                    });
+                  }}
+                />
+                <label className="text-xs text-muted-foreground">Page slug:</label>
+                <input
+                  className="w-full px-2 py-2 rounded-md border border-input"
+                  value={editingPage.slug}
+                  onChange={(e) => {
+                    setSlugEdited(true);
+                    setEditingPage((prev) => (prev ? { ...prev, slug: e.target.value } : prev));
+                  }}
+                />
+              </div>
+              <DialogFooter className="mt-4">
+                <button className="px-4 py-2 rounded-md border border-input" onClick={() => { setPageModalOpen(false); setEditingPage(null); }}>Cancel</button>
+                <button className="px-4 py-2 rounded-md bg-primary text-primary-foreground ml-2" onClick={() => {
+                  if (!editingPage) return;
+                  renamePage(editingPage.id, editingPage.name);
+                  setPageSlug(editingPage.id, editingPage.slug);
+                  setPageModalOpen(false);
+                  setEditingPage(null);
+                }}>OK</button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Confirm delete dialog used for projects and pages */}
+        {confirmTarget && (
+          <Dialog open={confirmOpen} onOpenChange={(v) => { setConfirmOpen(v); if (!v) setConfirmTarget(null); }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete {confirmTarget.kind === 'project' ? 'Project' : 'Page'}</DialogTitle>
+                <DialogDescription>Are you sure you want to delete "{confirmTarget.name}"? This action cannot be undone.</DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="mt-4">
+                <button className="px-4 py-2 rounded-md border border-input" onClick={() => { setConfirmOpen(false); setConfirmTarget(null); }}>Cancel</button>
+                <button className="px-4 py-2 rounded-md bg-destructive text-destructive-foreground ml-2" onClick={() => {
+                  if (!confirmTarget) return;
+                  if (confirmTarget.kind === 'project') del(confirmTarget.id);
+                  else deletePage(confirmTarget.id);
+                  setConfirmOpen(false);
+                  setConfirmTarget(null);
+                }}>Delete</button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <IconBtn title="New project" onClick={() => newProject()}><Plus className="w-4 h-4" /></IconBtn>

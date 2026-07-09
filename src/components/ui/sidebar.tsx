@@ -81,12 +81,16 @@ const SidebarProvider = React.forwardRef<
         } else {
           _setOpen(openState);
         }
-
-        // This sets the cookie to keep the sidebar state.
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
       },
       [setOpenProp, open],
     );
+
+    // Persist sidebar open state to cookie on client only.
+    React.useEffect(() => {
+      try {
+        document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+      } catch (_) {}
+    }, [open]);
 
     // Helper to toggle the sidebar.
     const toggleSidebar = React.useCallback(() => {
@@ -638,9 +642,14 @@ const SidebarMenuSkeleton = React.forwardRef<
     showIcon?: boolean;
   }
 >(({ className, showIcon = false, ...props }, ref) => {
-  // Random width between 50 to 90%.
-  const width = React.useMemo(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`;
+  // Random width between 50 to 90% (client-only to avoid SSR mismatch).
+  const [width, setWidth] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    try {
+      setWidth(`${Math.floor(Math.random() * 40) + 50}%`);
+    } catch (_) {
+      setWidth('70%');
+    }
   }, []);
 
   return (
@@ -656,7 +665,7 @@ const SidebarMenuSkeleton = React.forwardRef<
         data-sidebar="menu-skeleton-text"
         style={
           {
-            "--skeleton-width": width,
+            "--skeleton-width": width ?? '70%',
           } as React.CSSProperties
         }
       />

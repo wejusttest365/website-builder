@@ -1,7 +1,8 @@
 import { useBuilder, pageOf } from "@/lib/builder/store";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SECTION_LIBRARY } from "@/lib/builder/sections";
 import { PreviewFrame } from "./PreviewFrame";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
   ArrowDown,
@@ -10,6 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
   MousePointerClick,
+  Plus,
 } from "lucide-react";
 
 export function Canvas() {
@@ -23,6 +25,7 @@ export function Canvas() {
   const addSection = useBuilder((s) => s.addSection);
   const [draggingLibrarySection, setDraggingLibrarySection] = useState(false);
   const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     const onStart = () => setDraggingLibrarySection(true);
@@ -38,10 +41,24 @@ export function Canvas() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDraggingLibrarySection(false);
-    const tplId = e.dataTransfer.getData("application/x-wto-section");
+    const tplId = e.dataTransfer.getData("application/x-wto-section") || e.dataTransfer.getData("text/plain");
     if (!tplId) return;
     const tpl = SECTION_LIBRARY.find((s) => s.id === tplId);
-    if (tpl) addSection(tpl);
+    if (!tpl || !project) return;
+
+    const page = pageOf(project);
+    const sectionCount = page?.sections.length ?? 0;
+    let insertIndex = sectionCount;
+
+    const frame = iframeRef.current;
+    const frameRect = frame?.getBoundingClientRect();
+    if (frameRect) {
+      const dropY = Math.max(frameRect.top, Math.min(e.clientY, frameRect.bottom));
+      const ratio = (dropY - frameRect.top) / frameRect.height;
+      insertIndex = Math.floor(ratio * (sectionCount + 1));
+    }
+
+    addSection(tpl, insertIndex);
   };
 
   const handleSectionDrop = (targetIndex: number) => (e: React.DragEvent) => {
@@ -56,85 +73,30 @@ export function Canvas() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="border-b border-border bg-card flex items-stretch">
-        <div className="flex-1 overflow-x-auto flex items-center gap-1 px-2 py-2">
-          {(pageOf(project)?.sections ?? []).length === 0 && (
-            <div className="text-xs text-muted-foreground px-2 flex items-center gap-2">
-              <MousePointerClick className="w-3.5 h-3.5" />
-              Drag sections here or double-click a card in the library.
-            </div>
-          )}
-          {(pageOf(project)?.sections ?? []).map((s: any, idx: number) => {
-            const active = s.id === selectedId;
-            return (
-              <div
-                key={s.id}
-                draggable
-                onDragStart={(e) => {
-                  setDraggingSectionId(s.id);
-                  e.dataTransfer.setData("application/x-wto-existing-section", s.id);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onDragEnd={() => setDraggingSectionId(null)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleSectionDrop(idx)}
-                className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs border ${active ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:bg-accent"}`}
-              >
-                <button className="font-medium truncate max-w-[120px]" onClick={() => select(s.id)}>
-                  {s.name}
-                </button>
-                <button
-                  title="Move up"
-                  disabled={idx === 0}
-                  className="p-0.5 disabled:opacity-30 hover:bg-accent rounded"
-                  onClick={() => move(idx, idx - 1)}
-                >
-                  <ArrowUp className="w-3 h-3" />
-                </button>
-                <button
-                  title="Move down"
-                  disabled={idx === ((pageOf(project)?.sections ?? []).length ?? 0) - 1}
-                  className="p-0.5 disabled:opacity-30 hover:bg-accent rounded"
-                  onClick={() => move(idx, idx + 1)}
-                >
-                  <ArrowDown className="w-3 h-3" />
-                </button>
-                <button
-                  title={s.collapsed ? "Expand" : "Collapse"}
-                  className="p-0.5 hover:bg-accent rounded"
-                  onClick={() => toggleCollapsed(s.id)}
-                >
-                  {s.collapsed ? (
-                    <ChevronDown className="w-3 h-3" />
-                  ) : (
-                    <ChevronUp className="w-3 h-3" />
-                  )}
-                </button>
-                <button
-                  title="Duplicate"
-                  className="p-0.5 hover:bg-accent rounded"
-                  onClick={() => dup(s.id)}
-                >
-                  <Copy className="w-3 h-3" />
-                </button>
-                <button
-                  title="Delete"
-                  className="p-0.5 hover:bg-destructive/20 text-destructive rounded"
-                  onClick={() => remove(s.id)}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            );
-          })}
+      <div className="border-b border-border bg-card flex items-center px-3">
+        <div className="w-full">
+          <Tabs defaultValue={pageOf(project)?.id ?? ""} onValueChange={(v) => useBuilder.getState().selectPage(v)}>
+            <TabsList>
+              {(project?.pages ?? []).map((pg) => (
+                <TabsTrigger key={pg.id} value={pg.id} className="mr-2">{pg.name}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="h-8 w-8 rounded-md flex items-center justify-center hover:bg-accent" title="New page" onClick={() => useBuilder.getState().addPage()}><Plus className="w-4 h-4"/></button>
         </div>
       </div>
       <div
         className="relative flex-1 overflow-hidden"
-        onDragOver={(e) => e.preventDefault()}
+        onDragEnter={(e) => e.preventDefault()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }}
         onDrop={handleDrop}
       >
-        <PreviewFrame editable disablePointerEvents={draggingLibrarySection} />
+        <PreviewFrame editable disablePointerEvents={draggingLibrarySection} iframeRef={iframeRef} />
         {draggingLibrarySection && (
           <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/10 text-sm font-semibold text-primary">
             Drop section here

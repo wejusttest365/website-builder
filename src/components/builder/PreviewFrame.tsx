@@ -5,9 +5,10 @@ import { buildPreviewHTML, resolveAssetPaths } from "@/lib/builder/preview";
 interface Props {
   editable?: boolean;
   disablePointerEvents?: boolean;
+  iframeRef?: React.RefObject<HTMLIFrameElement>;
 }
 
-export function PreviewFrame({ editable = true, disablePointerEvents = false }: Props) {
+export function PreviewFrame({ editable = true, disablePointerEvents = false, iframeRef }: Props) {
   const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
   const selectedId = useBuilder((s) => s.selectedSectionId);
   const device = useBuilder((s) => s.device);
@@ -15,15 +16,23 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
   const setSectionHtml = useBuilder((s) => s.setSectionHtml);
   const updateSection = useBuilder((s) => s.updateSection);
   const addAsset = useBuilder((s) => s.addAsset);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const innerIframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeRefToUse = iframeRef ?? innerIframeRef;
   const [imageEditor, setImageEditor] = useState<{
     sectionId: string;
     src: string;
     idx: string | null;
+    path?: string | null;
     kind: "img" | "box";
   } | null>(null);
   const skipRebuildRef = useRef(false);
   const [srcDoc, setSrcDoc] = useState("");
+
+  function assetPathForDataUrl(src: string) {
+    if (!project || !src.startsWith("data:")) return src;
+    const asset = Object.entries(project.assets ?? {}).find(([_name, data]) => data === src);
+    return asset ? `images/${asset[0]}` : src;
+  }
 
   // Rebuild srcDoc for structural changes OR html changes that did NOT come from
   // inside the iframe. This prevents scroll jumps while inline-editing text.
@@ -59,13 +68,14 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
         editable,
         selectedId: null,
         assets: project.assets,
+        pages: project.pages?.map((p) => ({ id: p.id, slug: p.slug })) ?? [],
       }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structuralKey, htmlKey]);
 
   useEffect(() => {
-    const doc = iframeRef.current?.contentDocument;
+    const doc = iframeRefToUse.current?.contentDocument;
     if (!doc) return;
     doc.querySelectorAll("[data-wto-section]").forEach((el) => {
       el.classList.toggle("wto-selected", el.getAttribute("data-wto-section") === selectedId);
@@ -84,18 +94,83 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
         skipRebuildRef.current = true;
         setSectionHtml(String(data.payload?.sectionId ?? ""), String(data.payload?.html ?? ""));
       }
+    // handle brand upload requests from preview runtime
+    async function handleBrandUpload(payload: any) {
+      const sid = String(payload?.sectionId ?? "");
+      if (!sid || !project) return;
+      const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === sid);
+      if (!section) return;
+      const doc = new DOMParser().parseFromString(`<body>${section.html}</body>`, 'text/html');
+      const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
+      const anchors = nav ? Array.from(nav.querySelectorAll('a')) : [];
+      const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li'));
+      const currentSrc = brand?.querySelector('img')?.getAttribute('src') || "";
+      setImageEditor({ sectionId: sid, src: assetPathForDataUrl(currentSrc), idx: null, kind: 'img' });
+    }
       if (data.type === "image-click")
         setImageEditor({
           sectionId: String(data.payload?.sectionId ?? ""),
-          src: String(data.payload?.src ?? ""),
+          src: assetPathForDataUrl(String(data.payload?.src ?? "")),
           idx: data.payload?.idx != null ? String(data.payload.idx) : null,
+          path: data.payload?.path ? String(data.payload.path) : null,
           kind: (data.payload?.kind as "img" | "box") ?? "img",
         });
+      // Inline toolbar actions from preview runtime
+      if (data.type === "section-action") {
+        const sid = String(data.payload?.sectionId ?? "");
+        const act = String(data.payload?.action ?? "");
+        if (!sid) return;
+        const state = useBuilder.getState();
+        const cur = state.currentProject();
+        const moveByIndex = (from: number, to: number) => {
+          const move = state.moveSection;
+          if (from != null && to != null) move(from, to);
+        };
+        // map actions
+        const secs = cur ? pageOf(cur)?.sections ?? [] : [];
+        const fromIdx = secs.findIndex((s: any) => s.id === sid);
+        if (act === "up" && fromIdx > 0) moveByIndex(fromIdx, fromIdx - 1);
+        if (act === "down" && fromIdx >= 0 && fromIdx < secs.length - 1) moveByIndex(fromIdx, fromIdx + 1);
+        if (act === "top" && fromIdx > 0) moveByIndex(fromIdx, 0);
+        if (act === "bottom" && fromIdx >= 0) moveByIndex(fromIdx, secs.length - 1);
+        if (act === "dup") state.duplicateSection(sid);
+        if (act === "hide") state.toggleHidden(sid);
+        if (act === "del") state.removeSection(sid);
+      }
+      if (data.type === "section-move") {
+        const fromId = String(data.payload?.fromId ?? "");
+        const toId = String(data.payload?.toId ?? "");
+        const before = !!data.payload?.before;
+        const state = useBuilder.getState();
+        const cur = state.currentProject();
+        if (!fromId || !toId || !cur) return;
+        const secs = pageOf(cur)?.sections ?? [];
+        const fromIdx = secs.findIndex((s: any) => s.id === fromId);
+        const toIdx = secs.findIndex((s: any) => s.id === toId);
+        if (fromIdx < 0 || toIdx < 0) return;
+        const target = before ? toIdx : toIdx + 1;
+        state.moveSection(fromIdx, target > fromIdx ? target - 1 : target);
+      }
       if (data.type === "console") {
         window.dispatchEvent(new CustomEvent("wto-console", { detail: data.payload }));
       }
+      if (data.type === 'brand-upload') handleBrandUpload(data.payload || {});
     }
     window.addEventListener("message", onMsg);
+    // Debug: log forwarded iframe console messages to parent console for easier debugging
+    function onWtoConsole(ev: Event) {
+      try {
+        // detail has { level, args }
+        const detail = (ev as CustomEvent).detail;
+        const level = detail?.level || 'log';
+        const args = Array.isArray(detail?.args) ? detail.args : [detail?.args];
+        // prefix so it's easy to find
+        console[level]?.('[wto-iframe]', ...args);
+      } catch (err) {
+        console.error('wto-iframe console handler error', err);
+      }
+    }
+    window.addEventListener('wto-console', onWtoConsole as EventListener);
     return () => window.removeEventListener("message", onMsg);
   }, [editable, select, setSectionHtml]);
 
@@ -103,15 +178,13 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
 
   return (
     <div className="w-full h-full flex justify-center items-start overflow-auto bg-muted/40 p-4">
-      <div
-        className="bg-white shadow-xl transition-all"
-        style={{ width, minHeight: "calc(100% - 2rem)", flex: "0 0 auto" }}
-      >
+      <div className="bg-white shadow-xl transition-all" style={{ width, minHeight: "100%", flex: "0 0 auto", maxWidth: "100%" }}>
         <iframe
-          ref={iframeRef}
+          ref={iframeRefToUse}
           title="preview"
           srcDoc={srcDoc}
-          className={`w-full h-[calc(100vh-180px)] border-0 ${disablePointerEvents ? "pointer-events-none" : ""}`}
+          className={`w-full h-full border-0 ${disablePointerEvents ? "pointer-events-none" : ""}`}
+          style={{ minHeight: "520px" }}
         />
       </div>
       {imageEditor && (
@@ -143,6 +216,17 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
 }
 
 function findByIdx(root: ParentNode, idx: string): Element | null {
+  // Support legacy numeric idx (data-wto-idx) and path strings like "1,3,2"
+  if (!idx) return null;
+  if (idx.includes(',')) {
+    const parts = idx.split(',').map((p) => Number(p));
+    let cur: Element | null = root as Element | null;
+    for (const p of parts) {
+      if (!cur || !cur.children || cur.children.length <= p) return null;
+      cur = cur.children[p] as Element | null;
+    }
+    return cur;
+  }
   return root.querySelector(`[data-wto-idx="${CSS.escape(idx)}"]`);
 }
 
@@ -168,14 +252,29 @@ function cleanGradientClasses(cls: string) {
 
 function replaceImageAt(
   html: string,
-  target: { idx: string | null; src: string; kind: "img" | "box" },
+  target: { idx: string | null; path?: string | null; src: string; kind: "img" | "box" },
   newSrc: string,
 ): string {
   const doc = parseSection(html);
   let el: Element | null = null;
   if (target.idx) el = findByIdx(doc.body, target.idx);
+  if (!el && target.path) el = findByIdx(doc.body, target.path);
   if (!el && target.src && target.kind === "img") {
     el = doc.body.querySelector(`img[src="${cssAttr(target.src)}"]`);
+  }
+  if (!el && target.kind === "img") {
+    const nav = doc.body.querySelector("nav") ?? doc.body.querySelector("[data-wto-nav]");
+    const anchors = nav ? Array.from(nav.querySelectorAll("a")) : [];
+    const brand = anchors.find((a) => !a.closest("ul") && !a.closest("li"));
+    if (brand) {
+      brand.innerHTML = "";
+      const img = doc.createElement("img");
+      img.setAttribute("src", newSrc);
+      img.setAttribute("alt", "logo");
+      img.setAttribute("style", "height:40px;width:auto;object-fit:contain;");
+      brand.appendChild(img);
+      return doc.body.innerHTML;
+    }
   }
   if (!el) return html;
 
@@ -200,11 +299,12 @@ function replaceImageAt(
 
 function removeImageAt(
   html: string,
-  target: { idx: string | null; src: string; kind: "img" | "box" },
+  target: { idx: string | null; path?: string | null; src: string; kind: "img" | "box" },
 ): string {
   const doc = parseSection(html);
   let el: Element | null = null;
   if (target.idx) el = findByIdx(doc.body, target.idx);
+  if (!el && target.path) el = findByIdx(doc.body, target.path);
   if (!el && target.src && target.kind === "img") {
     el = doc.body.querySelector(`img[src="${cssAttr(target.src)}"]`);
   }

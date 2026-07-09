@@ -19,6 +19,9 @@ export interface PageSection {
     repeat?: boolean;
   };
   sticky?: boolean; // for nav/header sections
+  // shared marker for header/footer sections that are synced across pages
+  shared?: "header" | "footer";
+  sharedKey?: string;
 }
 
 export interface Page {
@@ -57,6 +60,10 @@ interface BuilderState {
   history: HistoryEntry[];
   historyIndex: number;
   hydrated: boolean;
+  leftPanelOpen: boolean;
+
+  setLeftPanelOpen: (v: boolean) => void;
+  toggleLeftPanel: () => void;
 
   hydrate: () => void;
   persist: () => void;
@@ -152,7 +159,7 @@ function migrateProject(raw: unknown): Project {
   };
 }
 
-function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null } {
+function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null; leftPanelOpen?: boolean } {
   if (typeof window === "undefined") return { projects: {}, currentProjectId: null };
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
@@ -162,7 +169,7 @@ function loadFromStorage(): { projects: Record<string, Project>; currentProjectI
     for (const [id, p] of Object.entries(parsed.projects || {})) {
       projects[id] = migrateProject(p);
     }
-    return { projects, currentProjectId: parsed.currentProjectId ?? null };
+    return { projects, currentProjectId: parsed.currentProjectId ?? null, leftPanelOpen: (parsed as any).leftPanelOpen };
   } catch {
     return { projects: {}, currentProjectId: null };
   }
@@ -205,7 +212,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
 
   hydrate: () => {
     if (get().hydrated) return;
-    const { projects, currentProjectId } = loadFromStorage();
+    const { projects, currentProjectId, leftPanelOpen } = loadFromStorage();
     let pid = currentProjectId;
     let projs = projects;
     if (!pid || !projs[pid]) {
@@ -213,7 +220,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       projs = { ...projs, [proj.id]: proj };
       pid = proj.id;
     }
-    set({ projects: projs, currentProjectId: pid, hydrated: true });
+    set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: leftPanelOpen ?? true });
     const p = projs[pid];
     const page = getCurrentPage(p)!;
     set({
@@ -226,11 +233,15 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     if (typeof window === "undefined") return;
     const { projects, currentProjectId } = get();
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, currentProjectId }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, currentProjectId, leftPanelOpen: get().leftPanelOpen }));
     } catch {
       /* ignore */
     }
   },
+
+  leftPanelOpen: true,
+  setLeftPanelOpen: (v) => set({ leftPanelOpen: v }),
+  toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
 
   currentProject: () => {
     const { projects, currentProjectId } = get();
@@ -308,7 +319,18 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const id = nanoid(8);
     let s = slug ? slugify(slug) : slugify(name);
     while (p.pages.some((pg) => pg.slug === s)) s += "-1";
-    const page: Page = { id, name, slug: s, sections: [] };
+    // Copy shared header/footer sections from an existing page (prefer first page)
+    const src = p.pages[0] ?? null;
+    const sharedSections: PageSection[] = [];
+    if (src) {
+      for (const sec of src.sections) {
+        if ((sec as any).shared) {
+          const copy: PageSection = { ...JSON.parse(JSON.stringify(sec)), id: nanoid(8) };
+          sharedSections.push(copy);
+        }
+      }
+    }
+    const page: Page = { id, name, slug: s, sections: sharedSections };
     updateCurrent(set, get, { pages: [...p.pages, page], currentPageId: id });
     set({ selectedSectionId: null });
     get().pushHistory();
@@ -398,17 +420,65 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
 
   updateSection: (id, patch) => {
-    const page = getCurrentPage(get().currentProject());
-    if (!page) return;
-    const sections = page.sections.map((s) => (s.id === id ? { ...s, ...patch } : s));
-    updatePageSections(set, get, sections);
+    const cur = get().currentProject();
+    if (!cur) return;
+    // find original section and its sharedKey (if any)
+    let original: PageSection | null = null;
+    for (const pg of cur.pages) {
+      const s = pg.sections.find((ss) => ss.id === id);
+      if (s) {
+        original = s;
+        break;
+      }
+    }
+    if (!original) return;
+    const sharedKey = (original as any).sharedKey as string | undefined;
+    const pages = cur.pages.map((pg) => {
+      // if we're turning this section into a shared section and this page lacks it,
+      // insert a copy in the appropriate place.
+      const hasShared = (pg.sections || []).some((s) => (s as any).sharedKey === (patch as any).sharedKey);
+      let sections = pg.sections.map((s) => {
+        if (s.id === id) return { ...s, ...patch };
+        if (sharedKey && (s as any).sharedKey === sharedKey) return { ...s, ...patch };
+        return s;
+      });
+      if ((patch as any).shared && (patch as any).sharedKey && !hasShared) {
+        // create a copy of the updated section for this page
+        const copy: PageSection = { ...JSON.parse(JSON.stringify({ ...original, ...patch })), id: nanoid(8) };
+        if ((patch as any).shared === "header") {
+          sections = [copy, ...sections];
+        } else {
+          sections = [...sections, copy];
+        }
+      }
+      return { ...pg, sections };
+    });
+    updateCurrent(set, get, { pages });
   },
 
   removeSection: (id) => {
-    const page = getCurrentPage(get().currentProject());
-    if (!page) return;
-    const sections = page.sections.filter((s) => s.id !== id);
-    updatePageSections(set, get, sections);
+    const cur = get().currentProject();
+    if (!cur) return;
+    // check if section is shared and remove from all pages
+    let original: PageSection | null = null;
+    for (const pg of cur.pages) {
+      const s = pg.sections.find((ss) => ss.id === id);
+      if (s) {
+        original = s;
+        break;
+      }
+    }
+    if (!original) return;
+    const sharedKey = (original as any).sharedKey as string | undefined;
+    const pages = cur.pages.map((pg) => ({
+      ...pg,
+      sections: pg.sections.filter((s) => {
+        if (s.id === id) return false;
+        if (sharedKey && (s as any).sharedKey === sharedKey) return false;
+        return true;
+      }),
+    }));
+    updateCurrent(set, get, { pages });
     get().pushHistory();
     if (get().selectedSectionId === id) set({ selectedSectionId: null });
   },

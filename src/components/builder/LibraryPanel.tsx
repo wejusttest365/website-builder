@@ -3,6 +3,7 @@ import { SECTION_LIBRARY, CATEGORIES, type SectionTemplate } from "@/lib/builder
 import { useBuilder } from "@/lib/builder/store";
 import { Search, Plus, Copy, Eye, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+import { ChevronLeft } from "lucide-react";
 
 export function LibraryPanel() {
   const [q, setQ] = useState("");
@@ -12,6 +13,8 @@ export function LibraryPanel() {
     Features: true,
   }));
   const addSection = useBuilder((s) => s.addSection);
+  const leftPanelOpen = useBuilder((s) => s.leftPanelOpen);
+  const toggleLeftPanel = useBuilder((s) => s.toggleLeftPanel);
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -31,9 +34,19 @@ export function LibraryPanel() {
     return CATEGORIES.filter((c) => map.has(c)).map((c) => [c, map.get(c)!] as const);
   }, [filtered]);
 
+  if (!leftPanelOpen) {
+    return (
+      <div className="h-full bg-card flex items-center justify-center">
+        <button className="p-2 rounded hover:bg-accent" title="Open library" onClick={() => toggleLeftPanel()}>
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-card">
-      <div className="p-3 border-b border-border">
+      <div className="p-3 border-b border-border relative">
         <div className="relative">
           <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
           <input
@@ -43,6 +56,9 @@ export function LibraryPanel() {
             className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
+        <button className="absolute right-2 top-2 p-1 rounded hover:bg-accent" title="Collapse" onClick={() => toggleLeftPanel()}>
+          <ChevronLeft className="w-4 h-4" />
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {grouped.length === 0 && (
@@ -84,6 +100,7 @@ function SectionCard({ tpl, onAdd }: { tpl: SectionTemplate; onAdd: () => void }
         draggable
         onDragStart={(e) => {
           e.dataTransfer.setData("application/x-wto-section", tpl.id);
+          e.dataTransfer.setData("text/plain", tpl.id);
           e.dataTransfer.effectAllowed = "copy";
           window.dispatchEvent(new CustomEvent("wto-library-drag-start", { detail: tpl.id }));
         }}
