@@ -1,4 +1,4 @@
-import { useBuilder } from "@/lib/builder/store";
+import { useBuilder, pageOf } from "@/lib/builder/store";
 import { SECTION_LIBRARY } from "@/lib/builder/sections";
 import { PreviewFrame } from "./PreviewFrame";
 import { useEffect, useState } from "react";
@@ -48,7 +48,7 @@ export function Canvas() {
     const sourceId = e.dataTransfer.getData("application/x-wto-existing-section") || draggingSectionId;
     if (!sourceId || !project) return;
     e.preventDefault();
-    const fromIndex = (pageOf(project)?.sections ?? []).findIndex((s) => s.id === sourceId);
+    const fromIndex = (pageOf(project)?.sections ?? []).findIndex((s: any) => s.id === sourceId);
     if (fromIndex < 0 || fromIndex === targetIndex) return;
     move(fromIndex, targetIndex);
     setDraggingSectionId(null);
@@ -64,7 +64,7 @@ export function Canvas() {
               Drag sections here or double-click a card in the library.
             </div>
           )}
-          {(pageOf(project)?.sections ?? []).map((s, idx) => {
+          {(pageOf(project)?.sections ?? []).map((s: any, idx: number) => {
             const active = s.id === selectedId;
             return (
               <div

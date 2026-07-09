@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useBuilder } from "@/lib/builder/store";
+import { useBuilder, pageOf } from "@/lib/builder/store";
 import { buildPreviewHTML, resolveAssetPaths } from "@/lib/builder/preview";
 
 interface Props {
@@ -30,10 +30,10 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
   const structuralKey = useMemo(() => {
     if (!project) return "";
     return JSON.stringify({
-      ids: (pageOf(project)?.sections ?? []).map((s) => s.id + ":" + (s.collapsed ? 1 : 0)),
-      styles: (pageOf(project)?.sections ?? []).map((s) => s.style),
-      classes: (pageOf(project)?.sections ?? []).map((s) => s.className),
-      domIds: (pageOf(project)?.sections ?? []).map((s) => s.domId),
+      ids: (pageOf(project)?.sections ?? []).map((s: any) => s.id + ":" + (s.collapsed ? 1 : 0)),
+      styles: (pageOf(project)?.sections ?? []).map((s: any) => s.style),
+      classes: (pageOf(project)?.sections ?? []).map((s: any) => s.className),
+      domIds: (pageOf(project)?.sections ?? []).map((s: any) => s.domId),
       css: project.globalCss,
       js: project.globalJs,
       editable,
@@ -41,7 +41,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
     });
   }, [project, editable]);
   const htmlKey = useMemo(
-    () => (pageOf(project)?.sections ?? []).map((s) => s.html).join("\u0001") ?? "",
+    () => (pageOf(project)?.sections ?? []).map((s: any) => s.html).join("\u0001") ?? "",
     [project],
   );
 
@@ -122,7 +122,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
           onClose={() => setImageEditor(null)}
           onApply={(newSrc) => {
             if (!project) return;
-            const section = (pageOf(project)?.sections ?? []).find((s) => s.id === imageEditor.sectionId);
+            const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === imageEditor.sectionId);
             if (!section) return;
             const nextHtml = replaceImageAt(section.html, imageEditor, newSrc);
             updateSection(section.id, { html: nextHtml });
@@ -130,7 +130,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false }: 
           }}
           onRemove={() => {
             if (!project) return;
-            const section = (pageOf(project)?.sections ?? []).find((s) => s.id === imageEditor.sectionId);
+            const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === imageEditor.sectionId);
             if (!section) return;
             const nextHtml = removeImageAt(section.html, imageEditor);
             updateSection(section.id, { html: nextHtml });

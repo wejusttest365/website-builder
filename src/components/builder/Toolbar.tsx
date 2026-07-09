@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useBuilder } from "@/lib/builder/store";
+import { useBuilder, pageOf } from "@/lib/builder/store";
 import { buildExportBundle } from "@/lib/builder/preview";
 import JSZip from "jszip";
 import { toast } from "sonner";
