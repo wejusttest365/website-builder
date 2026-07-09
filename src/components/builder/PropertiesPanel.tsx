@@ -9,7 +9,7 @@ export function PropertiesPanel() {
   const pushHistory = useBuilder((s) => s.pushHistory);
   const addAsset = useBuilder((s) => s.addAsset);
 
-  const section = project?.sections.find((s) => s.id === selectedId) ?? null;
+  const section = (pageOf(project)?.sections ?? []).find((s) => s.id === selectedId) ?? null;
 
   if (!section) {
     return (

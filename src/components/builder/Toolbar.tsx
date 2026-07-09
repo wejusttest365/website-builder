@@ -44,7 +44,7 @@ export function Toolbar() {
 
   const bundle = project
     ? buildExportBundle({
-        sections: project.sections,
+        sections: (pageOf(project)?.sections ?? []),
         globalCss: project.globalCss,
         globalJs: project.globalJs,
         title: project.name,

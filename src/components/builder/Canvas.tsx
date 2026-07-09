@@ -48,7 +48,7 @@ export function Canvas() {
     const sourceId = e.dataTransfer.getData("application/x-wto-existing-section") || draggingSectionId;
     if (!sourceId || !project) return;
     e.preventDefault();
-    const fromIndex = project.sections.findIndex((s) => s.id === sourceId);
+    const fromIndex = (pageOf(project)?.sections ?? []).findIndex((s) => s.id === sourceId);
     if (fromIndex < 0 || fromIndex === targetIndex) return;
     move(fromIndex, targetIndex);
     setDraggingSectionId(null);
@@ -58,13 +58,13 @@ export function Canvas() {
     <div className="flex flex-col h-full">
       <div className="border-b border-border bg-card flex items-stretch">
         <div className="flex-1 overflow-x-auto flex items-center gap-1 px-2 py-2">
-          {project?.sections.length === 0 && (
+          {(pageOf(project)?.sections ?? []).length === 0 && (
             <div className="text-xs text-muted-foreground px-2 flex items-center gap-2">
               <MousePointerClick className="w-3.5 h-3.5" />
               Drag sections here or double-click a card in the library.
             </div>
           )}
-          {project?.sections.map((s, idx) => {
+          {(pageOf(project)?.sections ?? []).map((s, idx) => {
             const active = s.id === selectedId;
             return (
               <div
@@ -93,7 +93,7 @@ export function Canvas() {
                 </button>
                 <button
                   title="Move down"
-                  disabled={idx === (project?.sections.length ?? 0) - 1}
+                  disabled={idx === ((pageOf(project)?.sections ?? []).length ?? 0) - 1}
                   className="p-0.5 disabled:opacity-30 hover:bg-accent rounded"
                   onClick={() => move(idx, idx + 1)}
                 >

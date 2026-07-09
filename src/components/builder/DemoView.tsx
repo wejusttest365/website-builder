@@ -8,7 +8,7 @@ export function DemoView({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("wto-builder-v1");
+      const raw = localStorage.getItem("wto-builder-v2");
       if (!raw) return setNotFound(true);
       const data = JSON.parse(raw) as { projects: Record<string, Project> };
       const p = data.projects?.[projectId];
@@ -34,7 +34,7 @@ export function DemoView({ projectId }: { projectId: string }) {
   if (!proj) return null;
 
   const bundle = buildExportBundle({
-    sections: proj.sections,
+    sections: (proj.pages?.[0]?.sections ?? []),
     globalCss: proj.globalCss,
     globalJs: proj.globalJs,
     title: proj.name,
