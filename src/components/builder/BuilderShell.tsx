@@ -4,7 +4,6 @@ import { Toolbar } from "./Toolbar";
 import { LibraryPanel } from "./LibraryPanel";
 import { Canvas } from "./Canvas";
 import { PropertiesPanel } from "./PropertiesPanel";
-import { CodePanel } from "./CodePanel";
 
 export function BuilderShell() {
   const hydrate = useBuilder((s) => s.hydrate);
@@ -65,13 +64,8 @@ export function BuilderShell() {
         <div className="border-r border-border min-h-0 overflow-hidden">
           <LibraryPanel />
         </div>
-        <div className="min-h-0 grid grid-rows-[1fr_280px]">
-          <div className="min-h-0 overflow-hidden">
-            <Canvas />
-          </div>
-          <div className="min-h-0 overflow-hidden border-t border-border">
-            <CodePanel />
-          </div>
+        <div className="min-h-0 overflow-hidden">
+          <Canvas />
         </div>
         <div className="border-l border-border min-h-0 overflow-hidden">
           <PropertiesPanel />

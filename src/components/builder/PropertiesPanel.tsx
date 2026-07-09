@@ -1,4 +1,4 @@
-import { useBuilder } from "@/lib/builder/store";
+import { useBuilder, pageOf } from "@/lib/builder/store";
 import { Plus, Trash2, Copy } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -9,7 +9,7 @@ export function PropertiesPanel() {
   const pushHistory = useBuilder((s) => s.pushHistory);
   const addAsset = useBuilder((s) => s.addAsset);
 
-  const section = project?.sections.find((s) => s.id === selectedId) ?? null;
+  const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === selectedId) ?? null;
 
   if (!section) {
     return (

@@ -42,16 +42,17 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
     name: "Simple Navbar",
     category: "Navigation",
     thumbBg: grad("#4f46e5", "#7c3aed"),
-    html: `<nav class="w-full bg-white border-b border-gray-200">
+    html: `<nav data-wto-nav class="w-full bg-white border-b border-gray-200">
   <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
     <a href="#" class="text-xl font-bold text-gray-900">Brand</a>
-    <ul class="hidden md:flex gap-8 text-sm text-gray-700">
-      <li><a href="#" class="hover:text-indigo-600">Home</a></li>
-      <li><a href="#" class="hover:text-indigo-600">Features</a></li>
-      <li><a href="#" class="hover:text-indigo-600">Pricing</a></li>
-      <li><a href="#" class="hover:text-indigo-600">Contact</a></li>
+    <ul data-wto-nav-menu class="hidden md:flex gap-8 text-sm text-gray-700">
+      <li><a href="index.html" class="hover:text-indigo-600">Home</a></li>
+      <li><a href="about-us.html" class="hover:text-indigo-600">About</a></li>
+      <li><a href="services.html" class="hover:text-indigo-600">Services</a></li>
+      <li><a href="contact.html" class="hover:text-indigo-600">Contact</a></li>
     </ul>
-    <a href="#" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">Get Started</a>
+    <a href="#" class="hidden md:inline-block px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">Get Started</a>
+    <button data-wto-nav-btn aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   </div>
 </nav>`,
   },

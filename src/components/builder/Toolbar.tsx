@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useBuilder } from "@/lib/builder/store";
+import { useBuilder, pageOf } from "@/lib/builder/store";
 import { buildExportBundle } from "@/lib/builder/preview";
 import JSZip from "jszip";
 import { toast } from "sonner";
@@ -44,7 +44,7 @@ export function Toolbar() {
 
   const bundle = project
     ? buildExportBundle({
-        sections: project.sections,
+        sections: (pageOf(project)?.sections ?? []),
         globalCss: project.globalCss,
         globalJs: project.globalJs,
         title: project.name,
