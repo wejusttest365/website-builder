@@ -230,13 +230,8 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   </div>
   <script>
     (function() {
-      var section = null;
-      if (document.currentScript && document.currentScript.parentElement) {
-        section = document.currentScript.parentElement;
-      } else {
-        var track = document.querySelector('[data-carousel-track]');
-        section = track ? track.closest('section') : null;
-      }
+      var script = document.currentScript || document.scripts[document.scripts.length - 1];
+      var section = script ? script.parentElement : null;
       if (!section) return;
       var track = section.querySelector('[data-carousel-track]');
       var prevBtn = section.querySelector('[data-carousel-prev]');
@@ -304,13 +299,8 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   </div>
   <script>
     (function() {
-      var section = null;
-      if (document.currentScript && document.currentScript.parentElement) {
-        section = document.currentScript.parentElement;
-      } else {
-        var track = document.querySelector('[data-carousel-items]');
-        section = track ? track.closest('section') : null;
-      }
+      var script = document.currentScript || document.scripts[document.scripts.length - 1];
+      var section = script ? script.parentElement : null;
       if (!section) return;
       var track = section.querySelector('[data-carousel-items]');
       var prevBtn = section.querySelector('[data-carousel-prev]');

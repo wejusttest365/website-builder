@@ -300,7 +300,16 @@ export function Toolbar() {
       </div>
 
       <IconBtn title="New project" onClick={() => newProject()}><Plus className="w-4 h-4" /></IconBtn>
-      <IconBtn title="Save" onClick={() => { persist(); toast.success("Project saved"); }}><Save className="w-4 h-4" /></IconBtn>
+      <IconBtn
+        title="Save"
+        onClick={() => {
+          const ok = persist();
+          if (ok) toast.success("Project saved");
+          else toast.error("Save failed. Check browser storage settings.");
+        }}
+      >
+        <Save className="w-4 h-4" />
+      </IconBtn>
       <IconBtn title="Undo (Ctrl+Z)" onClick={undo}><Undo2 className="w-4 h-4" /></IconBtn>
       <IconBtn title="Redo (Ctrl+Y)" onClick={redo}><Redo2 className="w-4 h-4" /></IconBtn>
 

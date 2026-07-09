@@ -244,10 +244,19 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   persist: () => {
     if (typeof window === "undefined") return;
     const { projects, currentProjectId } = get();
+    const payload = JSON.stringify({ projects, currentProjectId, leftPanelOpen: get().leftPanelOpen });
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, currentProjectId, leftPanelOpen: get().leftPanelOpen }));
+      localStorage.setItem(STORAGE_KEY, payload);
+      return true;
     } catch {
-      /* ignore */
+      try {
+        sessionStorage.setItem(STORAGE_KEY, payload);
+        console.warn("Persist failed for localStorage, saved to sessionStorage instead.");
+        return true;
+      } catch (err) {
+        console.error("Persist failed", err);
+        return false;
+      }
     }
   },
 

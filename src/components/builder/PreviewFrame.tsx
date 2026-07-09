@@ -188,8 +188,11 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
       }
     }
     window.addEventListener('wto-console', onWtoConsole as EventListener);
-    return () => window.removeEventListener("message", onMsg);
-  }, [editable, select, selectPage, setSectionHtml]);
+    return () => {
+      window.removeEventListener("message", onMsg);
+      window.removeEventListener('wto-console', onWtoConsole as EventListener);
+    };
+  }, [editable, project, select, selectPage, setSectionHtml]);
 
   const width = device === "desktop" ? "1180px" : device === "tablet" ? "820px" : "390px";
 
