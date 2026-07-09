@@ -410,6 +410,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       templateId: tpl.id,
       name: tpl.name,
       html: tpl.html,
+      animation: { type: "fade-up", duration: 700, delay: 0 },
     };
     const sections = [...page.sections];
     const at = index ?? sections.length;

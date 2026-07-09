@@ -425,9 +425,9 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   <div class="max-w-6xl mx-auto px-6 py-20">
     <h2 class="text-4xl font-bold text-gray-900">Latest posts</h2>
     <div class="mt-10 grid md:grid-cols-3 gap-8">
-      <article><div class="aspect-[4/3] rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600"></div><h3 class="mt-4 text-lg font-bold">How we scaled to 1M users</h3><p class="mt-2 text-gray-600 text-sm">Lessons learned from a year of growth.</p></article>
-      <article><div class="aspect-[4/3] rounded-xl bg-gradient-to-br from-blue-400 to-indigo-600"></div><h3 class="mt-4 text-lg font-bold">Designing for accessibility</h3><p class="mt-2 text-gray-600 text-sm">Making the web work for everyone.</p></article>
-      <article><div class="aspect-[4/3] rounded-xl bg-gradient-to-br from-orange-400 to-red-500"></div><h3 class="mt-4 text-lg font-bold">Announcing v2.0</h3><p class="mt-2 text-gray-600 text-sm">New features, better performance.</p></article>
+      <article><div class="aspect-[4/3] rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600"></div><h3 class="mt-4 text-lg font-bold">How we scaled to 1M users</h3><p class="mt-2 text-gray-600 text-sm">Lessons learned from a year of growth.</p><a href="#" class="mt-3 inline-block text-indigo-600 font-semibold hover:text-indigo-500">Read more →</a></article>
+      <article><div class="aspect-[4/3] rounded-xl bg-gradient-to-br from-blue-400 to-indigo-600"></div><h3 class="mt-4 text-lg font-bold">Designing for accessibility</h3><p class="mt-2 text-gray-600 text-sm">Making the web work for everyone.</p><a href="#" class="mt-3 inline-block text-indigo-600 font-semibold hover:text-indigo-500">Read more →</a></article>
+      <article><div class="aspect-[4/3] rounded-xl bg-gradient-to-br from-orange-400 to-red-500"></div><h3 class="mt-4 text-lg font-bold">Announcing v2.0</h3><p class="mt-2 text-gray-600 text-sm">New features, better performance.</p><a href="#" class="mt-3 inline-block text-indigo-600 font-semibold hover:text-indigo-500">Read more →</a></article>
     </div>
   </div>
 </section>`,
