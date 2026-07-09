@@ -13,6 +13,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
   const selectedId = useBuilder((s) => s.selectedSectionId);
   const device = useBuilder((s) => s.device);
   const select = useBuilder((s) => s.selectSection);
+  const selectPage = useBuilder((s) => s.selectPage);
   const setSectionHtml = useBuilder((s) => s.setSectionHtml);
   const updateSection = useBuilder((s) => s.updateSection);
   const addAsset = useBuilder((s) => s.addAsset);
@@ -56,21 +57,30 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
 
   useEffect(() => {
     if (!project) return;
+    const build = () => {
+      setSrcDoc(
+        buildPreviewHTML({
+          sections: (pageOf(project)?.sections ?? []),
+          globalCss: project.globalCss,
+          globalJs: project.globalJs,
+          editable,
+          selectedId: null,
+          assets: project.assets,
+          pages: project.pages?.map((p) => ({ id: p.id, slug: p.slug })) ?? [],
+          description: pageOf(project)?.description,
+          keywords: pageOf(project)?.keywords,
+          customHead: project.customHead,
+        }),
+      );
+    };
+
     if (skipRebuildRef.current) {
       skipRebuildRef.current = false;
-      return;
+      const timeout = window.setTimeout(build, 100);
+      return () => window.clearTimeout(timeout);
     }
-    setSrcDoc(
-      buildPreviewHTML({
-        sections: (pageOf(project)?.sections ?? []),
-        globalCss: project.globalCss,
-        globalJs: project.globalJs,
-        editable,
-        selectedId: null,
-        assets: project.assets,
-        pages: project.pages?.map((p) => ({ id: p.id, slug: p.slug })) ?? [],
-      }),
-    );
+
+    build();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structuralKey, htmlKey]);
 
@@ -89,10 +99,17 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
       const data = e.data as { __wto?: boolean; type?: string; payload?: Record<string, unknown> };
       if (!data || !data.__wto) return;
       if (data.type === "select") select(String(data.payload?.sectionId ?? ""));
+      if (data.type === "navigate-page") {
+        const slug = String(data.payload?.slug ?? "");
+        if (!slug || !project) return;
+        const page = project.pages.find((p) => p.slug === slug);
+        if (page) selectPage(page.id);
+      }
       if (data.type === "section-html") {
         // Iframe already has the updated DOM — skip srcDoc rebuild to preserve scroll.
         skipRebuildRef.current = true;
         setSectionHtml(String(data.payload?.sectionId ?? ""), String(data.payload?.html ?? ""));
+        useBuilder.getState().persist();
       }
     // handle brand upload requests from preview runtime
     async function handleBrandUpload(payload: any) {
@@ -172,7 +189,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
     }
     window.addEventListener('wto-console', onWtoConsole as EventListener);
     return () => window.removeEventListener("message", onMsg);
-  }, [editable, select, setSectionHtml]);
+  }, [editable, select, selectPage, setSectionHtml]);
 
   const width = device === "desktop" ? "1180px" : device === "tablet" ? "820px" : "390px";
 
@@ -341,6 +358,10 @@ function ImageEditorModal({
 }) {
   const [url, setUrl] = useState(initialSrc);
   const [previewUrl, setPreviewUrl] = useState(resolvedPreview);
+  useEffect(() => {
+    setUrl(initialSrc);
+    setPreviewUrl(resolvedPreview);
+  }, [initialSrc, resolvedPreview]);
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg p-6">
@@ -368,15 +389,16 @@ function ImageEditorModal({
               accept="image/*"
               className="mt-1 block w-full text-sm"
               onChange={(e) => {
-                const f = e.target.files?.[0];
+                const f = e.currentTarget.files?.[0];
                 if (!f) return;
                 const r = new FileReader();
                 r.onload = () => {
                   const dataUrl = String(r.result);
                   const ext = f.name.split(".").pop();
                   const path = onUpload(dataUrl, ext);
-                  setUrl(path);
+                  setUrl(path || dataUrl);
                   setPreviewUrl(dataUrl);
+                  e.currentTarget.value = "";
                 };
                 r.readAsDataURL(f);
               }}

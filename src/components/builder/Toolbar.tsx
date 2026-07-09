@@ -21,6 +21,7 @@ import {
   Settings,
   ChevronDown,
   Share2,
+  Edit2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 
@@ -47,9 +48,13 @@ export function Toolbar() {
   const duplicatePage = useBuilder((s) => s.duplicatePage);
   const deletePage = useBuilder((s) => s.deletePage);
   const selectPage = useBuilder((s) => s.selectPage);
+  const setDescription = useBuilder((s) => s.setPageDescription);
+  const setKeywords = useBuilder((s) => s.setPageKeywords);
+  const setCustomHead = useBuilder((s) => s.setCustomHead);
   const currentPageId = useBuilder((s) => s.currentProject() ? s.currentProject()!.currentPageId : null);
 
   const [exportOpen, setExportOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [pagesOpen, setPagesOpen] = useState(false);
   const [pageModalOpen, setPageModalOpen] = useState(false);
@@ -64,6 +69,10 @@ export function Toolbar() {
         globalCss: project.globalCss,
         globalJs: project.globalJs,
         title: project.name,
+        description: pageOf(project)?.description,
+        keywords: pageOf(project)?.keywords,
+        customHead: project.customHead,
+        assets: project.assets,
         pages: project.pages?.map((p) => ({ id: p.id, slug: p.slug })) ?? [],
       })
     : null;
@@ -114,7 +123,7 @@ export function Toolbar() {
   }
 
   return (
-    <div className="h-14 bg-card border-b border-border flex items-center gap-2 px-3">
+    <div className="h-14 bg-card border-b border-border flex items-center gap-2 px-3 overflow-visible">
       <div className="flex items-center gap-2 pr-2 border-r border-border h-full">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
           W
@@ -206,7 +215,7 @@ export function Toolbar() {
               {pages.map((pg) => (
                 <div key={pg.id} className={`group flex items-center gap-1 px-2 py-1.5 rounded-md hover:bg-accent text-sm ${pg.id === currentPageId ? "bg-accent" : ""}`}>
                   <button className="flex-1 text-left truncate" onClick={() => { selectPage(pg.id); setPagesOpen(false); }}>{pg.name}</button>
-                  <button title="Rename / Edit" className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-background" onClick={() => { setEditingPage({ id: pg.id, name: pg.name, slug: pg.slug }); setSlugEdited(false); setPageModalOpen(true); setPagesOpen(false); }}><Copy className="w-3 h-3" /></button>
+                  <button title="Rename / Edit" className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-background" onClick={() => { setEditingPage({ id: pg.id, name: pg.name, slug: pg.slug }); setSlugEdited(false); setPageModalOpen(true); setPagesOpen(false); }}><Edit2 className="w-3 h-3" /></button>
                   <div className="opacity-0 group-hover:opacity-100 text-xs px-2">/{pg.slug}</div>
                   <button title="Duplicate" className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-background" onClick={() => duplicatePage(pg.id)}><Copy className="w-3 h-3" /></button>
                   <button title="Delete" className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/20 text-destructive" onClick={() => { setConfirmTarget({ kind: "page", id: pg.id, name: pg.name }); setConfirmOpen(true); }}><Trash2 className="w-3 h-3" /></button>
@@ -358,8 +367,59 @@ export function Toolbar() {
             </div>
           )}
         </div>
-        <IconBtn title="Settings"><Settings className="w-4 h-4" /></IconBtn>
+        <IconBtn title="Settings" onClick={() => setSettingsOpen(true)}><Settings className="w-4 h-4" /></IconBtn>
       </div>
+
+      <Dialog open={settingsOpen} onOpenChange={(v) => setSettingsOpen(v)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>SEO & Analytics Settings</DialogTitle>
+            <DialogDescription>Configure page-specific SEO metadata and global tracking code.</DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 space-y-6">
+            <div className="border-b border-border pb-4">
+              <h3 className="text-sm font-semibold mb-3">Page SEO (Current Page)</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">Meta description</label>
+                  <textarea
+                    value={pageOf(project)?.description ?? ""}
+                    onChange={(e) => project && currentPageId && setDescription(currentPageId, e.target.value)}
+                    rows={3}
+                    className="w-full mt-1 rounded-md border border-input bg-background px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Meta keywords</label>
+                  <input
+                    value={pageOf(project)?.keywords ?? ""}
+                    onChange={(e) => project && currentPageId && setKeywords(currentPageId, e.target.value)}
+                    className="w-full mt-1 rounded-md border border-input bg-background px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="comma-separated keywords"
+                  />
+                </div>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Global Analytics & Tracking</h3>
+              <label className="text-xs text-muted-foreground">Custom HTML for &lt;head&gt;</label>
+              <textarea
+                value={project?.customHead ?? ""}
+                onChange={(e) => project && setCustomHead(e.target.value)}
+                rows={5}
+                placeholder="Google Analytics, Facebook Pixel, etc."
+                className="w-full mt-1 rounded-md border border-input bg-background px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+              />
+              <p className="text-[11px] text-muted-foreground mt-2">This HTML will be injected into the &lt;head&gt; of all pages</p>
+            </div>
+          </div>
+          <DialogFooter className="mt-6">
+            <DialogClose asChild>
+              <button className="px-4 py-2 rounded-md border border-input">Close</button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

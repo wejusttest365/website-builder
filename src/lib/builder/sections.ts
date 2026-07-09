@@ -205,6 +205,143 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
 </section>`,
   },
 
+  // CAROUSEL
+  {
+    id: "carousel-full",
+    name: "Full Width Carousel",
+    category: "Gallery",
+    thumbBg: grad("#d946ef", "#c084fc"),
+    html: `<section class="w-full bg-black relative overflow-hidden">
+  <div class="relative w-full h-96 md:h-screen bg-gray-900 flex items-center justify-center group">
+    <div class="relative w-full h-full overflow-hidden">
+      <div class="w-full h-full flex carousel-track" data-carousel-track style="transition: transform 0.5s ease-in-out; transform: translateX(0%);">
+        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://images.unsplash.com/photo-1682227955596-452ec28e7e4d?w=1200&h=800&fit=crop" alt="Slide 1" class="w-full h-full object-cover" data-wto-idx="0" /><div class="absolute inset-0 bg-black/20"></div></div>
+        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://images.unsplash.com/photo-1519346473061-f0a7cbc113d7?w=1200&h=800&fit=crop" alt="Slide 2" class="w-full h-full object-cover" data-wto-idx="1" /><div class="absolute inset-0 bg-black/20"></div></div>
+        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=1200&h=800&fit=crop" alt="Slide 3" class="w-full h-full object-cover" data-wto-idx="2" /><div class="absolute inset-0 bg-black/20"></div></div>
+      </div>
+    </div>
+    <button type="button" class="absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-white/30 hover:bg-white/50 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100" data-carousel-prev aria-label="Previous"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+    <button type="button" class="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-white/30 hover:bg-white/50 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100" data-carousel-next aria-label="Next"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19l7-7-7-7"/></svg></button>
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex gap-2" data-carousel-dots>
+      <button type="button" class="w-2 h-2 rounded-full bg-white" data-carousel-dot="0"></button>
+      <button type="button" class="w-2 h-2 rounded-full bg-white/40" data-carousel-dot="1"></button>
+      <button type="button" class="w-2 h-2 rounded-full bg-white/40" data-carousel-dot="2"></button>
+    </div>
+  </div>
+  <script>
+    (function() {
+      var section = null;
+      if (document.currentScript && document.currentScript.parentElement) {
+        section = document.currentScript.parentElement;
+      } else {
+        var track = document.querySelector('[data-carousel-track]');
+        section = track ? track.closest('section') : null;
+      }
+      if (!section) return;
+      var track = section.querySelector('[data-carousel-track]');
+      var prevBtn = section.querySelector('[data-carousel-prev]');
+      var nextBtn = section.querySelector('[data-carousel-next]');
+      var dots = Array.from(section.querySelectorAll('[data-carousel-dot]'));
+      if (!track || !prevBtn || !nextBtn || !dots.length) return;
+      var slideCount = track.children.length;
+      var currentIndex = 0;
+      function update() {
+        track.style.transform = 'translateX(-' + (currentIndex * 100) + '%)';
+        dots.forEach(function(dot, idx) {
+          dot.style.backgroundColor = idx === currentIndex ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.4)';
+        });
+      }
+      prevBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = (currentIndex - 1 + slideCount) % slideCount;
+        update();
+      });
+      nextBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = (currentIndex + 1) % slideCount;
+        update();
+      });
+      dots.forEach(function(dot) {
+        dot.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          currentIndex = parseInt(dot.getAttribute('data-carousel-dot') || '0', 10);
+          if (isNaN(currentIndex)) currentIndex = 0;
+          update();
+        });
+      });
+      update();
+    })();
+  </script>
+</section>`,
+  },
+
+  // CAROUSEL - MULTI ITEM
+  {
+    id: "carousel-multi",
+    name: "Multi-Item Carousel",
+    category: "Gallery",
+    thumbBg: grad("#f59e0b", "#fbbf24"),
+    html: `<section class="w-full bg-gray-50 py-16">
+  <div class="max-w-6xl mx-auto px-6">
+    <h2 class="text-4xl font-bold text-center text-gray-900 mb-4">Featured Collection</h2>
+    <p class="text-center text-gray-600 mb-12">Swipe through our latest collection</p>
+    <div class="relative">
+      <div class="overflow-hidden">
+        <div class="flex gap-6 carousel-items" data-carousel-items style="transition: transform 0.5s ease-in-out; transform: translateX(0%);">
+          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center relative group"><img src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop" alt="Item 1" class="w-full h-full object-cover" data-wto-idx="0" /><div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item One</h3><p class="text-sm text-gray-600 mt-1">Premium collection piece</p></div></div></div>
+          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center relative group"><img src="https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&h=400&fit=crop" alt="Item 2" class="w-full h-full object-cover" data-wto-idx="1" /><div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Two</h3><p class="text-sm text-gray-600 mt-1">Curated selection</p></div></div></div>
+          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center relative group"><img src="https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=400&h=400&fit=crop" alt="Item 3" class="w-full h-full object-cover" data-wto-idx="2" /><div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Three</h3><p class="text-sm text-gray-600 mt-1">Hand-picked items</p></div></div></div>
+          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center relative group"><img src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop" alt="Item 4" class="w-full h-full object-cover" data-wto-idx="3" /><div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Four</h3><p class="text-sm text-gray-600 mt-1">Limited edition</p></div></div></div>
+          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-indigo-400 to-blue-600 flex items-center justify-center relative group"><img src="https://images.unsplash.com/photo-1535368567674-7c8e7f14498a?w=400&h=400&fit=crop" alt="Item 5" class="w-full h-full object-cover" data-wto-idx="4" /><div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Five</h3><p class="text-sm text-gray-600 mt-1">Bestseller choice</p></div></div></div>
+        </div>
+      </div>
+      <button type="button" class="absolute -left-4 top-1/2 -translate-y-1/2 z-10 bg-white text-gray-800 p-2 rounded-full shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all" data-carousel-prev aria-label="Previous"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+      <button type="button" class="absolute -right-4 top-1/2 -translate-y-1/2 z-10 bg-white text-gray-800 p-2 rounded-full shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all" data-carousel-next aria-label="Next"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19l7-7-7-7"/></svg></button>
+    </div>
+  </div>
+  <script>
+    (function() {
+      var section = null;
+      if (document.currentScript && document.currentScript.parentElement) {
+        section = document.currentScript.parentElement;
+      } else {
+        var track = document.querySelector('[data-carousel-items]');
+        section = track ? track.closest('section') : null;
+      }
+      if (!section) return;
+      var track = section.querySelector('[data-carousel-items]');
+      var prevBtn = section.querySelector('[data-carousel-prev]');
+      var nextBtn = section.querySelector('[data-carousel-next]');
+      if (!track || !prevBtn || !nextBtn) return;
+      var itemCount = track.children.length;
+      var visible = 3;
+      var currentIndex = 0;
+      var maxIndex = Math.max(0, itemCount - visible);
+      function update() {
+        var offset = currentIndex * (100 / visible);
+        track.style.transform = 'translateX(-' + offset + '%)';
+      }
+      prevBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = Math.max(0, currentIndex - 1);
+        update();
+      });
+      nextBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = Math.min(maxIndex, currentIndex + 1);
+        update();
+      });
+      update();
+    })();
+  </script>
+</section>`,
+  },
+
   // PRICING
   {
     id: "pricing-3tier",

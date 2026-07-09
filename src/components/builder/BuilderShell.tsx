@@ -26,10 +26,18 @@ export function BuilderShell() {
 
   // Autosave
   useEffect(() => {
-    if (!hydrated) return;
-    const id = setTimeout(persist, 400);
-    return () => clearTimeout(id);
+    if (!hydrated || !project) return;
+    persist();
   }, [project, persist, hydrated]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onBeforeUnload = () => {
+      persist();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [hydrated, persist]);
 
   // Keyboard shortcuts
   useEffect(() => {

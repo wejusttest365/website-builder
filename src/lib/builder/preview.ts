@@ -355,6 +355,8 @@ export const RUNTIME_SCRIPT = `
   function onClick(e) {
     try {
       if (e.target.closest('#__wto_tb')) return;
+      if (e.target.closest('[data-wto-nav-btn]') || e.target.closest('[data-wto-nav-menu]')) return;
+      if (e.target.closest('[data-carousel-prev], [data-carousel-next], [data-carousel-dot], [data-carousel-items-prev], [data-carousel-items-next], [data-carousel-indicator]')) return;
       const section = e.target.closest('[data-wto-section]');
       if (!section) return;
       const img = e.target.closest('img');
@@ -422,6 +424,19 @@ export const RUNTIME_SCRIPT = `
     const btn = nav.querySelector('[data-wto-nav-btn]');
     const menu = nav.querySelector('[data-wto-nav-menu]');
     if (!btn || !menu) return;
+    
+    const setActiveLink = (slug) => {
+      menu.querySelectorAll('a').forEach(a => {
+        const href = a.getAttribute('href');
+        const linkSlug = href?.replace(/\.html$/, '');
+        if (linkSlug === slug) {
+          a.classList.add('active');
+        } else {
+          a.classList.remove('active');
+        }
+      });
+    };
+    
     const toggleMenu = () => {
       const open = menu.classList.toggle('wto-nav-open');
       menu.classList.toggle('hidden', !open);
@@ -431,11 +446,28 @@ export const RUNTIME_SCRIPT = `
       event.stopPropagation();
       toggleMenu();
     });
-    menu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+    menu.querySelectorAll('a').forEach(a => a.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const href = a.getAttribute('href');
+      // If link points to a page file (e.g., "about-us.html"), navigate to that page
+      if (href && href.endsWith('.html') && !href.startsWith('http')) {
+        e.preventDefault();
+        const slug = href.replace(/\.html$/, '');
+        setActiveLink(slug);
+        send('navigate-page', { slug });
+      }
       menu.classList.remove('wto-nav-open');
       menu.classList.add('hidden');
       menu.style.display = 'none';
     }));
+    // Close menu when clicking outside nav
+    document.addEventListener('click', e => {
+      if (!nav.contains(e.target) && menu.classList.contains('wto-nav-open')) {
+        menu.classList.remove('wto-nav-open');
+        menu.classList.add('hidden');
+        menu.style.display = 'none';
+      }
+    });
   });
 
   // Brand upload overlay: add a small upload button near the brand anchor in nav
@@ -484,17 +516,37 @@ export const EXPORT_RUNTIME = `
     else if(e.target.getAttribute('data-anim-repeat')==='1'){ e.target.classList.remove('wto-in'); }
   });},{threshold:.15});
   document.querySelectorAll('[data-anim]').forEach(function(el){io.observe(el);});
+  
+  var getPageSlug=function(){
+    var path=window.location.pathname;
+    var match=path.match(/([^\\/]+)\\.html?$/);
+    return match?match[1]:'index';
+  };
+  var currentSlug=getPageSlug();
+  
   document.querySelectorAll('[data-wto-nav]').forEach(function(nav){
     var btn=nav.querySelector('[data-wto-nav-btn]');
     var menu=nav.querySelector('[data-wto-nav-menu]');
     if(!btn||!menu)return;
+    
+    var setActiveLink=function(slug){
+      menu.querySelectorAll('a').forEach(function(a){
+        var href=a.getAttribute('href');
+        var linkSlug=href?href.replace(/\\.html$/,''):'index';
+        if(linkSlug===slug){a.classList.add('active');}
+        else{a.classList.remove('active');}
+      });
+    };
+    setActiveLink(currentSlug);
+    
     var toggleMenu=function(){
       var open=menu.classList.toggle('wto-nav-open');
       menu.classList.toggle('hidden', !open);
       menu.style.display=open?'flex':'none';
     };
     btn.addEventListener('click',function(e){e.stopPropagation();toggleMenu();});
-    menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){menu.classList.remove('wto-nav-open');menu.classList.add('hidden');menu.style.display='none';});});
+    menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){e.stopPropagation();var href=a.getAttribute('href');if(href&&href.match(/\\.html$/)){var slug=href.replace(/\\.html$/,'');setActiveLink(slug);}menu.classList.remove('wto-nav-open');menu.classList.add('hidden');menu.style.display='none';});});
+    document.addEventListener('click',function(e){if(!nav.contains(e.target)&&menu.classList.contains('wto-nav-open')){menu.classList.remove('wto-nav-open');menu.classList.add('hidden');menu.style.display='none';}});
   });
 })();
 `;
@@ -527,8 +579,11 @@ export function buildPreviewHTML(opts: {
   selectedId?: string | null;
   assets?: Record<string, string>;
   pages?: { id: string; slug: string }[];
+  description?: string;
+  keywords?: string;
+  customHead?: string;
 }) {
-  const { sections, globalCss, globalJs, editable, selectedId, assets, pages } = opts;
+  const { sections, globalCss, globalJs, editable, selectedId, assets, pages, description, keywords, customHead } = opts;
 
   const sectionHTML = sections
     .filter((s) => editable || !s.hidden)
@@ -558,11 +613,19 @@ export function buildPreviewHTML(opts: {
     `
     : "";
 
+  const metaTags = [
+    description ? `<meta name="description" content="${escapeHtml(description)}" />` : "",
+    keywords ? `<meta name="keywords" content="${escapeHtml(keywords)}" />` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+${metaTags}
 <title>Preview</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
@@ -571,6 +634,7 @@ export function buildPreviewHTML(opts: {
   ${editableStyles}
   ${globalCss || ""}
 </style>
+${customHead || ""}
 </head>
 <body>
 ${sectionHTML || (editable ? '<div style="padding:80px;text-align:center;color:#94a3b8;font-family:system-ui">Drag sections from the left to start building →</div>' : "")}
@@ -585,11 +649,14 @@ export function buildExportBundle(opts: {
   globalCss: string;
   globalJs: string;
   title?: string;
+  description?: string;
+  keywords?: string;
+  customHead?: string;
   assets?: Record<string, string>;
   inlineAssets?: boolean;
   pages?: { id: string; slug: string }[];
 }) {
-  const { sections, globalCss, globalJs, title = "My Website", assets, inlineAssets, pages } = opts;
+  const { sections, globalCss, globalJs, title = "My Website", description, keywords, customHead, assets, inlineAssets, pages } = opts;
   const body = sections
     .filter((s) => !s.hidden)
     .map((s) => {
@@ -607,14 +674,23 @@ export function buildExportBundle(opts: {
     })
     .join("\n");
 
+  const metaTags = [
+    description ? `<meta name="description" content="${escapeHtml(description)}" />` : "",
+    keywords ? `<meta name="keywords" content="${escapeHtml(keywords)}" />` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+${metaTags}
 <title>${escapeHtml(title)}</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="./css/styles.css" />
+${customHead || ""}
 </head>
 <body>
 ${body}
@@ -622,14 +698,23 @@ ${body}
 </body>
 </html>`;
 
+  const completeMetaTags = [
+    description ? `<meta name="description" content="${escapeHtml(description)}" />` : "",
+    keywords ? `<meta name="keywords" content="${escapeHtml(keywords)}" />` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const complete = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+${completeMetaTags}
 <title>${escapeHtml(title)}</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>${RUNTIME_CSS}\n${globalCss}</style>
+${customHead || ""}
 </head>
 <body>
 ${inlineAssets ? body : resolveAssetPaths(body, assets)}
@@ -652,6 +737,9 @@ export function buildSiteExport(project: Project) {
       globalCss: "",
       globalJs: "",
       title: `${project.name} — ${page.name}`,
+      description: page.description,
+      keywords: page.keywords,
+      customHead: project.customHead,
       assets: project.assets,
       pages: pageMeta,
     });

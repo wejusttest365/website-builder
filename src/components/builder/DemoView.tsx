@@ -38,6 +38,9 @@ export function DemoView({ projectId }: { projectId: string }) {
     globalCss: proj.globalCss,
     globalJs: proj.globalJs,
     title: proj.name,
+    description: proj.pages?.[0]?.description,
+    keywords: proj.pages?.[0]?.keywords,
+    customHead: proj.customHead,
     assets: proj.assets,
     inlineAssets: true,
   });

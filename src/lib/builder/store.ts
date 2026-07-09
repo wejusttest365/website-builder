@@ -30,6 +30,8 @@ export interface Page {
   slug: string; // filename without extension, e.g. "index", "about-us"
   sections: PageSection[];
   hidden?: boolean;
+  description?: string; // SEO meta description
+  keywords?: string; // SEO meta keywords
 }
 
 export interface Project {
@@ -39,6 +41,7 @@ export interface Project {
   currentPageId: string;
   globalCss: string;
   globalJs: string;
+  customHead: string; // Custom HTML for head (GA tracking, etc.)
   createdAt: number;
   updatedAt: number;
   assets?: Record<string, string>;
@@ -92,6 +95,9 @@ interface BuilderState {
 
   setGlobalCss: (v: string) => void;
   setGlobalJs: (v: string) => void;
+  setCustomHead: (v: string) => void;
+  setPageDescription: (id: string, v: string) => void;
+  setPageKeywords: (id: string, v: string) => void;
   setSectionHtml: (id: string, html: string) => void;
   setPageHtml: (html: string) => void; // replaces all sections with a single custom block
 
@@ -133,6 +139,7 @@ function migrateProject(raw: unknown): Project {
       currentPageId: p.currentPageId,
       globalCss: p.globalCss ?? "/* Global CSS */\n",
       globalJs: p.globalJs ?? "// Global JS\n",
+      customHead: p.customHead ?? "",
       createdAt: p.createdAt ?? Date.now(),
       updatedAt: p.updatedAt ?? Date.now(),
       assets: p.assets,
@@ -148,11 +155,14 @@ function migrateProject(raw: unknown): Project {
         name: "Home",
         slug: "index",
         sections: p.sections ?? [],
+        description: "",
+        keywords: "",
       },
     ],
     currentPageId: pageId,
     globalCss: p.globalCss ?? "/* Global CSS */\n",
     globalJs: p.globalJs ?? "// Global JS\n",
+    customHead: p.customHead ?? "",
     createdAt: p.createdAt ?? Date.now(),
     updatedAt: p.updatedAt ?? Date.now(),
     assets: p.assets,
@@ -185,6 +195,8 @@ function emptyProject(name = "Untitled Project"): Project {
     currentPageId: pageId,
     globalCss: "/* Global CSS */\n",
     globalJs: "// Global JS\n",
+    description: "",
+    keywords: "",
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -551,6 +563,23 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
   setGlobalJs: (v) => {
     updateCurrent(set, get, { globalJs: v });
+  },
+  setCustomHead: (v) => {
+    updateCurrent(set, get, { customHead: v });
+  },
+  setPageDescription: (id, v) => {
+    const p = get().currentProject();
+    if (!p) return;
+    updateCurrent(set, get, {
+      pages: p.pages.map((pg) => (pg.id === id ? { ...pg, description: v } : pg)),
+    });
+  },
+  setPageKeywords: (id, v) => {
+    const p = get().currentProject();
+    if (!p) return;
+    updateCurrent(set, get, {
+      pages: p.pages.map((pg) => (pg.id === id ? { ...pg, keywords: v } : pg)),
+    });
   },
   setSectionHtml: (id, html) => {
     const page = getCurrentPage(get().currentProject());
