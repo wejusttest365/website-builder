@@ -1,36 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ClientOnly } from "@/components/builder/ClientOnly";
 import { BuilderShell } from "@/components/builder/BuilderShell";
+import { MainLayout } from "@/components/layout/MainLayout";
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "WebToolOcean — Drag & Drop Website Builder" },
-      {
-        name: "description",
-        content:
-          "Build beautiful, responsive websites without code. Drag pre-built HTML sections, edit inline, and export production-ready HTML, CSS, and JavaScript.",
-      },
-      { property: "og:title", content: "WebToolOcean — Drag & Drop Website Builder" },
-      {
-        property: "og:description",
-        content: "Build beautiful, responsive websites without code. Drag pre-built HTML sections, edit inline, and export production-ready HTML, CSS, and JavaScript.",
-      },
-    ],
-  }),
   component: Index,
 });
 
 function Index() {
   return (
-    <ClientOnly
-      fallback={
-        <div className="h-screen w-screen flex items-center justify-center text-sm text-muted-foreground">
-          Loading builder…
-        </div>
-      }
-    >
-      <BuilderShell />
-    </ClientOnly>
+    <MainLayout>
+      <ClientOnly
+        fallback={
+          <div className="h-screen w-screen flex items-center justify-center text-sm text-muted-foreground">
+            Loading builder…
+          </div>
+        }
+      >
+        <BuilderShell />
+      </ClientOnly>
+    </MainLayout>
   );
 }

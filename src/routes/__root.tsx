@@ -1,9 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
-  Link,
   createRootRouteWithContext,
-  useRouter,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -81,14 +79,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "WebToolOcean — Drag & Drop Website Builder" },
       { name: "description", content: "Build beautiful, responsive websites without code. Drag pre-built HTML sections, edit inline, and export production-ready HTML, CSS, and JavaScript." },
       { name: "author", content: "Lovable" },
+      { name: "google-site-verification", content: "Y4ZO2trgDXbKzMA1yC5bmxoSYw3063IMwh9C3Mk6roA" },
       { property: "og:title", content: "WebToolOcean — Drag & Drop Website Builder" },
       { property: "og:description", content: "Build beautiful, responsive websites without code. Drag pre-built HTML sections, edit inline, and export production-ready HTML, CSS, and JavaScript." },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d85a05a9-c71b-4775-88b8-cb73c6849803/id-preview-56fcb52b--36d1ad9a-6d64-4ba7-ae4f-8fde04af296f.lovable.app-1783423688753.png" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "WebToolOcean — Drag & Drop Website Builder" },
       { name: "twitter:description", content: "Build beautiful, responsive websites without code. Drag pre-built HTML sections, edit inline, and export production-ready HTML, CSS, and JavaScript." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d85a05a9-c71b-4775-88b8-cb73c6849803/id-preview-56fcb52b--36d1ad9a-6d64-4ba7-ae4f-8fde04af296f.lovable.app-1783423688753.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d85a05a9-c71b-4775-88b8-cb73c6849803/id-preview-56fcb52b--36d1ad9a-6d64-4ba7-ae4f-8fde04af296f.lovable.app-1783423688753.png" },
     ],
     links: [
@@ -97,6 +96,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+    ],
+    scripts: [
+      { src: "https://www.googletagmanager.com/gtag/js?id=G-W14JC88EV7", async: true },
+      {
+        children: `window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-W14JC88EV7');`,
+      },
     ],
   }),
   shellComponent: RootShell,
@@ -109,6 +114,7 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* This in the header, is part of the Website Builder web application, NOT the HTML pages. */}
         <HeadContent />
       </head>
       <body suppressHydrationWarning>

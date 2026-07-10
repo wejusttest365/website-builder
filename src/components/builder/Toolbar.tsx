@@ -20,7 +20,6 @@ import {
   Trash2,
   Settings,
   ChevronDown,
-  Share2,
   Edit2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
@@ -123,20 +122,10 @@ export function Toolbar() {
   }
 
   return (
-    <div className="h-14 bg-card border-b border-border flex items-center gap-2 px-3 overflow-visible">
-      <div className="flex items-center gap-2 pr-2 border-r border-border h-full">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
-          W
-        </div>
-        <div className="hidden md:block">
-          <div className="text-[11px] font-semibold leading-none">WebToolOcean</div>
-          <div className="text-[10px] text-muted-foreground leading-tight">Website Builder</div>
-        </div>
-      </div>
-
+    <div className="h-11 bg-card border-b border-border flex items-center gap-1.5 px-2 overflow-visible">
       <div className="flex items-center gap-2 pr-2 border-r border-border h-full relative">
         <button
-          className="h-8 px-2 rounded-md hover:bg-accent flex items-center gap-1.5 text-xs"
+          className="h-7 px-2 rounded-md hover:bg-accent flex items-center gap-1 text-[11px]"
           onClick={() => setProjectsOpen((v) => !v)}
         >
           <FolderOpen className="w-3.5 h-3.5" />
@@ -198,10 +187,10 @@ export function Toolbar() {
         <input
           value={project?.name ?? ""}
           onChange={(e) => project && rename(project.id, e.target.value)}
-          className="w-40 h-8 px-2 rounded-md border border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-40 h-7 px-2 rounded-md border border-input bg-background text-[11px] focus:outline-none focus:ring-2 focus:ring-ring"
         />
         <button
-          className="h-8 px-2 rounded-md hover:bg-accent flex items-center gap-1.5 text-xs"
+          className="h-7 px-2 rounded-md hover:bg-accent flex items-center gap-1 text-[11px]"
           onClick={() => setPagesOpen((v) => !v)}
         >
           <Plus className="w-3.5 h-3.5" />
@@ -335,13 +324,14 @@ export function Toolbar() {
           {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </IconBtn>
         <button
-          className="h-8 px-3 rounded-md hover:bg-accent flex items-center gap-1.5 text-xs"
+          className="h-7 px-2 rounded-md hover:bg-accent flex items-center gap-1 text-[11px]"
           onClick={() => {
             if (!project) return;
             persist();
-            const pageParam = currentPageId ? `?page=${currentPageId}` : "";
-            const url = `/preview/${project.id}${pageParam}`;
             const pageId = currentPageId ?? project.currentPageId ?? project.pages?.[0]?.id ?? null;
+            const pageSlug = pageId ? project.pages.find((pg) => pg.id === pageId)?.slug : null;
+            const pageParam = pageSlug ? `?page=${encodeURIComponent(pageSlug)}` : "";
+            const url = `/preview/${project.id}${pageParam}`;
             const newWindow = window.open(url, "_blank");
             if (newWindow) {
               (window as any).__lovablePreviewData = {
@@ -361,22 +351,9 @@ export function Toolbar() {
         >
           <Eye className="w-3.5 h-3.5" /> Preview
         </button>
-        <button
-          className="h-8 px-3 rounded-md hover:bg-accent flex items-center gap-1.5 text-xs"
-          onClick={() => {
-            if (!project) return;
-            const url = `${window.location.origin}/demo/${project.id}`;
-            navigator.clipboard.writeText(url);
-            toast.success("Share link copied", {
-              description: "Opens in the same browser that saved the project.",
-            });
-          }}
-        >
-          <Share2 className="w-3.5 h-3.5" /> Share
-        </button>
         <div className="relative">
           <button
-            className="h-8 px-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 text-xs font-medium"
+            className="h-7 px-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1 text-[11px] font-medium"
             onClick={() => setExportOpen((v) => !v)}
           >
             <Download className="w-3.5 h-3.5" /> Export
@@ -467,7 +444,7 @@ function IconBtn({
     <button
       title={title}
       onClick={onClick}
-      className="h-8 w-8 rounded-md flex items-center justify-center hover:bg-accent text-foreground/80 hover:text-foreground"
+      className="h-7 w-7 rounded-md flex items-center justify-center hover:bg-accent text-foreground/80 hover:text-foreground"
     >
       {children}
     </button>

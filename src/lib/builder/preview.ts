@@ -385,9 +385,13 @@ export const RUNTIME_SCRIPT = `
       if (!section) return;
       const anchor = target.closest('a');
       if (anchor) {
-        const href = anchor.getAttribute('href');
+        const href = anchor.getAttribute('href') || "";
+        const normalized = href.replace(/^[./]+/, "").replace(/\.html(?:[?#].*)?$/, "");
         if (!href || href === '#') {
           e.preventDefault();
+        } else if (/^(?!https?:|mailto:).+\.html(?:[?#].*)?$/.test(href)) {
+          e.preventDefault();
+          send('navigate-page', { slug: normalized });
         }
       }
       currentSection = section;
@@ -563,8 +567,22 @@ export const EXPORT_RUNTIME = `
       menu.style.display=open?'flex':'none';
     };
     btn.addEventListener('click',function(e){e.stopPropagation();toggleMenu();});
-    menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){e.stopPropagation();var href=a.getAttribute('href');if(href&&href.match(/\\.html$/)){var slug=href.replace(/\\.html$/,'');setActiveLink(slug);}menu.classList.remove('wto-nav-open');menu.classList.add('hidden');menu.style.display='none';});});
+menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){e.stopPropagation();var href=a.getAttribute('href')||'';if(href&&/\.html(?:[?#].*)?$/.test(href)&&!href.startsWith('http')){e.preventDefault();var slug=href.replace(/^[./]+/,'').replace(/\.html(?:[?#].*)?$/,'')||'index';setActiveLink(slug);parent.postMessage({ __wto: true, type: 'navigate-page', payload: { slug: slug } }, '*');}menu.classList.remove('wto-nav-open');menu.classList.add('hidden');menu.style.display='none';});});
     document.addEventListener('click',function(e){if(!nav.contains(e.target)&&menu.classList.contains('wto-nav-open')){menu.classList.remove('wto-nav-open');menu.classList.add('hidden');menu.style.display='none';}});
+  });
+  document.addEventListener('click',function(e){
+    try {
+      var target = e.target;
+      while (target && target.nodeName !== 'A') { target = target.parentElement; }
+      if (!target || target.nodeName !== 'A') return;
+      var href = target.getAttribute('href') || '';
+      if (!href || href === '#' || href.startsWith('http') || href.startsWith('mailto:')) return;
+      if (/\.html(?:[?#].*)?$/.test(href)) {
+        e.preventDefault();
+        var slug = href.replace(/^[./]+/, '').replace(/\.html(?:[?#].*)?$/, '');
+        parent.postMessage({ __wto: true, type: 'navigate-page', payload: { slug: slug } }, '*');
+      }
+    } catch (_) {}
   });
 })();
 `;

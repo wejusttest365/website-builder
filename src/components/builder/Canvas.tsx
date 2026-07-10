@@ -143,7 +143,7 @@ export function Canvas() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <div className="border-b border-border bg-card flex items-center px-3">
         <div className="w-full">
           <Tabs defaultValue={pageOf(project)?.id ?? ""} onValueChange={(v) => useBuilder.getState().selectPage(v)}>

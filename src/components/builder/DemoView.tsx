@@ -10,7 +10,7 @@ export function DemoView({ projectId }: { projectId: string }) {
   useEffect(() => {
     let timeout: number | null = null;
     const handleResponse = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
+      if (event.origin !== window.location.origin && event.origin !== 'null') return;
       const data = event.data as {
         __lovablePreviewPayload?: true;
         projectId?: string;
@@ -34,9 +34,12 @@ export function DemoView({ projectId }: { projectId: string }) {
         const p = data.projects?.[projectId];
         if (p) {
           const urlParams = new URLSearchParams(window.location.search);
-          const pageId = urlParams.get("page");
+          const pageParam = urlParams.get("page")?.replace(/^[./]+/, "").replace(/\.html$/i, "");
+          const matchedPage = pageParam
+            ? p.pages.find((pg) => pg.id === pageParam || pg.slug === pageParam)
+            : null;
           setProj(p);
-          setActivePageId(pageId && p.pages.some((pg) => pg.id === pageId) ? pageId : p.currentPageId ?? p.pages?.[0]?.id ?? null);
+          setActivePageId(matchedPage?.id ?? p.currentPageId ?? p.pages?.[0]?.id ?? null);
           return () => window.removeEventListener("message", handleResponse);
         }
       }
@@ -57,6 +60,25 @@ export function DemoView({ projectId }: { projectId: string }) {
     setNotFound(true);
     return () => window.removeEventListener("message", handleResponse);
   }, [projectId]);
+
+  useEffect(() => {
+    if (!proj) return;
+    const handlePreviewMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin && event.origin !== 'null') return;
+      const data = event.data as { __wto?: boolean; type?: string; payload?: Record<string, unknown> };
+      if (!data || !data.__wto) return;
+      if (data.type !== "navigate-page") return;
+      const slug = String(data.payload?.slug ?? "");
+      const page = proj.pages.find((pg) => pg.slug === slug || pg.id === slug);
+      if (!page) return;
+      setActivePageId(page.id);
+      const params = new URLSearchParams(window.location.search);
+      params.set("page", slug);
+      window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+    };
+    window.addEventListener("message", handlePreviewMessage);
+    return () => window.removeEventListener("message", handlePreviewMessage);
+  }, [proj]);
 
   if (notFound) {
     return (

@@ -143,10 +143,14 @@
 
   html, body {
     overflow-x: hidden;
+    margin: 0;
+    min-height: 100%;
+    min-width: 100%;
   }
 
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    min-height: 100%;
   }
 }

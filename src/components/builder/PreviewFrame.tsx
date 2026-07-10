@@ -225,15 +225,14 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
   const width = device === "desktop" ? "1180px" : device === "tablet" ? "820px" : "390px";
 
   return (
-    <div ref={wrapperRef} className="w-full h-full flex justify-center items-start overflow-y-auto overflow-x-hidden bg-muted/40 p-4">
-      <div className="bg-white shadow-xl transition-all" style={{ width, minHeight: "100%", flex: "0 0 auto", maxWidth: "100%", overflowX: "hidden" }}>
+    <div ref={wrapperRef} className="w-full h-full min-h-0 flex items-stretch overflow-hidden bg-muted/40 p-4">
+      <div className="bg-white shadow-xl transition-all flex min-h-0 flex-1 flex-col h-full" style={{ width, maxWidth: "100%", overflowX: "hidden" }}>
         <iframe
           ref={iframeRefToUse}
           title="preview"
           srcDoc={srcDoc}
           onLoad={restoreSavedScroll}
           className={`w-full h-full border-0 ${disablePointerEvents ? "pointer-events-none" : ""}`}
-          style={{ minHeight: "520px" }}
         />
       </div>
       {imageEditor && (

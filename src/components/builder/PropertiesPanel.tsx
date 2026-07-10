@@ -98,7 +98,7 @@ export function PropertiesPanel() {
   const updateHtml = (html: string) => updateSection(section.id, { html });
 
   return (
-    <div className="h-full bg-card flex flex-col">
+    <div className="h-full min-w-0 bg-card flex flex-col">
       <div className="p-4 border-b border-border">
         <div className="text-xs uppercase tracking-wider text-muted-foreground">Section</div>
         <input
@@ -108,7 +108,7 @@ export function PropertiesPanel() {
           className="mt-1 w-full text-base font-semibold bg-transparent focus:outline-none"
         />
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-5 text-sm">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5 text-sm">
         {/* Brand / Logo controls moved into scrollable area so it scrolls with the panel */}
         {(() => {
           const brand = findBrandAnchor(section.html);

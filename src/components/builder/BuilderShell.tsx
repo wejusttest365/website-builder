@@ -67,19 +67,19 @@ export function BuilderShell() {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">
+    <div className="h-full w-full flex flex-col bg-background text-foreground overflow-hidden">
       <Toolbar />
       <div
-        className="flex-1 min-h-0 grid"
-        style={{ gridTemplateColumns: `${leftPanelOpen ? 260 : 44}px 1fr 320px`, transition: "grid-template-columns 220ms ease" }}
+        className="flex-1 min-h-0 min-w-0 grid"
+        style={{ gridTemplateColumns: `${leftPanelOpen ? 260 : 44}px 1fr 320px`, gridAutoRows: "1fr", transition: "grid-template-columns 220ms ease" }}
       >
-        <div className={`border-r border-border min-h-0 overflow-hidden ${leftPanelOpen ? '' : 'flex items-center justify-center'}`}>
+        <div className={`border-r border-border min-h-0 min-w-0 overflow-hidden ${leftPanelOpen ? '' : 'flex items-center justify-center'}`}>
           <LibraryPanel />
         </div>
-        <div className="min-h-0 overflow-hidden">
+        <div className="min-h-0 min-w-0 overflow-hidden">
           <Canvas />
         </div>
-        <div className="border-l border-border min-h-0 overflow-hidden">
+        <div className="border-l border-border min-h-0 min-w-0 overflow-hidden">
           <PropertiesPanel />
         </div>
       </div>
