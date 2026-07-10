@@ -746,6 +746,7 @@ ${inlineAssets ? body : resolveAssetPaths(body, assets)}
 }
 
 export function buildSiteExport(project: Project) {
+  const SITE_TRACKING_SNIPPET = `\n<!-- Google tag (gtag.js) -->\n<script async src="https://www.googletagmanager.com/gtag/js?id=G-W14JC88EV7"></script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n\n  gtag('config', 'G-W14JC88EV7');\n</script>\n\n<meta name="google-site-verification" content="Y4ZO2trgDXbKzMA1yC5bmxoSYw3063IMwh9C3Mk6roA" />\n`;
   const pageMeta = project.pages.map((p) => ({ id: p.id, slug: p.slug }));
   const files: { path: string; content: string; base64?: string }[] = [];
   files.push({ path: "css/styles.css", content: `${RUNTIME_CSS}\n${project.globalCss || ""}` });
@@ -758,7 +759,7 @@ export function buildSiteExport(project: Project) {
       title: `${project.name} — ${page.name}`,
       description: page.description,
       keywords: page.keywords,
-      customHead: project.customHead,
+      customHead: (project.customHead ?? "") + SITE_TRACKING_SNIPPET,
       assets: project.assets,
       pages: pageMeta,
     });

@@ -84,7 +84,7 @@ interface BuilderState {
   deletePage: (id: string) => void;
   selectPage: (id: string) => void;
 
-  addSection: (tpl: SectionTemplate, index?: number) => void;
+  addSection: (tpl: SectionTemplate, index?: number) => string;
   updateSection: (id: string, patch: Partial<PageSection>) => void;
   removeSection: (id: string) => void;
   duplicateSection: (id: string) => void;
@@ -439,6 +439,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     updatePageSections(set, get, sections);
     get().pushHistory();
     set({ selectedSectionId: section.id });
+    return section.id;
   },
 
   updateSection: (id, patch) => {
@@ -481,6 +482,11 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   removeSection: (id) => {
     const cur = get().currentProject();
     if (!cur) return;
+    const page = getCurrentPage(cur);
+    if (!page) return;
+    const removedIndex = page.sections.findIndex((s) => s.id === id);
+    if (removedIndex < 0) return;
+
     // check if section is shared and remove from all pages
     let original: PageSection | null = null;
     for (const pg of cur.pages) {
@@ -502,7 +508,13 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     }));
     updateCurrent(set, get, { pages });
     get().pushHistory();
-    if (get().selectedSectionId === id) set({ selectedSectionId: null });
+
+    const currentlySelected = get().selectedSectionId;
+    if (currentlySelected === id) {
+      const nextPage = getCurrentPage(get().currentProject());
+      const nextId = nextPage?.sections?.[Math.min(Math.max(0, removedIndex), (nextPage.sections.length || 1) - 1)]?.id ?? null;
+      set({ selectedSectionId: nextId });
+    }
   },
 
   duplicateSection: (id) => {

@@ -47,6 +47,54 @@ export function LibraryPanel() {
 
   return (
     <div className="flex flex-col h-full bg-card">
+      {/* Quick components: draggable small UI elements (buttons, badges) */}
+      <div className="p-2 border-b border-border flex items-center gap-2">
+        <div className="text-xs font-semibold text-muted-foreground">Components</div>
+        <div className="ml-2 flex gap-2">
+          <div
+            draggable
+            onDragStart={(e) => {
+              const html = `<a href="#" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium">New Button</a>`;
+              e.dataTransfer.setData("application/x-wto-element", html);
+              e.dataTransfer.effectAllowed = "copy";
+              window.dispatchEvent(new CustomEvent("wto-library-drag-element-start", { detail: { html } }));
+            }}
+            onDragEnd={() => window.dispatchEvent(new CustomEvent("wto-library-drag-element-end"))}
+            className="px-3 py-1 rounded bg-indigo-600 text-white text-xs cursor-grab"
+            title="Drag button into a section"
+          >
+            Button
+          </div>
+          <div
+            draggable
+            onDragStart={(e) => {
+              const html = `<span class="inline-block px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-medium">Badge</span>`;
+              e.dataTransfer.setData("application/x-wto-element", html);
+              e.dataTransfer.effectAllowed = "copy";
+              window.dispatchEvent(new CustomEvent("wto-library-drag-element-start", { detail: { html } }));
+            }}
+            onDragEnd={() => window.dispatchEvent(new CustomEvent("wto-library-drag-element-end"))}
+            className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs cursor-grab"
+            title="Drag badge into a section"
+          >
+            Badge
+          </div>
+          <div
+            draggable
+            onDragStart={(e) => {
+              const html = `<img src="https://picsum.photos/seed/button/240/120" alt="" class="inline-block rounded-md" />`;
+              e.dataTransfer.setData("application/x-wto-element", html);
+              e.dataTransfer.effectAllowed = "copy";
+              window.dispatchEvent(new CustomEvent("wto-library-drag-element-start", { detail: { html } }));
+            }}
+            onDragEnd={() => window.dispatchEvent(new CustomEvent("wto-library-drag-element-end"))}
+            className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-xs cursor-grab"
+            title="Drag image into a section"
+          >
+            Image
+          </div>
+        </div>
+      </div>
       <div className="p-3 border-b border-border relative">
         <div className="relative">
           <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />

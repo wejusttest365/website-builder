@@ -20,6 +20,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
   const addAsset = useBuilder((s) => s.addAsset);
   const innerIframeRef = useRef<HTMLIFrameElement>(null);
   const iframeRefToUse = iframeRef ?? innerIframeRef;
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [imageEditor, setImageEditor] = useState<{
     sectionId: string;
     src: string;
@@ -29,12 +30,33 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
   } | null>(null);
   const skipRebuildRef = useRef(false);
   const [srcDoc, setSrcDoc] = useState("");
+  const pendingScrollTopRef = useRef<number | null>(null);
+  const pendingOuterScrollTopRef = useRef<number | null>(null);
 
   function assetPathForDataUrl(src: string) {
     if (!project || !src.startsWith("data:")) return src;
     const asset = Object.entries(project.assets ?? {}).find(([_name, data]) => data === src);
     return asset ? `images/${asset[0]}` : src;
   }
+
+  const restoreOuterScroll = () => {
+    const top = pendingOuterScrollTopRef.current;
+    if (top == null) return;
+    const wrapper = wrapperRef.current;
+    if (wrapper) wrapper.scrollTop = top;
+    pendingOuterScrollTopRef.current = null;
+  };
+
+  const restoreSavedScroll = () => {
+    const iframe = iframeRefToUse.current;
+    const win = iframe?.contentWindow;
+    const scrollTop = pendingScrollTopRef.current;
+    if (win && scrollTop != null) {
+      win.scrollTo(0, scrollTop);
+    }
+    pendingScrollTopRef.current = null;
+    restoreOuterScroll();
+  };
 
   // Rebuild srcDoc for structural changes OR html changes that did NOT come from
   // inside the iframe. This prevents scroll jumps while inline-editing text.
@@ -59,13 +81,18 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
   useEffect(() => {
     if (!project) return;
     const build = () => {
+      const iframeWindow = iframeRefToUse.current?.contentWindow;
+      if (iframeWindow) {
+        pendingScrollTopRef.current = iframeWindow.scrollY ?? iframeWindow.pageYOffset ?? 0;
+      }
+      pendingOuterScrollTopRef.current = wrapperRef.current?.scrollTop ?? null;
       setSrcDoc(
         buildPreviewHTML({
           sections: (pageOf(project)?.sections ?? []),
           globalCss: project.globalCss,
           globalJs: project.globalJs,
           editable,
-          selectedId: null,
+          selectedId,
           assets: project.assets,
           pages: project.pages?.map((p) => ({ id: p.id, slug: p.slug })) ?? [],
           description: pageOf(project)?.description,
@@ -198,12 +225,13 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
   const width = device === "desktop" ? "1180px" : device === "tablet" ? "820px" : "390px";
 
   return (
-    <div className="w-full h-full flex justify-center items-start overflow-y-auto overflow-x-hidden bg-muted/40 p-4">
+    <div ref={wrapperRef} className="w-full h-full flex justify-center items-start overflow-y-auto overflow-x-hidden bg-muted/40 p-4">
       <div className="bg-white shadow-xl transition-all" style={{ width, minHeight: "100%", flex: "0 0 auto", maxWidth: "100%", overflowX: "hidden" }}>
         <iframe
           ref={iframeRefToUse}
           title="preview"
           srcDoc={srcDoc}
+          onLoad={restoreSavedScroll}
           className={`w-full h-full border-0 ${disablePointerEvents ? "pointer-events-none" : ""}`}
           style={{ minHeight: "520px" }}
         />

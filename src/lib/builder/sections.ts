@@ -245,11 +245,6 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
     </button>
     <button type="button" class="absolute left-4 top-1/2 -translate-y-1/2 z-20 pointer-events-auto bg-white/30 hover:bg-white/50 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100" data-carousel-prev aria-label="Previous"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
     <button type="button" class="absolute right-4 top-1/2 -translate-y-1/2 z-20 pointer-events-auto bg-white/30 hover:bg-white/50 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100" data-carousel-next aria-label="Next"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19l7-7-7-7"/></svg></button>
-    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex gap-2" data-carousel-dots>
-      <button type="button" class="w-2 h-2 rounded-full bg-white" data-carousel-dot="0"></button>
-      <button type="button" class="w-2 h-2 rounded-full bg-white/40" data-carousel-dot="1"></button>
-      <button type="button" class="w-2 h-2 rounded-full bg-white/40" data-carousel-dot="2"></button>
-    </div>
   </div>
   <script>
     (function() {
@@ -259,8 +254,7 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
       var track = section.querySelector('[data-carousel-track]');
       var prevBtn = section.querySelector('[data-carousel-prev]');
       var nextBtn = section.querySelector('[data-carousel-next]');
-      var dots = Array.from(section.querySelectorAll('[data-carousel-dot]'));
-      if (!track || !prevBtn || !nextBtn || !dots.length) return;
+      if (!track || !prevBtn || !nextBtn) return;
       var slideCount = track.children.length;
       var currentIndex = 0;
       var autoMove = true;
@@ -288,9 +282,6 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
       function update() {
         var percent = 100 * currentIndex;
         track.style.transform = 'translateX(-' + percent + '%)';
-        dots.forEach(function(dot, idx) {
-          dot.style.backgroundColor = idx === currentIndex ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.4)';
-        });
       }
       prevBtn.addEventListener('click', function(e) {
         e.preventDefault();
@@ -305,16 +296,6 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
         currentIndex = (currentIndex + 1) % slideCount;
         update();
         if (autoMove) startAutoMove();
-      });
-      dots.forEach(function(dot) {
-        dot.addEventListener('click', function(e) {
-          e.preventDefault();
-          e.stopPropagation();
-          currentIndex = parseInt(dot.getAttribute('data-carousel-dot') || '0', 10);
-          if (isNaN(currentIndex)) currentIndex = 0;
-          update();
-          if (autoMove) startAutoMove();
-        });
       });
       if (autoButton) {
         autoButton.addEventListener('click', function(e) {

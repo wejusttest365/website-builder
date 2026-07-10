@@ -32,15 +32,86 @@ export function Canvas() {
     const onEnd = () => setDraggingLibrarySection(false);
     window.addEventListener("wto-library-drag-start", onStart);
     window.addEventListener("wto-library-drag-end", onEnd);
+    // element-level drags (components like button)
+    window.addEventListener("wto-library-drag-element-start", onStart);
+    window.addEventListener("wto-library-drag-element-end", onEnd);
     return () => {
       window.removeEventListener("wto-library-drag-start", onStart);
       window.removeEventListener("wto-library-drag-end", onEnd);
+      window.removeEventListener("wto-library-drag-element-start", onStart);
+      window.removeEventListener("wto-library-drag-element-end", onEnd);
     };
   }, []);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDraggingLibrarySection(false);
+    // If dragging an element (component) into an existing section
+    const elementHtml = e.dataTransfer.getData("application/x-wto-element");
+    if (elementHtml && project) {
+      const page = pageOf(project);
+      const sectionCount = page?.sections.length ?? 0;
+      if (!page || sectionCount === 0) return;
+      const frame = iframeRef.current;
+      const frameRect = frame?.getBoundingClientRect();
+      // Try to map drop coordinates into the iframe to find exact target element
+      try {
+        if (frame && frame.contentDocument && frameRect) {
+          const relX = e.clientX - frameRect.left;
+          const relY = e.clientY - frameRect.top;
+          const doc = frame.contentDocument;
+          const el = doc.elementFromPoint(relX, relY) as Element | null;
+          const secEl = el?.closest && el.closest('[data-wto-section]');
+          const sectionId = secEl?.getAttribute('data-wto-section');
+          if (sectionId) {
+            const target = (page.sections ?? []).find((s: any) => s.id === sectionId);
+            if (target) {
+              // If we hit a specific inner element, insert before it; otherwise append
+              const idxEl = el?.closest && el.closest('[data-wto-idx]');
+              if (idxEl) {
+                const outer = (idxEl as HTMLElement).outerHTML;
+                // sanitize and replace first occurrence of outerHTML in target.html
+                const html = target.html;
+                const i = html.indexOf(outer);
+                let nextHtml = html;
+                if (i >= 0) {
+                  nextHtml = html.slice(0, i) + elementHtml + html.slice(i);
+                } else {
+                  // fallback: append
+                  nextHtml = html + elementHtml;
+                }
+                useBuilder.getState().updateSection(target.id, { html: nextHtml });
+                useBuilder.getState().selectSection(target.id);
+                return;
+              }
+              // no specific element hit; append
+              useBuilder.getState().updateSection(target.id, { html: target.html + elementHtml });
+              useBuilder.getState().selectSection(target.id);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        // ignore and fallback to append behavior
+        console.error('element drop insert error', err);
+      }
+      // fallback: decide section by Y position and append
+      let insertIndex = 0;
+      if (frameRect) {
+        const dropY = Math.max(frameRect.top, Math.min(e.clientY, frameRect.bottom));
+        const ratio = (dropY - frameRect.top) / frameRect.height;
+        insertIndex = Math.floor(ratio * sectionCount);
+        if (insertIndex < 0) insertIndex = 0;
+        if (insertIndex >= sectionCount) insertIndex = sectionCount - 1;
+      }
+      const target = page.sections[insertIndex];
+      if (!target) return;
+      useBuilder.getState().updateSection(target.id, { html: target.html + elementHtml });
+      useBuilder.getState().selectSection(target.id);
+      return;
+    }
+
+    // Otherwise treat as full-section drop (existing behavior)
     const tplId = e.dataTransfer.getData("application/x-wto-section") || e.dataTransfer.getData("text/plain");
     if (!tplId) return;
     const tpl = SECTION_LIBRARY.find((s) => s.id === tplId);
