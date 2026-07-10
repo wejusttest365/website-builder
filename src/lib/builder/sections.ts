@@ -19,6 +19,7 @@ export const CATEGORIES = [
   "Features",
   "Services",
   "Portfolio",
+  "Carousel",
   "Gallery",
   "Pricing",
   "Testimonials",
@@ -86,7 +87,7 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
         <a href="#" class="px-6 py-3 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50">Watch Demo</a>
       </div>
     </div>
-    <div class="rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 aspect-[4/3] shadow-2xl"></div>
+    <div class="rounded-2xl overflow-hidden aspect-[4/3] shadow-2xl"><img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1200&q=80" alt="Website preview" class="w-full h-full object-cover" /></div>
   </div>
 </section>`,
   },
@@ -113,7 +114,7 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
     thumbBg: grad("#10b981", "#059669"),
     html: `<section class="w-full bg-white">
   <div class="max-w-6xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-12 items-center">
-    <div class="rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 aspect-square"></div>
+    <div class="rounded-2xl overflow-hidden aspect-square"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80" alt="About the company" class="w-full h-full object-cover" /></div>
     <div>
       <h2 class="text-4xl font-bold text-gray-900">About our company</h2>
       <p class="mt-4 text-gray-600 leading-relaxed">We're a passionate team of designers and engineers building tools that empower creators around the world.</p>
@@ -154,14 +155,33 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   <div class="max-w-6xl mx-auto px-6 py-20">
     <h2 class="text-4xl font-bold text-center text-gray-900">Our Services</h2>
     <div class="mt-12 grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <div class="p-6 rounded-2xl border border-gray-200 hover:shadow-lg transition"><h3 class="font-bold text-lg">Design</h3><p class="mt-2 text-sm text-gray-600">Beautiful interfaces that convert.</p></div>
-      <div class="p-6 rounded-2xl border border-gray-200 hover:shadow-lg transition"><h3 class="font-bold text-lg">Development</h3><p class="mt-2 text-sm text-gray-600">Robust code that scales.</p></div>
-      <div class="p-6 rounded-2xl border border-gray-200 hover:shadow-lg transition"><h3 class="font-bold text-lg">Marketing</h3><p class="mt-2 text-sm text-gray-600">Reach the right audience.</p></div>
-      <div class="p-6 rounded-2xl border border-gray-200 hover:shadow-lg transition"><h3 class="font-bold text-lg">Support</h3><p class="mt-2 text-sm text-gray-600">24/7 human support.</p></div>
+      <div class="p-6 rounded-2xl border border-gray-200 hover:shadow-lg transition flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-3xl overflow-hidden bg-slate-100"><img src="https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=240&q=80" alt="Design icon" class="w-full h-full object-cover" /></div>
+        <h3 class="mt-6 font-bold text-lg">Design</h3>
+        <p class="mt-3 text-sm text-gray-600">Beautiful interfaces that convert.</p>
+        <a href="#" class="mt-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">Learn more</a>
+      </div>
+      <div class="p-6 rounded-2xl border border-gray-200 hover:shadow-lg transition flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-3xl overflow-hidden bg-slate-100"><img src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=240&q=80" alt="Development icon" class="w-full h-full object-cover" /></div>
+        <h3 class="mt-6 font-bold text-lg">Development</h3>
+        <p class="mt-3 text-sm text-gray-600">Robust code that scales.</p>
+        <a href="#" class="mt-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">Learn more</a>
+      </div>
+      <div class="p-6 rounded-2xl border border-gray-200 hover:shadow-lg transition flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-3xl overflow-hidden bg-slate-100"><img src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=240&q=80" alt="Marketing icon" class="w-full h-full object-cover" /></div>
+        <h3 class="mt-6 font-bold text-lg">Marketing</h3>
+        <p class="mt-3 text-sm text-gray-600">Reach the right audience.</p>
+        <a href="#" class="mt-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">Learn more</a>
+      </div>
+      <div class="p-6 rounded-2xl border border-gray-200 hover:shadow-lg transition flex flex-col items-center text-center">
+        <div class="w-20 h-20 rounded-3xl overflow-hidden bg-slate-100"><img src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=240&q=80" alt="Support icon" class="w-full h-full object-cover" /></div>
+        <h3 class="mt-6 font-bold text-lg">Support</h3>
+        <p class="mt-3 text-sm text-gray-600">24/7 human support.</p>
+        <a href="#" class="mt-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">Learn more</a>
+      </div>
     </div>
   </div>
-</section>`,
-  },
+</section>`},
 
   // PORTFOLIO
   {
@@ -173,12 +193,12 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   <div class="max-w-6xl mx-auto px-6 py-20">
     <h2 class="text-4xl font-bold text-gray-900">Selected Work</h2>
     <div class="mt-10 grid md:grid-cols-3 gap-6">
-      <div class="rounded-2xl overflow-hidden bg-gradient-to-br from-purple-400 to-pink-500 aspect-[4/3]"></div>
-      <div class="rounded-2xl overflow-hidden bg-gradient-to-br from-blue-400 to-cyan-500 aspect-[4/3]"></div>
-      <div class="rounded-2xl overflow-hidden bg-gradient-to-br from-orange-400 to-red-500 aspect-[4/3]"></div>
-      <div class="rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-400 to-teal-500 aspect-[4/3]"></div>
-      <div class="rounded-2xl overflow-hidden bg-gradient-to-br from-slate-700 to-slate-900 aspect-[4/3]"></div>
-      <div class="rounded-2xl overflow-hidden bg-gradient-to-br from-yellow-400 to-orange-500 aspect-[4/3]"></div>
+      <div class="rounded-2xl overflow-hidden aspect-[4/3]"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80" alt="Project image" class="w-full h-full object-cover" /></div>
+      <div class="rounded-2xl overflow-hidden aspect-[4/3]"><img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1200&q=80" alt="Project image" class="w-full h-full object-cover" /></div>
+      <div class="rounded-2xl overflow-hidden aspect-[4/3]"><img src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1200&q=80" alt="Project image" class="w-full h-full object-cover" /></div>
+      <div class="rounded-2xl overflow-hidden aspect-[4/3]"><img src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80" alt="Project image" class="w-full h-full object-cover" /></div>
+      <div class="rounded-2xl overflow-hidden aspect-[4/3]"><img src="https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=1200&q=80" alt="Project image" class="w-full h-full object-cover" /></div>
+      <div class="rounded-2xl overflow-hidden aspect-[4/3]"><img src="https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1200&q=80" alt="Project image" class="w-full h-full object-cover" /></div>
     </div>
   </div>
 </section>`,
@@ -194,12 +214,12 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   <div class="max-w-6xl mx-auto px-6 py-20">
     <h2 class="text-4xl font-bold text-gray-900 text-center">Gallery</h2>
     <div class="mt-10 columns-2 md:columns-3 gap-4 space-y-4">
-      <div class="rounded-xl bg-gradient-to-br from-teal-400 to-cyan-600 h-64 break-inside-avoid"></div>
-      <div class="rounded-xl bg-gradient-to-br from-purple-400 to-pink-500 h-40 break-inside-avoid"></div>
-      <div class="rounded-xl bg-gradient-to-br from-orange-400 to-red-500 h-56 break-inside-avoid"></div>
-      <div class="rounded-xl bg-gradient-to-br from-blue-400 to-indigo-600 h-48 break-inside-avoid"></div>
-      <div class="rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 h-72 break-inside-avoid"></div>
-      <div class="rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 h-52 break-inside-avoid"></div>
+      <div class="rounded-xl overflow-hidden h-64 break-inside-avoid"><img src="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=800&q=80" alt="Gallery image" class="w-full h-full object-cover" /></div>
+      <div class="rounded-xl overflow-hidden h-40 break-inside-avoid"><img src="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=800&q=80" alt="Gallery image" class="w-full h-full object-cover" /></div>
+      <div class="rounded-xl overflow-hidden h-56 break-inside-avoid"><img src="https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=800&q=80" alt="Gallery image" class="w-full h-full object-cover" /></div>
+      <div class="rounded-xl overflow-hidden h-48 break-inside-avoid"><img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=800&q=80" alt="Gallery image" class="w-full h-full object-cover" /></div>
+      <div class="rounded-xl overflow-hidden h-72 break-inside-avoid"><img src="https://images.unsplash.com/photo-1521170665346-3f21e2291d8a?auto=format&fit=crop&w=800&q=80" alt="Gallery image" class="w-full h-full object-cover" /></div>
+      <div class="rounded-xl overflow-hidden h-52 break-inside-avoid"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=800&q=80" alt="Gallery image" class="w-full h-full object-cover" /></div>
     </div>
   </div>
 </section>`,
@@ -209,19 +229,22 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   {
     id: "carousel-full",
     name: "Full Width Carousel",
-    category: "Gallery",
+    category: "Carousel",
     thumbBg: grad("#d946ef", "#c084fc"),
     html: `<section class="w-full bg-black relative overflow-hidden">
   <div class="relative w-full h-96 md:h-screen bg-gray-900 flex items-center justify-center group">
     <div class="relative w-full h-full overflow-hidden">
       <div class="w-full h-full flex carousel-track" data-carousel-track style="transition: transform 0.5s ease-in-out; transform: translateX(0%);">
-        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://images.unsplash.com/photo-1682227955596-452ec28e7e4d?w=1200&h=800&fit=crop" alt="Slide 1" class="w-full h-full object-cover" data-wto-idx="0" /><div class="absolute inset-0 bg-black/20"></div></div>
-        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://images.unsplash.com/photo-1519346473061-f0a7cbc113d7?w=1200&h=800&fit=crop" alt="Slide 2" class="w-full h-full object-cover" data-wto-idx="1" /><div class="absolute inset-0 bg-black/20"></div></div>
-        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=1200&h=800&fit=crop" alt="Slide 3" class="w-full h-full object-cover" data-wto-idx="2" /><div class="absolute inset-0 bg-black/20"></div></div>
+        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://picsum.photos/id/1018/1200/800" alt="Slide 1" class="w-full h-full object-cover" data-wto-idx="0" /><div class="absolute inset-0 pointer-events-none bg-black/20"></div></div>
+        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://picsum.photos/id/1015/1200/800" alt="Slide 2" class="w-full h-full object-cover" data-wto-idx="1" /><div class="absolute inset-0 pointer-events-none bg-black/20"></div></div>
+        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://picsum.photos/id/1016/1200/800" alt="Slide 3" class="w-full h-full object-cover" data-wto-idx="2" /><div class="absolute inset-0 pointer-events-none bg-black/20"></div></div>
       </div>
     </div>
-    <button type="button" class="absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-white/30 hover:bg-white/50 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100" data-carousel-prev aria-label="Previous"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
-    <button type="button" class="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-white/30 hover:bg-white/50 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100" data-carousel-next aria-label="Next"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19l7-7-7-7"/></svg></button>
+    <button type="button" class="absolute top-4 right-4 z-20 rounded-full border border-white/50 bg-white/90 px-3 py-1 text-xs font-semibold text-slate-900 opacity-0 group-hover:opacity-100 transition-all hover:bg-white" data-carousel-autoplay-toggle>
+      Auto: On
+    </button>
+    <button type="button" class="absolute left-4 top-1/2 -translate-y-1/2 z-20 pointer-events-auto bg-white/30 hover:bg-white/50 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100" data-carousel-prev aria-label="Previous"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+    <button type="button" class="absolute right-4 top-1/2 -translate-y-1/2 z-20 pointer-events-auto bg-white/30 hover:bg-white/50 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100" data-carousel-next aria-label="Next"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19l7-7-7-7"/></svg></button>
     <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex gap-2" data-carousel-dots>
       <button type="button" class="w-2 h-2 rounded-full bg-white" data-carousel-dot="0"></button>
       <button type="button" class="w-2 h-2 rounded-full bg-white/40" data-carousel-dot="1"></button>
@@ -240,8 +263,31 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
       if (!track || !prevBtn || !nextBtn || !dots.length) return;
       var slideCount = track.children.length;
       var currentIndex = 0;
+      var autoMove = true;
+      var autoMoveInterval = 5000;
+      var autoMoveTimer = null;
+      var autoButton = section.querySelector('[data-carousel-autoplay-toggle]');
+      function setAutoplayButton() {
+        if (!autoButton) return;
+        autoButton.textContent = autoMove ? 'Auto: On' : 'Auto: Off';
+      }
+      function stopAutoMove() {
+        if (autoMoveTimer) {
+          clearInterval(autoMoveTimer);
+          autoMoveTimer = null;
+        }
+      }
+      function startAutoMove() {
+        stopAutoMove();
+        if (!autoMove) return;
+        autoMoveTimer = setInterval(function() {
+          currentIndex = (currentIndex + 1) % slideCount;
+          update();
+        }, autoMoveInterval);
+      }
       function update() {
-        track.style.transform = 'translateX(-' + (currentIndex * 100) + '%)';
+        var percent = 100 * currentIndex;
+        track.style.transform = 'translateX(-' + percent + '%)';
         dots.forEach(function(dot, idx) {
           dot.style.backgroundColor = idx === currentIndex ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.4)';
         });
@@ -251,12 +297,14 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
         e.stopPropagation();
         currentIndex = (currentIndex - 1 + slideCount) % slideCount;
         update();
+        if (autoMove) startAutoMove();
       });
       nextBtn.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
         currentIndex = (currentIndex + 1) % slideCount;
         update();
+        if (autoMove) startAutoMove();
       });
       dots.forEach(function(dot) {
         dot.addEventListener('click', function(e) {
@@ -265,9 +313,22 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
           currentIndex = parseInt(dot.getAttribute('data-carousel-dot') || '0', 10);
           if (isNaN(currentIndex)) currentIndex = 0;
           update();
+          if (autoMove) startAutoMove();
         });
       });
+      if (autoButton) {
+        autoButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          autoMove = !autoMove;
+          setAutoplayButton();
+          if (autoMove) startAutoMove();
+          else stopAutoMove();
+        });
+      }
       update();
+      setAutoplayButton();
+      startAutoMove();
     })();
   </script>
 </section>`,
@@ -277,7 +338,7 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   {
     id: "carousel-multi",
     name: "Multi-Item Carousel",
-    category: "Gallery",
+    category: "Carousel",
     thumbBg: grad("#f59e0b", "#fbbf24"),
     html: `<section class="w-full bg-gray-50 py-16">
   <div class="max-w-6xl mx-auto px-6">
@@ -286,13 +347,14 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
     <div class="relative">
       <div class="overflow-hidden">
         <div class="flex gap-6 carousel-items" data-carousel-items style="transition: transform 0.5s ease-in-out; transform: translateX(0%);">
-          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center relative group"><img src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop" alt="Item 1" class="w-full h-full object-cover" data-wto-idx="0" /><div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item One</h3><p class="text-sm text-gray-600 mt-1">Premium collection piece</p></div></div></div>
-          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center relative group"><img src="https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&h=400&fit=crop" alt="Item 2" class="w-full h-full object-cover" data-wto-idx="1" /><div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Two</h3><p class="text-sm text-gray-600 mt-1">Curated selection</p></div></div></div>
-          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center relative group"><img src="https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=400&h=400&fit=crop" alt="Item 3" class="w-full h-full object-cover" data-wto-idx="2" /><div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Three</h3><p class="text-sm text-gray-600 mt-1">Hand-picked items</p></div></div></div>
-          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center relative group"><img src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop" alt="Item 4" class="w-full h-full object-cover" data-wto-idx="3" /><div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Four</h3><p class="text-sm text-gray-600 mt-1">Limited edition</p></div></div></div>
-          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-indigo-400 to-blue-600 flex items-center justify-center relative group"><img src="https://images.unsplash.com/photo-1535368567674-7c8e7f14498a?w=400&h=400&fit=crop" alt="Item 5" class="w-full h-full object-cover" data-wto-idx="4" /><div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Five</h3><p class="text-sm text-gray-600 mt-1">Bestseller choice</p></div></div></div>
+          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center relative group"><img src="https://picsum.photos/id/1011/400/400" alt="Item 1" class="w-full h-full object-cover" data-wto-idx="0" /><div class="absolute inset-0 pointer-events-none bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item One</h3><p class="text-sm text-gray-600 mt-1">Premium collection piece</p></div></div></div>
+          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center relative group"><img src="https://picsum.photos/id/1012/400/400" alt="Item 2" class="w-full h-full object-cover" data-wto-idx="1" /><div class="absolute inset-0 pointer-events-none bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Two</h3><p class="text-sm text-gray-600 mt-1">Curated selection</p></div></div></div>
+          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center relative group"><img src="https://picsum.photos/id/1013/400/400" alt="Item 3" class="w-full h-full object-cover" data-wto-idx="2" /><div class="absolute inset-0 pointer-events-none bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Three</h3><p class="text-sm text-gray-600 mt-1">Hand-picked items</p></div></div></div>
+          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center relative group"><img src="https://picsum.photos/id/1014/400/400" alt="Item 4" class="w-full h-full object-cover" data-wto-idx="3" /><div class="absolute inset-0 pointer-events-none bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Four</h3><p class="text-sm text-gray-600 mt-1">Limited edition</p></div></div></div>
+          <div class="w-full md:w-1/3 flex-shrink-0"><div class="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all"><div class="aspect-square bg-gradient-to-br from-indigo-400 to-blue-600 flex items-center justify-center relative group"><img src="https://picsum.photos/id/1015/400/400" alt="Item Five" class="w-full h-full object-cover" data-wto-idx="4" /><div class="absolute inset-0 pointer-events-none bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"><svg width="32" height="32" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div></div><div class="p-4"><h3 class="font-bold text-lg text-gray-900">Item Five</h3><p class="text-sm text-gray-600 mt-1">Bestseller choice</p></div></div></div>
         </div>
       </div>
+      <button type="button" class="absolute top-4 right-4 z-20 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-900 shadow-sm" data-carousel-autoplay-toggle>Auto: On</button>
       <button type="button" class="absolute -left-4 top-1/2 -translate-y-1/2 z-10 bg-white text-gray-800 p-2 rounded-full shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all" data-carousel-prev aria-label="Previous"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
       <button type="button" class="absolute -right-4 top-1/2 -translate-y-1/2 z-10 bg-white text-gray-800 p-2 rounded-full shadow-lg hover:shadow-xl hover:bg-gray-50 transition-all" data-carousel-next aria-label="Next"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19l7-7-7-7"/></svg></button>
     </div>
@@ -305,11 +367,33 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
       var track = section.querySelector('[data-carousel-items]');
       var prevBtn = section.querySelector('[data-carousel-prev]');
       var nextBtn = section.querySelector('[data-carousel-next]');
+      var autoButton = section.querySelector('[data-carousel-autoplay-toggle]');
       if (!track || !prevBtn || !nextBtn) return;
       var itemCount = track.children.length;
       var visible = 3;
       var currentIndex = 0;
       var maxIndex = Math.max(0, itemCount - visible);
+      var autoMove = true;
+      var autoMoveInterval = 5000;
+      var autoMoveTimer = null;
+      function setAutoplayButton() {
+        if (!autoButton) return;
+        autoButton.textContent = autoMove ? 'Auto: On' : 'Auto: Off';
+      }
+      function stopAutoMove() {
+        if (autoMoveTimer) {
+          clearInterval(autoMoveTimer);
+          autoMoveTimer = null;
+        }
+      }
+      function startAutoMove() {
+        stopAutoMove();
+        if (!autoMove) return;
+        autoMoveTimer = setInterval(function() {
+          currentIndex = currentIndex >= maxIndex ? 0 : currentIndex + 1;
+          update();
+        }, autoMoveInterval);
+      }
       function update() {
         var offset = currentIndex * (100 / visible);
         track.style.transform = 'translateX(-' + offset + '%)';
@@ -319,14 +403,164 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
         e.stopPropagation();
         currentIndex = Math.max(0, currentIndex - 1);
         update();
+        if (autoMove) startAutoMove();
       });
       nextBtn.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
         currentIndex = Math.min(maxIndex, currentIndex + 1);
         update();
+        if (autoMove) startAutoMove();
       });
+      if (autoButton) {
+        autoButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          autoMove = !autoMove;
+          setAutoplayButton();
+          if (autoMove) startAutoMove();
+          else stopAutoMove();
+        });
+      }
       update();
+      setAutoplayButton();
+      startAutoMove();
+    })();
+  </script>
+</section>`,
+  },
+
+  // CAROUSEL - SPOTLIGHT
+  {
+    id: "carousel-spotlight",
+    name: "Spotlight Carousel",
+    category: "Carousel",
+    thumbBg: grad("#6366f1", "#8b5cf6"),
+    html: `<section class="w-full bg-slate-950 text-white py-24">
+  <div class="max-w-6xl mx-auto px-6">
+    <div class="mb-12 text-center">
+      <p class="text-sm uppercase tracking-[0.4em] text-cyan-300">New arrivals</p>
+      <h2 class="mt-4 text-5xl font-black">Spotlight carousel</h2>
+      <p class="mt-4 text-lg text-slate-300 max-w-2xl mx-auto">Showcase three featured items with bold, centered controls.</p>
+    </div>
+    <div class="relative overflow-hidden rounded-[2rem] bg-black/80">
+      <div class="flex h-[560px] carousel-spotlight-track" data-carousel-track style="transition: transform 0.6s ease-in-out; transform: translateX(0%);">
+        <div class="w-full flex-shrink-0 relative">
+          <img src="https://picsum.photos/id/1020/1200/700" alt="Spotlight 1" class="w-full h-full object-cover" data-wto-idx="0" />
+          <div class="absolute inset-0 bg-black/40"></div>
+          <div class="absolute left-8 bottom-12 max-w-xl text-white">
+            <p class="text-sm uppercase tracking-[0.4em] text-cyan-300">Featured</p>
+            <h3 class="mt-4 text-4xl font-black">Modern design</h3>
+            <p class="mt-4 text-sm text-slate-200">Elegant slides with large copy and strong calls to action.</p>
+          </div>
+        </div>
+        <div class="w-full flex-shrink-0 relative">
+          <img src="https://picsum.photos/id/1021/1200/700" alt="Spotlight 2" class="w-full h-full object-cover" data-wto-idx="1" />
+          <div class="absolute inset-0 bg-black/40"></div>
+          <div class="absolute left-8 bottom-12 max-w-xl text-white">
+            <p class="text-sm uppercase tracking-[0.4em] text-cyan-300">Premium</p>
+            <h3 class="mt-4 text-4xl font-black">Strong visuals</h3>
+            <p class="mt-4 text-sm text-slate-200">Perfect for product launches, portfolios, and hero messaging.</p>
+          </div>
+        </div>
+        <div class="w-full flex-shrink-0 relative">
+          <img src="https://picsum.photos/id/1022/1200/700" alt="Spotlight 3" class="w-full h-full object-cover" data-wto-idx="2" />
+          <div class="absolute inset-0 bg-black/40"></div>
+          <div class="absolute left-8 bottom-12 max-w-xl text-white">
+            <p class="text-sm uppercase tracking-[0.4em] text-cyan-300">Launch</p>
+            <h3 class="mt-4 text-4xl font-black">Built for attention</h3>
+            <p class="mt-4 text-sm text-slate-200">Stylish indicators and controls keep the experience clear on desktop and mobile.</p>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="absolute top-5 right-5 z-20 rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs font-semibold text-white shadow-lg" data-carousel-autoplay-toggle>Auto: On</button>
+      <button type="button" class="absolute left-5 top-1/2 -translate-y-1/2 z-20 rounded-full bg-white/20 p-3 text-white shadow-lg" data-carousel-prev aria-label="Previous"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+      <button type="button" class="absolute right-5 top-1/2 -translate-y-1/2 z-20 rounded-full bg-white/20 p-3 text-white shadow-lg" data-carousel-next aria-label="Next"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19l7-7-7-7"/></svg></button>
+      <div class="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+        <button type="button" class="w-3 h-3 rounded-full bg-white" data-carousel-dot="0"></button>
+        <button type="button" class="w-3 h-3 rounded-full bg-white/50" data-carousel-dot="1"></button>
+        <button type="button" class="w-3 h-3 rounded-full bg-white/50" data-carousel-dot="2"></button>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function() {
+      var script = document.currentScript || document.scripts[document.scripts.length - 1];
+      var section = script ? script.parentElement : null;
+      if (!section) return;
+      var track = section.querySelector('[data-carousel-track]');
+      var prevBtn = section.querySelector('[data-carousel-prev]');
+      var nextBtn = section.querySelector('[data-carousel-next]');
+      var dots = Array.from(section.querySelectorAll('[data-carousel-dot]'));
+      if (!track || !prevBtn || !nextBtn || !dots.length) return;
+      var slideCount = track.children.length;
+      var currentIndex = 0;
+      var autoMove = true;
+      var autoMoveInterval = 5000;
+      var autoMoveTimer = null;
+      var autoButton = section.querySelector('[data-carousel-autoplay-toggle]');
+      function setAutoplayButton() {
+        if (!autoButton) return;
+        autoButton.textContent = autoMove ? 'Auto: On' : 'Auto: Off';
+      }
+      function stopAutoMove() {
+        if (autoMoveTimer) {
+          clearInterval(autoMoveTimer);
+          autoMoveTimer = null;
+        }
+      }
+      function startAutoMove() {
+        stopAutoMove();
+        if (!autoMove) return;
+        autoMoveTimer = setInterval(function() {
+          currentIndex = (currentIndex + 1) % slideCount;
+          update();
+        }, autoMoveInterval);
+      }
+      function update() {
+        var percent = 100 * currentIndex;
+        track.style.transform = 'translateX(-' + percent + '%)';
+        dots.forEach(function(dot, idx) {
+          dot.style.backgroundColor = idx === currentIndex ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.4)';
+        });
+      }
+      prevBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = (currentIndex - 1 + slideCount) % slideCount;
+        update();
+        if (autoMove) startAutoMove();
+      });
+      nextBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = (currentIndex + 1) % slideCount;
+        update();
+        if (autoMove) startAutoMove();
+      });
+      dots.forEach(function(dot) {
+        dot.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          currentIndex = parseInt(dot.getAttribute('data-carousel-dot') || '0', 10);
+          if (isNaN(currentIndex)) currentIndex = 0;
+          update();
+          if (autoMove) startAutoMove();
+        });
+      });
+      if (autoButton) {
+        autoButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          autoMove = !autoMove;
+          setAutoplayButton();
+          if (autoMove) startAutoMove();
+          else stopAutoMove();
+        });
+      }
+      update();
+      setAutoplayButton();
+      startAutoMove();
     })();
   </script>
 </section>`,
@@ -361,9 +595,9 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   <div class="max-w-6xl mx-auto px-6 py-20">
     <h2 class="text-4xl font-bold text-center text-gray-900">Loved by teams</h2>
     <div class="mt-12 grid md:grid-cols-3 gap-6">
-      <div class="p-6 rounded-2xl bg-gray-50"><p class="text-gray-700">"Absolutely changed how we work. Highly recommend to any team."</p><div class="mt-4 flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-500"></div><div><div class="font-semibold text-sm">Sara Chen</div><div class="text-xs text-gray-500">Designer, Acme</div></div></div></div>
-      <div class="p-6 rounded-2xl bg-gray-50"><p class="text-gray-700">"The best product I've used in years. Ship faster with confidence."</p><div class="mt-4 flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-cyan-500"></div><div><div class="font-semibold text-sm">Marcus Ali</div><div class="text-xs text-gray-500">CTO, Vertex</div></div></div></div>
-      <div class="p-6 rounded-2xl bg-gray-50"><p class="text-gray-700">"Beautiful, powerful, and easy. What more could you ask for?"</p><div class="mt-4 flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500"></div><div><div class="font-semibold text-sm">Priya Rao</div><div class="text-xs text-gray-500">Founder, Sun</div></div></div></div>
+      <div class="p-6 rounded-2xl bg-gray-50"><p class="text-gray-700">"Absolutely changed how we work. Highly recommend to any team."</p><div class="mt-4 flex items-center gap-3"><img class="w-10 h-10 rounded-full object-cover" src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80" alt="Sara Chen" /><div><div class="font-semibold text-sm">Sara Chen</div><div class="text-xs text-gray-500">Designer, Acme</div></div></div></div>
+      <div class="p-6 rounded-2xl bg-gray-50"><p class="text-gray-700">"The best product I've used in years. Ship faster with confidence."</p><div class="mt-4 flex items-center gap-3"><img class="w-10 h-10 rounded-full object-cover" src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=200&q=80" alt="Marcus Ali" /><div><div class="font-semibold text-sm">Marcus Ali</div><div class="text-xs text-gray-500">CTO, Vertex</div></div></div></div>
+      <div class="p-6 rounded-2xl bg-gray-50"><p class="text-gray-700">"Beautiful, powerful, and easy. What more could you ask for?"</p><div class="mt-4 flex items-center gap-3"><img class="w-10 h-10 rounded-full object-cover" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80" alt="Priya Rao" /><div><div class="font-semibold text-sm">Priya Rao</div><div class="text-xs text-gray-500">Founder, Sun</div></div></div></div>
     </div>
   </div>
 </section>`,
@@ -397,10 +631,10 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   <div class="max-w-6xl mx-auto px-6 py-20">
     <h2 class="text-4xl font-bold text-center text-gray-900">Meet the team</h2>
     <div class="mt-12 grid md:grid-cols-4 gap-6">
-      <div class="text-center"><div class="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-indigo-400 to-purple-500"></div><h3 class="mt-4 font-bold">Alex Kim</h3><p class="text-sm text-gray-500">CEO</p></div>
-      <div class="text-center"><div class="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-pink-400 to-red-500"></div><h3 class="mt-4 font-bold">Jamie Lee</h3><p class="text-sm text-gray-500">CTO</p></div>
-      <div class="text-center"><div class="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-emerald-400 to-teal-500"></div><h3 class="mt-4 font-bold">Sam Patel</h3><p class="text-sm text-gray-500">Design</p></div>
-      <div class="text-center"><div class="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-orange-400 to-yellow-500"></div><h3 class="mt-4 font-bold">Robin Cruz</h3><p class="text-sm text-gray-500">Ops</p></div>
+      <div class="text-center"><img class="w-32 h-32 mx-auto rounded-full object-cover" src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80" alt="Alex Kim" /><h3 class="mt-4 font-bold">Alex Kim</h3><p class="text-sm text-gray-500">CEO</p></div>
+      <div class="text-center"><img class="w-32 h-32 mx-auto rounded-full object-cover" src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80" alt="Jamie Lee" /><h3 class="mt-4 font-bold">Jamie Lee</h3><p class="text-sm text-gray-500">CTO</p></div>
+      <div class="text-center"><img class="w-32 h-32 mx-auto rounded-full object-cover" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80" alt="Sam Patel" /><h3 class="mt-4 font-bold">Sam Patel</h3><p class="text-sm text-gray-500">Design</p></div>
+      <div class="text-center"><img class="w-32 h-32 mx-auto rounded-full object-cover" src="https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=300&q=80" alt="Robin Cruz" /><h3 class="mt-4 font-bold">Robin Cruz</h3><p class="text-sm text-gray-500">Ops</p></div>
     </div>
   </div>
 </section>`,
@@ -450,9 +684,9 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
     thumbBg: grad("#a855f7", "#ec4899"),
     html: `<section class="w-full bg-white">
   <div class="max-w-6xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-6">
-    <div class="p-6 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 text-white"><h3 class="text-xl font-bold">Discover</h3><p class="mt-2 opacity-90">Explore what's possible today.</p></div>
-    <div class="p-6 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white"><h3 class="text-xl font-bold">Create</h3><p class="mt-2 opacity-90">Turn ideas into reality.</p></div>
-    <div class="p-6 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white"><h3 class="text-xl font-bold">Share</h3><p class="mt-2 opacity-90">Publish to the world.</p></div>
+    <div class="overflow-hidden rounded-2xl shadow-lg"><img src="https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=800&q=80" alt="Discover" class="w-full h-44 object-cover" /><div class="p-6 bg-white"><h3 class="text-xl font-bold">Discover</h3><p class="mt-2 text-gray-600">Explore what's possible today.</p></div></div>
+    <div class="overflow-hidden rounded-2xl shadow-lg"><img src="https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=800&q=80" alt="Create" class="w-full h-44 object-cover" /><div class="p-6 bg-white"><h3 class="text-xl font-bold">Create</h3><p class="mt-2 text-gray-600">Turn ideas into reality.</p></div></div>
+    <div class="overflow-hidden rounded-2xl shadow-lg"><img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=800&q=80" alt="Share" class="w-full h-44 object-cover" /><div class="p-6 bg-white"><h3 class="text-xl font-bold">Share</h3><p class="mt-2 text-gray-600">Publish to the world.</p></div></div>
   </div>
 </section>`,
   },
@@ -476,21 +710,6 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   },
 
   // BUTTONS
-  {
-    id: "buttons-showcase",
-    name: "Button Showcase",
-    category: "Buttons",
-    thumbBg: grad("#3b82f6", "#06b6d4"),
-    html: `<section class="w-full bg-white">
-  <div class="max-w-4xl mx-auto px-6 py-16 flex flex-wrap gap-4 justify-center">
-    <button class="px-6 py-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700">Primary</button>
-    <button class="px-6 py-3 rounded-lg border border-gray-300 text-gray-800 font-medium hover:bg-gray-50">Secondary</button>
-    <button class="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium">Gradient</button>
-    <button class="px-6 py-3 rounded-lg bg-gray-900 text-white font-medium">Dark</button>
-    <button class="px-6 py-3 rounded-lg border-2 border-indigo-600 text-indigo-600 font-medium">Outline</button>
-  </div>
-</section>`,
-  },
   {
     id: "button-primary",
     name: "Primary Button",
@@ -552,9 +771,9 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   <div class="max-w-6xl mx-auto px-6 py-20">
     <h2 class="text-4xl font-bold text-gray-900">Latest posts</h2>
     <div class="mt-10 grid md:grid-cols-3 gap-8">
-      <article><div class="aspect-[4/3] rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600"></div><h3 class="mt-4 text-lg font-bold">How we scaled to 1M users</h3><p class="mt-2 text-gray-600 text-sm">Lessons learned from a year of growth.</p><a href="#" class="mt-3 inline-block text-indigo-600 font-semibold hover:text-indigo-500">Read more →</a></article>
-      <article><div class="aspect-[4/3] rounded-xl bg-gradient-to-br from-blue-400 to-indigo-600"></div><h3 class="mt-4 text-lg font-bold">Designing for accessibility</h3><p class="mt-2 text-gray-600 text-sm">Making the web work for everyone.</p><a href="#" class="mt-3 inline-block text-indigo-600 font-semibold hover:text-indigo-500">Read more →</a></article>
-      <article><div class="aspect-[4/3] rounded-xl bg-gradient-to-br from-orange-400 to-red-500"></div><h3 class="mt-4 text-lg font-bold">Announcing v2.0</h3><p class="mt-2 text-gray-600 text-sm">New features, better performance.</p><a href="#" class="mt-3 inline-block text-indigo-600 font-semibold hover:text-indigo-500">Read more →</a></article>
+      <article><div class="aspect-[4/3] rounded-xl overflow-hidden"><img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=900&q=80" alt="Blog post image" class="w-full h-full object-cover" /></div><h3 class="mt-4 text-lg font-bold">How we scaled to 1M users</h3><p class="mt-2 text-gray-600 text-sm">Lessons learned from a year of growth.</p><a href="#" class="mt-3 inline-block text-indigo-600 font-semibold hover:text-indigo-500">Read more →</a></article>
+      <article><div class="aspect-[4/3] rounded-xl overflow-hidden"><img src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=900&q=80" alt="Blog post image" class="w-full h-full object-cover" /></div><h3 class="mt-4 text-lg font-bold">Designing for accessibility</h3><p class="mt-2 text-gray-600 text-sm">Making the web work for everyone.</p><a href="#" class="mt-3 inline-block text-indigo-600 font-semibold hover:text-indigo-500">Read more →</a></article>
+      <article><div class="aspect-[4/3] rounded-xl overflow-hidden"><img src="https://images.unsplash.com/photo-1485217988980-11786ced9454?auto=format&fit=crop&w=900&q=80" alt="Blog post image" class="w-full h-full object-cover" /></div><h3 class="mt-4 text-lg font-bold">Announcing v2.0</h3><p class="mt-2 text-gray-600 text-sm">New features, better performance.</p><a href="#" class="mt-3 inline-block text-indigo-600 font-semibold hover:text-indigo-500">Read more →</a></article>
     </div>
   </div>
 </section>`,

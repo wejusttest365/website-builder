@@ -336,7 +336,28 @@ export function Toolbar() {
         </IconBtn>
         <button
           className="h-8 px-3 rounded-md hover:bg-accent flex items-center gap-1.5 text-xs"
-          onClick={() => project && window.open(`/preview/${project.id}`, "_blank")}
+          onClick={() => {
+            if (!project) return;
+            persist();
+            const pageParam = currentPageId ? `?page=${currentPageId}` : "";
+            const url = `/preview/${project.id}${pageParam}`;
+            const pageId = currentPageId ?? project.currentPageId ?? project.pages?.[0]?.id ?? null;
+            const newWindow = window.open(url, "_blank");
+            if (newWindow) {
+              (window as any).__lovablePreviewData = {
+                project,
+                projectId: project.id,
+                pageId,
+              };
+              const payload = { __lovablePreviewPayload: true, projectId: project.id, project, pageId };
+              try {
+                newWindow.postMessage(payload, window.location.origin);
+                window.setTimeout(() => newWindow.postMessage(payload, window.location.origin), 200);
+              } catch (_err) {
+                // ignore; preview will fallback to storage if available
+              }
+            }
+          }}
         >
           <Eye className="w-3.5 h-3.5" /> Preview
         </button>

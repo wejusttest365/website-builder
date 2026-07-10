@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { UploadCloud } from "lucide-react";
 import { useBuilder, pageOf } from "@/lib/builder/store";
 import { buildPreviewHTML, resolveAssetPaths } from "@/lib/builder/preview";
 
@@ -197,8 +198,8 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
   const width = device === "desktop" ? "1180px" : device === "tablet" ? "820px" : "390px";
 
   return (
-    <div className="w-full h-full flex justify-center items-start overflow-auto bg-muted/40 p-4">
-      <div className="bg-white shadow-xl transition-all" style={{ width, minHeight: "100%", flex: "0 0 auto", maxWidth: "100%" }}>
+    <div className="w-full h-full flex justify-center items-start overflow-y-auto overflow-x-hidden bg-muted/40 p-4">
+      <div className="bg-white shadow-xl transition-all" style={{ width, minHeight: "100%", flex: "0 0 auto", maxWidth: "100%", overflowX: "hidden" }}>
         <iframe
           ref={iframeRefToUse}
           title="preview"
@@ -276,9 +277,13 @@ function replaceImageAt(
   newSrc: string,
 ): string {
   const doc = parseSection(html);
+  const root =
+    doc.body.children.length === 1 && doc.body.firstElementChild?.tagName.toLowerCase() === "section"
+      ? (doc.body.firstElementChild as Element)
+      : doc.body;
   let el: Element | null = null;
-  if (target.idx) el = findByIdx(doc.body, target.idx);
-  if (!el && target.path) el = findByIdx(doc.body, target.path);
+  if (target.idx) el = findByIdx(root, target.idx);
+  if (!el && target.path) el = findByIdx(root, target.path);
   if (!el && target.src && target.kind === "img") {
     el = doc.body.querySelector(`img[src="${cssAttr(target.src)}"]`);
   }
@@ -322,9 +327,13 @@ function removeImageAt(
   target: { idx: string | null; path?: string | null; src: string; kind: "img" | "box" },
 ): string {
   const doc = parseSection(html);
+  const root =
+    doc.body.children.length === 1 && doc.body.firstElementChild?.tagName.toLowerCase() === "section"
+      ? (doc.body.firstElementChild as Element)
+      : doc.body;
   let el: Element | null = null;
-  if (target.idx) el = findByIdx(doc.body, target.idx);
-  if (!el && target.path) el = findByIdx(doc.body, target.path);
+  if (target.idx) el = findByIdx(root, target.idx);
+  if (!el && target.path) el = findByIdx(root, target.path);
   if (!el && target.src && target.kind === "img") {
     el = doc.body.querySelector(`img[src="${cssAttr(target.src)}"]`);
   }
@@ -385,28 +394,32 @@ function ImageEditorModal({
             onChange={(e) => { setUrl(e.target.value); setPreviewUrl(e.target.value); }}
             placeholder="https://..."
           />
-          <label className="block">
+          <div className="space-y-2">
             <span className="text-sm font-medium">Upload from device</span>
-            <input
-              type="file"
-              accept="image/*"
-              className="mt-1 block w-full text-sm"
-              onChange={(e) => {
-                const f = e.currentTarget.files?.[0];
-                if (!f) return;
-                const r = new FileReader();
-                r.onload = () => {
-                  const dataUrl = String(r.result);
-                  const ext = f.name.split(".").pop();
-                  const path = onUpload(dataUrl, ext);
-                  setUrl(path || dataUrl);
-                  setPreviewUrl(dataUrl);
-                  e.currentTarget.value = "";
-                };
-                r.readAsDataURL(f);
-              }}
-            />
-          </label>
+            <label className="inline-flex items-center gap-2 rounded-lg border border-input bg-muted px-3 py-2 text-sm font-medium text-foreground cursor-pointer hover:bg-accent/10">
+              <UploadCloud className="h-4 w-4" />
+              Choose file
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.currentTarget.files?.[0];
+                  if (!f) return;
+                  const r = new FileReader();
+                  r.onload = () => {
+                    const dataUrl = String(r.result);
+                    const ext = f.name.split(".").pop();
+                    const path = onUpload(dataUrl, ext);
+                    setUrl(path || dataUrl);
+                    setPreviewUrl(dataUrl);
+                    e.currentTarget.value = "";
+                  };
+                  r.readAsDataURL(f);
+                }}
+              />
+            </label>
+          </div>
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <button

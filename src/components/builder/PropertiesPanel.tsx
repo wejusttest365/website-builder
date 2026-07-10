@@ -1,6 +1,6 @@
 import { useBuilder, pageOf } from "@/lib/builder/store";
 import { nanoid } from "nanoid";
-import { Plus, Trash2, Copy, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash2, Copy, Eye, EyeOff, UploadCloud } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function PropertiesPanel() {
@@ -167,22 +167,26 @@ export function PropertiesPanel() {
                         </button>
                       )}
                     </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="block w-full text-xs"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (!f) return;
-                        const r = new FileReader();
-                        r.onload = () => {
-                          const path = addAsset(String(r.result), f.name.split(".").pop());
-                          updateHtml(setBrandImage(section.html, path));
-                          pushHistory();
-                        };
-                        r.readAsDataURL(f);
-                      }}
-                    />
+                    <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+                      <UploadCloud className="h-4 w-4" />
+                      Upload logo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const r = new FileReader();
+                          r.onload = () => {
+                            const path = addAsset(String(r.result), f.name.split(".").pop());
+                            updateHtml(setBrandImage(section.html, path));
+                            pushHistory();
+                          };
+                          r.readAsDataURL(f);
+                        }}
+                      />
+                    </label>
                   </div>
                 ) : null}
 
@@ -406,22 +410,26 @@ export function PropertiesPanel() {
                         onChange={(e) => updateHtml(setRepeaterItemImage(section.html, i, e.target.value))}
                         onBlur={pushHistory}
                       />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="block w-full text-xs"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (!f) return;
-                          const r = new FileReader();
-                          r.onload = () => {
-                            const path = addAsset(String(r.result), f.name.split(".").pop());
-                            updateHtml(setRepeaterItemImage(section.html, i, path));
-                            pushHistory();
-                          };
-                          r.readAsDataURL(f);
-                        }}
-                      />
+                      <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+                        <UploadCloud className="h-4 w-4" />
+                        Upload image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            const r = new FileReader();
+                            r.onload = () => {
+                              const path = addAsset(String(r.result), f.name.split(".").pop());
+                              updateHtml(setRepeaterItemImage(section.html, i, path));
+                              pushHistory();
+                            };
+                            r.readAsDataURL(f);
+                          }}
+                        />
+                      </label>
                       {it.image && /^images\//.test(it.image) && (
                         <div className="text-right">
                           <button className="mt-1 px-3 py-1 rounded-md border border-input text-xs" onClick={() => downloadAssetByPath(it.image)}>
@@ -569,22 +577,26 @@ export function PropertiesPanel() {
             />
           </Field>
           <Field label="Upload">
-            <input
-              type="file"
-              accept="image/*"
-              className="block w-full text-xs"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                const r = new FileReader();
-                r.onload = () => {
-                  const path = addAsset(String(r.result), f.name.split(".").pop());
-                  set("background-image", `url("${path}")`);
-                  pushHistory();
-                };
-                r.readAsDataURL(f);
-              }}
-            />
+            <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+              <UploadCloud className="h-4 w-4" />
+              Upload Image
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  const r = new FileReader();
+                  r.onload = () => {
+                    const path = addAsset(String(r.result), f.name.split(".").pop());
+                    set("background-image", `url("${path}")`);
+                    pushHistory();
+                  };
+                  r.readAsDataURL(f);
+                }}
+              />
+            </label>
           </Field>
           {backgroundImage && /^images\//.test(backgroundImage) && (
             <Field label="Download">
@@ -1391,6 +1403,200 @@ function addRepeaterItem(html: string) {
 }
 
 // Footer helpers omitted for brevity — keep the ones we used earlier
+
+function findFooterColumnElements(doc: Document): Element[] {
+  const footer = doc.body.querySelector('footer');
+  if (!footer) return [];
+  // Prefer explicit lists as columns
+  let cols: Element[] = Array.from(footer.querySelectorAll('ul')) as Element[];
+  if (cols.length > 0) return cols;
+  // Otherwise, direct child elements that contain links/lists
+  cols = Array.from(footer.children).filter((c) => !!c.querySelector && !!c.querySelector('a,li')) as Element[];
+  if (cols.length > 0) return cols;
+  // Fallback: any element under footer with anchors grouped by a common parent
+  const anchors = Array.from(footer.querySelectorAll('a'));
+  const parents = anchors.map((a) => a.closest('div,section') || a.parentElement).filter(Boolean) as Element[];
+  // pick unique parents
+  return Array.from(new Set(parents));
+}
+
+function getFooterColumns(html: string): { heading: string; items: { text: string; href: string }[] }[] {
+  const doc = parseHtml(html);
+  if (!doc) return [];
+  const cols = findFooterColumnElements(doc);
+  return cols.map((col) => {
+    let heading = '';
+    // heading may be an H* or strong inside the column, or a previous sibling when the column is a UL
+    const h = col.querySelector('h1,h2,h3,h4,h5,h6,strong');
+    if (h && (h.textContent || '').trim()) heading = (h.textContent || '').trim();
+    else if (/^UL$|^OL$/.test(col.tagName)) {
+      const prev = col.previousElementSibling;
+      if (prev && (prev.textContent || '').trim()) heading = (prev.textContent || '').trim();
+    }
+    // collect anchors
+    const items: { text: string; href: string }[] = [];
+    const listItems = Array.from(col.querySelectorAll('li'));
+    if (listItems.length > 0) {
+      for (const li of listItems) {
+        const a = li.querySelector('a');
+        const text = (a?.textContent || li.textContent || '').trim();
+        const href = a?.getAttribute('href') ?? '#';
+        if (text.trim()) items.push({ text, href });
+      }
+    } else {
+      const anchors = Array.from(col.querySelectorAll('a'));
+      for (const a of anchors) {
+        const text = (a.textContent || '').trim();
+        const href = a.getAttribute('href') ?? '#';
+        if (text) items.push({ text, href });
+      }
+    }
+    return { heading, items };
+  });
+}
+
+function setFooterColumnHeading(html: string, colIndex: number, heading: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const cols = findFooterColumnElements(doc);
+  const col = cols[colIndex];
+  if (!col) return html;
+  // Try to find an existing heading element
+  let h = col.querySelector('h1,h2,h3,h4,h5,h6,strong');
+  if (!h && (/^UL$|^OL$/.test(col.tagName))) {
+    // create or update previous sibling text node
+    const prev = col.previousElementSibling;
+    if (prev && /^H[1-6]$/.test(prev.tagName)) {
+      prev.textContent = heading;
+      return serialize(doc);
+    }
+    // insert a heading before the list
+    h = doc.createElement('h3');
+    h.textContent = heading;
+    col.parentElement?.insertBefore(h, col);
+    return serialize(doc);
+  }
+  if (!h) {
+    h = doc.createElement('h3');
+    h.textContent = heading;
+    col.insertBefore(h, col.firstChild);
+    return serialize(doc);
+  }
+  h.textContent = heading;
+  return serialize(doc);
+}
+
+function removeFooterColumn(html: string, colIndex: number) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const cols = findFooterColumnElements(doc);
+  const col = cols[colIndex];
+  if (!col) return html;
+  // If the column is a UL and previous sibling is heading, remove heading too
+  const prev = col.previousElementSibling;
+  if (prev && /^H[1-6]$/.test(prev.tagName)) prev.remove();
+  col.remove();
+  return serialize(doc);
+}
+
+function updateFooterColumnItem(html: string, colIndex: number, itemIndex: number, patch: Partial<{ text: string; href: string }>) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const cols = findFooterColumnElements(doc);
+  const col = cols[colIndex];
+  if (!col) return html;
+  const listItems = Array.from(col.querySelectorAll('li'));
+  if (listItems.length > 0) {
+    const li = listItems[itemIndex];
+    if (!li) return serialize(doc);
+    const a = li.querySelector('a');
+    if (patch.text !== undefined) {
+      if (a) a.textContent = patch.text;
+      else li.textContent = patch.text;
+    }
+    if (patch.href !== undefined) {
+      if (a) a.setAttribute('href', patch.href || '#');
+      else {
+        const na = doc.createElement('a');
+        na.setAttribute('href', patch.href || '#');
+        na.textContent = li.textContent || patch.href || '#';
+        li.textContent = '';
+        li.appendChild(na);
+      }
+    }
+    return serialize(doc);
+  }
+  const anchors = Array.from(col.querySelectorAll('a'));
+  const a = anchors[itemIndex];
+  if (!a) return serialize(doc);
+  if (patch.text !== undefined) a.textContent = patch.text;
+  if (patch.href !== undefined) a.setAttribute('href', patch.href || '#');
+  return serialize(doc);
+}
+
+function removeFooterColumnItem(html: string, colIndex: number, itemIndex: number) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const cols = findFooterColumnElements(doc);
+  const col = cols[colIndex];
+  if (!col) return html;
+  const listItems = Array.from(col.querySelectorAll('li'));
+  if (listItems.length > 0) {
+    const li = listItems[itemIndex];
+    if (li) li.remove();
+    return serialize(doc);
+  }
+  const anchors = Array.from(col.querySelectorAll('a'));
+  const a = anchors[itemIndex];
+  if (a) a.remove();
+  return serialize(doc);
+}
+
+function addFooterColumnItem(html: string, colIndex: number) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const cols = findFooterColumnElements(doc);
+  const col = cols[colIndex];
+  if (!col) return html;
+  // If column contains a UL, append LI
+  const ul = col.querySelector('ul') ?? (col.tagName === 'UL' ? col : null);
+  if (ul) {
+    const li = doc.createElement('li');
+    const a = doc.createElement('a');
+    a.setAttribute('href', '#');
+    a.textContent = 'New item';
+    li.appendChild(a);
+    ul.appendChild(li);
+    return serialize(doc);
+  }
+  // Otherwise append an anchor inside the column
+  const a = doc.createElement('a');
+  a.setAttribute('href', '#');
+  a.textContent = 'New item';
+  col.appendChild(a);
+  return serialize(doc);
+}
+
+function addFooterColumn(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const footer = doc.body.querySelector('footer');
+  if (!footer) return html;
+  const wrapper = doc.createElement('div');
+  const h = doc.createElement('h3');
+  h.textContent = 'New Column';
+  const ul = doc.createElement('ul');
+  const li = doc.createElement('li');
+  const a = doc.createElement('a');
+  a.setAttribute('href', '#');
+  a.textContent = 'New item';
+  li.appendChild(a);
+  ul.appendChild(li);
+  wrapper.appendChild(h);
+  wrapper.appendChild(ul);
+  footer.appendChild(wrapper);
+  return serialize(doc);
+}
 
 function hasRepeaterTarget(html: string, index: number) {
   const doc = parseHtml(html);

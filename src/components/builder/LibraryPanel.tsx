@@ -11,6 +11,7 @@ export function LibraryPanel() {
     Hero: true,
     Navigation: true,
     Features: true,
+    Carousel: true,
   }));
   const addSection = useBuilder((s) => s.addSection);
   const leftPanelOpen = useBuilder((s) => s.leftPanelOpen);

@@ -28,9 +28,10 @@ details > summary::-webkit-details-marker { display: none; }
 details > summary .wto-chevron { transition: transform .25s ease; display: inline-block; }
 details[open] > summary .wto-chevron { transform: rotate(180deg); }
 
-[data-wto-sticky="1"] { position: sticky; top: 0; z-index: 40; }
+data-wto-sticky="1"] { position: sticky; top: 0; z-index: 40; }
 
-div:has(nav) { position: relative; z-index: 999999999999999999999; }
+/* Limit nav wrapper stacking so it doesn't block other interactive elements */
+div:has(nav) { position: relative; z-index: 9999; }
 
 [data-wto-nav-btn] { display: none; }
 @media (max-width: 767px) {
@@ -177,6 +178,11 @@ export const RUNTIME_SCRIPT = `
     }
     return parts.join(',');
   }
+
+  function getEventTarget(e) {
+    return e.target instanceof Element ? e.target : (e.target && e.target.parentElement) || null;
+  }
+
   indexAll();
 
   function isBoxLike(el) {
@@ -193,7 +199,7 @@ export const RUNTIME_SCRIPT = `
   // Inline section toolbar
   const tb = document.createElement('div');
   tb.id = '__wto_tb';
-  tb.style.cssText = 'position:fixed;z-index:2147483000;display:none;gap:2px;background:#0f172a;color:#fff;border-radius:8px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.3);font:14px system-ui;';
+  tb.style.cssText = 'position:fixed;z-index:10003;display:none;gap:2px;background:#0f172a;color:#fff;border-radius:8px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.3);font:14px system-ui;';
   const btns = [
     ['up','↑','Move up'], ['down','↓','Move down'],
     ['top','⤒','Move to top'], ['bottom','⤓','Move to bottom'],
@@ -228,7 +234,7 @@ export const RUNTIME_SCRIPT = `
   uploadIcon.id = '__wto_image_upload';
   uploadIcon.type = 'button';
   uploadIcon.textContent = '📷';
-  uploadIcon.style.cssText = 'position:absolute;display:none;z-index:2147483002;width:32px;height:32px;border-radius:9999px;border:1px solid rgba(255,255,255,.9);background:rgba(15,23,42,.95);color:white;align-items:center;justify-content:center;font:16px system-ui;cursor:pointer;pointer-events:auto;';
+  uploadIcon.style.cssText = 'position:absolute;display:none;z-index:10004;width:32px;height:32px;border-radius:9999px;border:1px solid rgba(255,255,255,.9);background:rgba(15,23,42,.95);color:white;align-items:center;justify-content:center;font:16px system-ui;cursor:pointer;pointer-events:auto;';
   uploadIcon.addEventListener('mousedown', e => e.stopPropagation());
   document.body.appendChild(uploadIcon);
 
@@ -249,9 +255,17 @@ export const RUNTIME_SCRIPT = `
     uploadIcon.style.display = 'none';
   }
 
+  function getImageElement(el) {
+    if (!el || el.tagName === 'BODY' || el.tagName === 'HTML') return null;
+    if (el.tagName === 'IMG') return el;
+    return el.querySelector('img');
+  }
+
   function isUploadCandidate(el) {
     if (!el || el.tagName === 'BODY' || el.tagName === 'HTML') return null;
-    if (el.tagName === 'IMG') return { el, kind: 'img' };
+    if (isCarouselArea(el)) return null;
+    const img = getImageElement(el);
+    if (img) return { el: img, kind: 'img' };
     if (isBoxLike(el)) return { el, kind: 'box' };
     return null;
   }
@@ -272,8 +286,13 @@ export const RUNTIME_SCRIPT = `
   });
 
   document.addEventListener('pointermove', e => {
-    if (e.target.closest('#__wto_image_upload')) return;
-    const candidate = e.target.closest('[data-wto-idx]');
+    const target = getEventTarget(e);
+    if (!target || target.closest('#__wto_image_upload')) return;
+    let candidate = target.closest('[data-wto-idx]');
+    if (!candidate) {
+      const wrapper = target.closest('[data-wto-idx]');
+      candidate = wrapper;
+    }
     if (!candidate) {
       hideUploadIcon();
       return;
@@ -288,7 +307,8 @@ export const RUNTIME_SCRIPT = `
   }, true);
 
   document.addEventListener('pointerdown', e => {
-    if (!e.target.closest('#__wto_image_upload')) hideUploadIcon();
+    const target = getEventTarget(e);
+    if (!target || !target.closest('#__wto_image_upload')) hideUploadIcon();
   });
 
   addEventListener('scroll', () => positionToolbar(currentSection), true);
@@ -296,6 +316,7 @@ export const RUNTIME_SCRIPT = `
 
   // Drag reorder
   document.querySelectorAll('[data-wto-section]').forEach(sec => sec.setAttribute('draggable','true'));
+  document.querySelectorAll('[data-wto-section] a').forEach(a => a.setAttribute('draggable','false'));
   let dragId = null;
   document.addEventListener('dragstart', e => {
     try {
@@ -314,6 +335,7 @@ export const RUNTIME_SCRIPT = `
     try {
       const sec = e.target.closest && e.target.closest('[data-wto-section]');
       if (sec) sec.style.opacity = '';
+      e.preventDefault();
       const l = document.getElementById('__wto_line'); if (l) l.remove();
     } catch (err) {
       try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
@@ -354,24 +376,20 @@ export const RUNTIME_SCRIPT = `
 
   function onClick(e) {
     try {
-      if (e.target.closest('#__wto_tb')) return;
-      if (e.target.closest('[data-wto-nav-btn]') || e.target.closest('[data-wto-nav-menu]')) return;
-      if (e.target.closest('[data-carousel-prev], [data-carousel-next], [data-carousel-dot], [data-carousel-items-prev], [data-carousel-items-next], [data-carousel-indicator]')) return;
-      const section = e.target.closest('[data-wto-section]');
+      const target = getEventTarget(e);
+      if (!target) return;
+      if (target.closest('#__wto_tb')) return;
+      if (target.closest('[data-wto-nav-btn]') || target.closest('[data-wto-nav-menu]')) return;
+      if (target.closest('[data-carousel-prev], [data-carousel-next], [data-carousel-dot], [data-carousel-items-prev], [data-carousel-items-next], [data-carousel-indicator]')) return;
+      const section = target.closest('[data-wto-section]');
       if (!section) return;
-      const img = e.target.closest('img');
-      if (img) {
-        e.preventDefault(); e.stopPropagation();
-        send('image-click', { sectionId: section.dataset.wtoSection, idx: img.getAttribute('data-wto-idx'), path: pathFrom(img, section), src: img.getAttribute('src') || '', kind: 'img' });
-        return;
+      const anchor = target.closest('a');
+      if (anchor) {
+        const href = anchor.getAttribute('href');
+        if (!href || href === '#') {
+          e.preventDefault();
+        }
       }
-      const box = e.target.closest('[data-wto-idx]');
-      if (box && isBoxLike(box) && !e.target.closest('a,button,h1,h2,h3,h4,h5,h6,p,li,input,textarea')) {
-        e.preventDefault(); e.stopPropagation();
-        send('image-click', { sectionId: section.dataset.wtoSection, idx: box.getAttribute('data-wto-idx'), path: pathFrom(box, section), src: '', kind: 'box' });
-        return;
-      }
-      if (e.target.closest('a')) e.preventDefault();
       currentSection = section;
       positionToolbar(section);
       send('select', { sectionId: section.dataset.wtoSection });
@@ -479,7 +497,7 @@ export const RUNTIME_SCRIPT = `
       brand.style.position = brand.style.position || 'relative';
       const up = document.createElement('button');
       up.setAttribute('aria-label', 'Upload logo');
-      up.style.cssText = 'position:absolute;right:-8px;top:50%;transform:translateY(-50%);background:rgba(15,23,42,0.95);color:#fff;border-radius:6px;padding:6px;z-index:2147483001;border:0;cursor:pointer;';
+      up.style.cssText = 'position:absolute;right:-8px;top:50%;transform:translateY(-50%);background:rgba(15,23,42,0.95);color:#fff;border-radius:6px;padding:6px;z-index:10005;border:0;cursor:pointer;';
       up.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 5 17 10"/><line x1="12" y1="5" x2="12" y2="17"/></svg>';
       up.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();
@@ -629,7 +647,8 @@ ${metaTags}
 <title>Preview</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  html, body { margin: 0; min-height: 100%; overflow-x: hidden; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   ${RUNTIME_CSS}
   ${editableStyles}
   ${globalCss || ""}

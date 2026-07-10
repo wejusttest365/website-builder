@@ -4,19 +4,58 @@ import type { Project } from "@/lib/builder/store";
 
 export function DemoView({ projectId }: { projectId: string }) {
   const [proj, setProj] = useState<Project | null>(null);
+  const [activePageId, setActivePageId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
+    let timeout: number | null = null;
+    const handleResponse = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as {
+        __lovablePreviewPayload?: true;
+        projectId?: string;
+        project?: Project;
+        pageId?: string | null;
+      };
+      if (!data || data.__lovablePreviewPayload !== true) return;
+      if (data.projectId !== projectId) return;
+      if (!data.project) return;
+      setProj(data.project);
+      setActivePageId(data.pageId ?? data.project.currentPageId ?? data.project.pages?.[0]?.id ?? null);
+      if (timeout) window.clearTimeout(timeout);
+    };
+
+    window.addEventListener("message", handleResponse);
+
     try {
       const raw = localStorage.getItem("wto-builder-v2");
-      if (!raw) return setNotFound(true);
-      const data = JSON.parse(raw) as { projects: Record<string, Project> };
-      const p = data.projects?.[projectId];
-      if (!p) return setNotFound(true);
-      setProj(p);
+      if (raw) {
+        const data = JSON.parse(raw) as { projects: Record<string, Project> };
+        const p = data.projects?.[projectId];
+        if (p) {
+          const urlParams = new URLSearchParams(window.location.search);
+          const pageId = urlParams.get("page");
+          setProj(p);
+          setActivePageId(pageId && p.pages.some((pg) => pg.id === pageId) ? pageId : p.currentPageId ?? p.pages?.[0]?.id ?? null);
+          return () => window.removeEventListener("message", handleResponse);
+        }
+      }
     } catch {
-      setNotFound(true);
+      // storage not available, use opener message instead
     }
+
+    if (typeof window !== "undefined" && window.opener) {
+      timeout = window.setTimeout(() => {
+        if (!proj) setNotFound(true);
+      }, 2000);
+      return () => {
+        window.removeEventListener("message", handleResponse);
+        if (timeout) window.clearTimeout(timeout);
+      };
+    }
+
+    setNotFound(true);
+    return () => window.removeEventListener("message", handleResponse);
   }, [projectId]);
 
   if (notFound) {
@@ -31,17 +70,20 @@ export function DemoView({ projectId }: { projectId: string }) {
       </div>
     );
   }
-  if (!proj) return null;
+
+  if (!proj || activePageId === null) return null;
+
+  const page = proj.pages.find((pg) => pg.id === activePageId) ?? proj.pages[0];
 
   const bundle = buildExportBundle({
-    sections: (proj.pages?.[0]?.sections ?? []),
-    globalCss: proj.globalCss,
-    globalJs: proj.globalJs,
-    title: proj.name,
-    description: proj.pages?.[0]?.description,
-    keywords: proj.pages?.[0]?.keywords,
-    customHead: proj.customHead,
-    assets: proj.assets,
+    sections: (page?.sections ?? []),
+    globalCss: proj?.globalCss ?? "",
+    globalJs: proj?.globalJs ?? "",
+    title: proj?.name ?? "",
+    description: page?.description,
+    keywords: page?.keywords,
+    customHead: proj?.customHead,
+    assets: proj?.assets,
     inlineAssets: true,
   });
 
