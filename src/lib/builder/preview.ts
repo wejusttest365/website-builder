@@ -1,13 +1,35 @@
 import type { PageSection, Project } from "./store";
 
+const SITE_TRACKING_SNIPPET = `
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-W14JC88EV7"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);} 
+  gtag('js', new Date());
+  gtag('config', 'G-W14JC88EV7');
+</script>`;
+
+function normalizeAssetRef(ref: string) {
+  return ref.replace(/^\.\//, "").replace(/^\//, "");
+}
+
 // Rewrite `images/<filename>` refs to inline data URLs from the assets map.
 export function resolveAssetPaths(html: string, assets?: Record<string, string>) {
   if (!assets) return html;
   let out = html;
   for (const [name, data] of Object.entries(assets)) {
-    const path = `images/${name}`;
-    const esc = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    out = out.replace(new RegExp(esc, "g"), data);
+    const variants = [
+      `images/${name}`,
+      `/${name}`,
+      `./images/${name}`,
+      `/images/${name}`,
+      name,
+    ];
+    for (const variant of variants) {
+      const normalized = normalizeAssetRef(variant);
+      const esc = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      out = out.replace(new RegExp(esc, "g"), data);
+    }
   }
   return out;
 }
@@ -183,6 +205,20 @@ export const RUNTIME_SCRIPT = `
     return e.target instanceof Element ? e.target : (e.target && e.target.parentElement) || null;
   }
 
+  function scrollToHash(href, e) {
+    if (!href || !href.startsWith('#')) return false;
+    const hash = href.slice(1);
+    const target = document.getElementById(hash);
+    if (!target) return false;
+    if (e) e.preventDefault();
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (window.history && window.history.replaceState) {
+      const nextUrl = window.location.pathname + window.location.search + '#' + hash;
+      window.history.replaceState(null, '', nextUrl);
+    }
+    return true;
+  }
+
   indexAll();
 
   function isBoxLike(el) {
@@ -195,6 +231,20 @@ export const RUNTIME_SCRIPT = `
     if (/background-image\s*:/i.test(style) || /background-color\s*:/i.test(style)) return true;
     return false;
   }
+
+  const scrollTopBtn = document.createElement('button');
+  scrollTopBtn.type = 'button';
+  scrollTopBtn.setAttribute('aria-label', 'Scroll to top');
+  scrollTopBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+  scrollTopBtn.style.cssText = 'position:fixed;right:20px;bottom:20px;z-index:10005;display:none;align-items:center;justify-content:center;width:44px;height:44px;border:0;border-radius:9999px;background:#0f172a;color:#fff;box-shadow:0 10px 24px rgba(15,23,42,.25);cursor:pointer;';
+  scrollTopBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  document.body.appendChild(scrollTopBtn);
+  const toggleScrollTopBtn = () => {
+    const shouldShow = window.scrollY > 240;
+    scrollTopBtn.style.display = shouldShow ? 'flex' : 'none';
+  };
+  toggleScrollTopBtn();
+  window.addEventListener('scroll', toggleScrollTopBtn, { passive: true });
 
   // Inline section toolbar
   const tb = document.createElement('div');
@@ -389,6 +439,8 @@ export const RUNTIME_SCRIPT = `
         const normalized = href.replace(/^[./]+/, "").replace(/\.html(?:[?#].*)?$/, "");
         if (!href || href === '#') {
           e.preventDefault();
+        } else if (scrollToHash(href, e)) {
+          return;
         } else if (/^(?!https?:|mailto:).+\.html(?:[?#].*)?$/.test(href)) {
           e.preventDefault();
           send('navigate-page', { slug: normalized });
@@ -403,13 +455,35 @@ export const RUNTIME_SCRIPT = `
     }
   }
 
+  function isEditableTextNode(el) {
+    if (!el || !el.textContent || !el.textContent.trim()) return false;
+    if (el.closest && (el.closest('[data-wto-nav]') || el.closest('[data-wto-nav-menu]') || el.closest('[data-wto-toolbar]') || el.closest('[data-wto-ignore-edit]'))) return false;
+    const tag = (el.tagName || '').toLowerCase();
+    if (['script', 'style', 'svg', 'img', 'video', 'audio', 'canvas', 'iframe', 'input', 'textarea', 'select'].includes(tag)) return false;
+    const hasInteractiveChild = !!(el.querySelector && el.querySelector('a,button,input,select,textarea'));
+    if (['a', 'button', 'summary', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'span', 'strong', 'em', 'b', 'i', 'small', 'blockquote', 'cite', 'label'].includes(tag)) return true;
+    if (tag === 'div' && !hasInteractiveChild) return true;
+    return false;
+  }
+
+  function findEditableTarget(target) {
+    let current = target;
+    while (current && current !== document.body) {
+      if (isEditableTextNode(current)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
   function startTextEdit(e) {
-    const el = e.target.closest('h1,h2,h3,h4,h5,h6,p,summary,span,a,button,li');
-    const section = e.target.closest('[data-wto-section]');
+    const target = e.target;
+    const el = findEditableTarget(target);
+    const section = target.closest('[data-wto-section]');
     if (!el || !section) return;
     e.preventDefault(); e.stopPropagation();
     el.setAttribute('contenteditable', 'true');
     el.setAttribute('spellcheck', 'false');
+    el.setAttribute('data-wto-editable', 'true');
     el.focus();
     try { const range = document.createRange(); range.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(range); } catch(_) {}
     const onKey = (ev) => { if ((ev.key==='Enter' && !ev.shiftKey) || ev.key==='Escape') { ev.preventDefault(); el.blur(); } };
@@ -464,13 +538,23 @@ export const RUNTIME_SCRIPT = `
       menu.classList.toggle('hidden', !open);
       menu.style.display = open ? 'flex' : 'none';
     };
+    const closeMenu = () => {
+      if (!window.matchMedia('(max-width: 767px)').matches) return;
+      menu.classList.remove('wto-nav-open');
+      menu.classList.add('hidden');
+      menu.style.display = 'none';
+    };
     btn.addEventListener('click', event => {
       event.stopPropagation();
       toggleMenu();
     });
     menu.querySelectorAll('a').forEach(a => a.addEventListener('click', (e) => {
       e.stopPropagation();
-      const href = a.getAttribute('href');
+      const href = a.getAttribute('href') || '';
+      if (scrollToHash(href, e)) {
+        closeMenu();
+        return;
+      }
       // If link points to a page file (e.g., "about-us.html"), navigate to that page
       if (href && href.endsWith('.html') && !href.startsWith('http')) {
         e.preventDefault();
@@ -478,16 +562,12 @@ export const RUNTIME_SCRIPT = `
         setActiveLink(slug);
         send('navigate-page', { slug });
       }
-      menu.classList.remove('wto-nav-open');
-      menu.classList.add('hidden');
-      menu.style.display = 'none';
+      closeMenu();
     }));
     // Close menu when clicking outside nav
     document.addEventListener('click', e => {
       if (!nav.contains(e.target) && menu.classList.contains('wto-nav-open')) {
-        menu.classList.remove('wto-nav-open');
-        menu.classList.add('hidden');
-        menu.style.display = 'none';
+        closeMenu();
       }
     });
   });
@@ -495,13 +575,20 @@ export const RUNTIME_SCRIPT = `
   // Brand upload overlay: add a small upload button near the brand anchor in nav
   document.querySelectorAll('nav, [data-wto-nav]').forEach(nav => {
     try {
-      const anchors = Array.from(nav.querySelectorAll('a'));
-      const brand = anchors.find(a => !a.closest('ul') && !a.closest('li'));
+      const header = nav.closest('header');
+      const candidateAnchors = [];
+      if (header) candidateAnchors.push(...Array.from(header.querySelectorAll('a')));
+      candidateAnchors.push(...Array.from(nav.querySelectorAll('a')));
+      const brand = candidateAnchors.find(a => {
+        if (a.closest('ul') || a.closest('li') || a.closest('[data-wto-nav-menu]')) return false;
+        const href = (a.getAttribute('href') || '').trim();
+        return href === '#top' || (header && a.closest('header') && !a.closest('nav'));
+      }) || candidateAnchors.find(a => !a.closest('ul') && !a.closest('li') && !a.closest('[data-wto-nav-menu]'));
       if (!brand) return;
       brand.style.position = brand.style.position || 'relative';
       const up = document.createElement('button');
       up.setAttribute('aria-label', 'Upload logo');
-      up.style.cssText = 'position:absolute;right:-8px;top:50%;transform:translateY(-50%);background:rgba(15,23,42,0.95);color:#fff;border-radius:6px;padding:6px;z-index:10005;border:0;cursor:pointer;';
+      up.style.cssText = 'position:absolute;left:-8px;top:50%;transform:translate(-100%, -50%);background:rgba(15,23,42,0.95);color:#fff;border-radius:6px;padding:6px;z-index:10005;border:0;cursor:pointer;';
       up.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 5 17 10"/><line x1="12" y1="5" x2="12" y2="17"/></svg>';
       up.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();
@@ -545,6 +632,25 @@ export const EXPORT_RUNTIME = `
     return match?match[1]:'index';
   };
   var currentSlug=getPageSlug();
+  var scrollTopBtn=document.createElement('button');
+  scrollTopBtn.type='button';
+  scrollTopBtn.setAttribute('aria-label','Scroll to top');
+  scrollTopBtn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+  scrollTopBtn.style.cssText='position:fixed;right:20px;bottom:20px;z-index:10005;display:none;align-items:center;justify-content:center;width:44px;height:44px;border:0;border-radius:9999px;background:#0f172a;color:#fff;box-shadow:0 10px 24px rgba(15,23,42,.25);cursor:pointer;';
+  scrollTopBtn.addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
+  document.body.appendChild(scrollTopBtn);
+  var toggleScrollTopBtn=function(){var shouldShow=window.scrollY>240;scrollTopBtn.style.display=shouldShow?'flex':'none';};
+  toggleScrollTopBtn();
+  window.addEventListener('scroll',toggleScrollTopBtn,{passive:true});
+  var scrollToHash=function(href,e){
+    if(!href||!href.startsWith('#')) return false;
+    var hash=href.slice(1);
+    var target=document.getElementById(hash);
+    if(!target) return false;
+    if(e) e.preventDefault();
+    target.scrollIntoView({behavior:'smooth',block:'start'});
+    return true;
+  };
   
   document.querySelectorAll('[data-wto-nav]').forEach(function(nav){
     var btn=nav.querySelector('[data-wto-nav-btn]');
@@ -566,9 +672,15 @@ export const EXPORT_RUNTIME = `
       menu.classList.toggle('hidden', !open);
       menu.style.display=open?'flex':'none';
     };
+    var closeMenu=function(){
+      if(!window.matchMedia('(max-width: 767px)').matches) return;
+      menu.classList.remove('wto-nav-open');
+      menu.classList.add('hidden');
+      menu.style.display='none';
+    };
     btn.addEventListener('click',function(e){e.stopPropagation();toggleMenu();});
-menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){e.stopPropagation();var href=a.getAttribute('href')||'';if(href&&/\.html(?:[?#].*)?$/.test(href)&&!href.startsWith('http')){e.preventDefault();var slug=href.replace(/^[./]+/,'').replace(/\.html(?:[?#].*)?$/,'')||'index';setActiveLink(slug);parent.postMessage({ __wto: true, type: 'navigate-page', payload: { slug: slug } }, '*');}menu.classList.remove('wto-nav-open');menu.classList.add('hidden');menu.style.display='none';});});
-    document.addEventListener('click',function(e){if(!nav.contains(e.target)&&menu.classList.contains('wto-nav-open')){menu.classList.remove('wto-nav-open');menu.classList.add('hidden');menu.style.display='none';}});
+menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){e.stopPropagation();var href=a.getAttribute('href')||'';if(scrollToHash(href,e)){closeMenu();return;}if(href&&/\.html(?:[?#].*)?$/.test(href)&&!href.startsWith('http')){e.preventDefault();var slug=href.replace(/^[./]+/,'').replace(/\.html(?:[?#].*)?$/,'')||'index';setActiveLink(slug);parent.postMessage({ __wto: true, type: 'navigate-page', payload: { slug: slug } }, '*');}closeMenu();});});
+    document.addEventListener('click',function(e){if(!nav.contains(e.target)&&menu.classList.contains('wto-nav-open')){closeMenu();}});
   });
   document.addEventListener('click',function(e){
     try {
@@ -586,6 +698,15 @@ menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',functi
   });
 })();
 `;
+
+function withExportTracking(customHead?: string) {
+  const baseHead = (customHead ?? "").trim();
+  if (!baseHead) return SITE_TRACKING_SNIPPET.trim();
+  if (baseHead.includes("googletagmanager.com/gtag/js") || baseHead.includes("google-site-verification")) {
+    return baseHead;
+  }
+  return `${baseHead}\n${SITE_TRACKING_SNIPPET}`.trim();
+}
 
 function sectionAttrs(s: PageSection) {
   const parts: string[] = [];
@@ -694,6 +815,7 @@ export function buildExportBundle(opts: {
   pages?: { id: string; slug: string }[];
 }) {
   const { sections, globalCss, globalJs, title = "My Website", description, keywords, customHead, assets, inlineAssets, pages } = opts;
+  const exportHead = withExportTracking(customHead);
   const body = sections
     .filter((s) => !s.hidden)
     .map((s) => {
@@ -727,7 +849,7 @@ ${metaTags}
 <title>${escapeHtml(title)}</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="./css/styles.css" />
-${customHead || ""}
+${exportHead}
 </head>
 <body>
 ${body}
@@ -751,7 +873,7 @@ ${completeMetaTags}
 <title>${escapeHtml(title)}</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>${RUNTIME_CSS}\n${globalCss}</style>
-${customHead || ""}
+${exportHead}
 </head>
 <body>
 ${inlineAssets ? body : resolveAssetPaths(body, assets)}
@@ -764,7 +886,6 @@ ${inlineAssets ? body : resolveAssetPaths(body, assets)}
 }
 
 export function buildSiteExport(project: Project) {
-  const SITE_TRACKING_SNIPPET = `\n<!-- Google tag (gtag.js) -->\n<script async src="https://www.googletagmanager.com/gtag/js?id=G-W14JC88EV7"></script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n\n  gtag('config', 'G-W14JC88EV7');\n</script>\n\n<meta name="google-site-verification" content="Y4ZO2trgDXbKzMA1yC5bmxoSYw3063IMwh9C3Mk6roA" />\n`;
   const pageMeta = project.pages.map((p) => ({ id: p.id, slug: p.slug }));
   const files: { path: string; content: string; base64?: string }[] = [];
   files.push({ path: "css/styles.css", content: `${RUNTIME_CSS}\n${project.globalCss || ""}` });
@@ -777,7 +898,7 @@ export function buildSiteExport(project: Project) {
       title: `${project.name} — ${page.name}`,
       description: page.description,
       keywords: page.keywords,
-      customHead: (project.customHead ?? "") + SITE_TRACKING_SNIPPET,
+      customHead: withExportTracking(project.customHead),
       assets: project.assets,
       pages: pageMeta,
     });

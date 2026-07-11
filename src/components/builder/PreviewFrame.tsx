@@ -6,7 +6,7 @@ import { buildPreviewHTML, resolveAssetPaths } from "@/lib/builder/preview";
 interface Props {
   editable?: boolean;
   disablePointerEvents?: boolean;
-  iframeRef?: React.RefObject<HTMLIFrameElement>;
+  iframeRef?: React.RefObject<HTMLIFrameElement | null>;
 }
 
 export function PreviewFrame({ editable = true, disablePointerEvents = false, iframeRef }: Props) {
@@ -30,6 +30,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
   } | null>(null);
   const skipRebuildRef = useRef(false);
   const [srcDoc, setSrcDoc] = useState("");
+  const [previewCycle, setPreviewCycle] = useState(0);
   const pendingScrollTopRef = useRef<number | null>(null);
   const pendingOuterScrollTopRef = useRef<number | null>(null);
 
@@ -71,6 +72,8 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
       js: project.globalJs,
       editable,
       assets: project.assets ? Object.keys(project.assets).join(",") : "",
+      pageId: project.currentPageId,
+      updatedAt: project.updatedAt,
     });
   }, [project, editable]);
   const htmlKey = useMemo(
@@ -110,7 +113,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
 
     build();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [structuralKey, htmlKey]);
+  }, [structuralKey, htmlKey, previewCycle]);
 
   useEffect(() => {
     const doc = iframeRefToUse.current?.contentDocument;
@@ -137,6 +140,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
         // Iframe already has the updated DOM — skip srcDoc rebuild to preserve scroll.
         skipRebuildRef.current = true;
         setSectionHtml(String(data.payload?.sectionId ?? ""), String(data.payload?.html ?? ""));
+        setPreviewCycle((value) => value + 1);
         useBuilder.getState().persist();
       }
     // handle brand upload requests from preview runtime
@@ -146,9 +150,7 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
       const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === sid);
       if (!section) return;
       const doc = new DOMParser().parseFromString(`<body>${section.html}</body>`, 'text/html');
-      const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
-      const anchors = nav ? Array.from(nav.querySelectorAll('a')) : [];
-      const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li'));
+      const brand = findBrandAnchorInDoc(doc);
       const currentSrc = brand?.querySelector('img')?.getAttribute('src') || "";
       setImageEditor({ sectionId: sid, src: assetPathForDataUrl(currentSrc), idx: null, kind: 'img' });
     }
@@ -207,10 +209,11 @@ export function PreviewFrame({ editable = true, disablePointerEvents = false, if
       try {
         // detail has { level, args }
         const detail = (ev as CustomEvent).detail;
-        const level = detail?.level || 'log';
+        const level = String(detail?.level || 'log');
         const args = Array.isArray(detail?.args) ? detail.args : [detail?.args];
+        const method = console[level as keyof Console] as ((...args: unknown[]) => void) | undefined;
         // prefix so it's easy to find
-        console[level]?.('[wto-iframe]', ...args);
+        method?.('[wto-iframe]', ...args);
       } catch (err) {
         console.error('wto-iframe console handler error', err);
       }
@@ -282,6 +285,17 @@ function parseSection(html: string) {
   return new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
 }
 
+function findBrandAnchorInDoc(doc: Document) {
+  const header = doc.body.querySelector("header");
+  const nav = doc.body.querySelector("nav") ?? doc.body.querySelector("[data-wto-nav]");
+  const anchors = header ? Array.from(header.querySelectorAll("a")) : [];
+  if (nav) anchors.push(...Array.from(nav.querySelectorAll("a")));
+  const brand =
+    anchors.find((a) => !a.closest("ul") && !a.closest("li") && !a.closest("[data-wto-nav-menu]") && ((a.getAttribute("href") || "").trim() === "#top" || (header && a.closest("header") && !a.closest("nav")))) ||
+    anchors.find((a) => !a.closest("ul") && !a.closest("li") && !a.closest("[data-wto-nav-menu]"));
+  return brand ?? null;
+}
+
 // Strip gradient / background color utility classes so the replacement image
 // isn't tinted; keep sizing / rounding / aspect classes.
 function cleanGradientClasses(cls: string) {
@@ -315,9 +329,7 @@ function replaceImageAt(
     el = doc.body.querySelector(`img[src="${cssAttr(target.src)}"]`);
   }
   if (!el && target.kind === "img") {
-    const nav = doc.body.querySelector("nav") ?? doc.body.querySelector("[data-wto-nav]");
-    const anchors = nav ? Array.from(nav.querySelectorAll("a")) : [];
-    const brand = anchors.find((a) => !a.closest("ul") && !a.closest("li"));
+    const brand = findBrandAnchorInDoc(doc);
     if (brand) {
       brand.innerHTML = "";
       const img = doc.createElement("img");

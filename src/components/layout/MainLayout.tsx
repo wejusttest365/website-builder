@@ -1,7 +1,10 @@
 import { ReactNode, useEffect } from "react";
 import { Header } from "@/components/layout/Header";
+import { useMounted } from "@/hooks/use-mounted";
 
 export function MainLayout({ children }: { children: ReactNode }) {
+  const mounted = useMounted();
+
   useEffect(() => {
     if (typeof document === "undefined") return;
     const html = document.documentElement;

@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SECTION_LIBRARY } from "@/lib/builder/sections";
 import { PreviewFrame } from "./PreviewFrame";
 import { useEffect, useRef, useState } from "react";
+import { useMounted } from "@/hooks/use-mounted";
 import {
   ArrowUp,
   ArrowDown,
@@ -26,8 +27,10 @@ export function Canvas() {
   const [draggingLibrarySection, setDraggingLibrarySection] = useState(false);
   const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const mounted = useMounted();
 
   useEffect(() => {
+    if (!mounted) return;
     const onStart = () => setDraggingLibrarySection(true);
     const onEnd = () => setDraggingLibrarySection(false);
     window.addEventListener("wto-library-drag-start", onStart);
@@ -41,7 +44,7 @@ export function Canvas() {
       window.removeEventListener("wto-library-drag-element-start", onStart);
       window.removeEventListener("wto-library-drag-element-end", onEnd);
     };
-  }, []);
+  }, [mounted]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -167,7 +170,9 @@ export function Canvas() {
         }}
         onDrop={handleDrop}
       >
-        <PreviewFrame editable disablePointerEvents={draggingLibrarySection} iframeRef={iframeRef} />
+        {mounted ? (
+          <PreviewFrame editable disablePointerEvents={draggingLibrarySection} iframeRef={iframeRef} />
+        ) : null}
         {draggingLibrarySection && (
           <div className="pointer-events-none absolute inset-4 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/10 text-sm font-semibold text-primary">
             Drop section here

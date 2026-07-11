@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  Link,
   Outlet,
   createRootRouteWithContext,
   HeadContent,
   Scripts,
+  useRouter,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
@@ -113,7 +115,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
+      <head suppressHydrationWarning>
         {/* This in the header, is part of the Website Builder web application, NOT the HTML pages. */}
         <HeadContent />
       </head>

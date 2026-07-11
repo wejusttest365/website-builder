@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useMounted } from "@/hooks/use-mounted";
 import { useBuilder, pageOf } from "@/lib/builder/store";
 import { buildExportBundle, buildSiteExport } from "@/lib/builder/preview";
 import JSZip from "jszip";
@@ -60,6 +61,7 @@ export function Toolbar() {
   const [editingPage, setEditingPage] = useState<{ id: string; name: string; slug: string } | null>(null);
   const [slugEdited, setSlugEdited] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const mounted = useMounted();
   const [confirmTarget, setConfirmTarget] = useState<{ kind: "project" | "page"; id: string; name: string } | null>(null);
 
   const bundle = project
@@ -77,11 +79,13 @@ export function Toolbar() {
     : null;
 
   async function copy(text: string, label: string) {
+    if (!mounted) return;
     await navigator.clipboard.writeText(text);
     toast.success(`${label} copied`);
   }
 
   function download(name: string, content: string, mime = "text/html") {
+    if (!mounted) return;
     const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -102,7 +106,7 @@ export function Toolbar() {
   }
 
   async function downloadZip() {
-    if (!project) return;
+    if (!project || !mounted) return;
     const zip = new JSZip();
     const exportData = buildSiteExport(project);
     for (const f of exportData.files) {
@@ -292,9 +296,10 @@ export function Toolbar() {
       <IconBtn
         title="Save"
         onClick={() => {
+          if (!mounted) return;
           const ok = persist();
-          if (ok) toast.success("Project saved");
-          else toast.error("Save failed. Check browser storage settings.");
+          if (ok) toast.success("Saved", { duration: 1000, position: "top-center", className: "text-sm" });
+          else toast.error("Save failed. Check browser storage settings.", { duration: 2200, position: "top-center" });
         }}
       >
         <Save className="w-4 h-4" />
@@ -326,7 +331,7 @@ export function Toolbar() {
         <button
           className="h-7 px-2 rounded-md hover:bg-accent flex items-center gap-1 text-[11px]"
           onClick={() => {
-            if (!project) return;
+            if (!project || !mounted) return;
             persist();
             const pageId = currentPageId ?? project.currentPageId ?? project.pages?.[0]?.id ?? null;
             const pageSlug = pageId ? project.pages.find((pg) => pg.id === pageId)?.slug : null;

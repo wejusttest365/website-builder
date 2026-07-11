@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
+import { useMounted } from "@/hooks/use-mounted";
 
 const navItems = [
   { label: "Dashboard", to: "/dashboard" },
@@ -22,6 +23,30 @@ export function Header() {
   const router = useRouter();
   const pathname = router.state.location.pathname || "/";
   const [menuOpen, setMenuOpen] = useState(false);
+  const mounted = useMounted();
+
+  if (!mounted) {
+    return (
+      <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-xl">
+        <div className="mx-auto flex h-12 max-w-[1600px] items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3 text-slate-900">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold uppercase tracking-tight text-white shadow-sm">
+              W
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-sm font-semibold leading-none">WebToolOcean</p>
+              <p className="text-xs text-slate-500">Website Builder</p>
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 md:flex">
+            <div className="h-9 w-20 rounded-md bg-slate-100" />
+            <div className="h-9 w-20 rounded-md bg-slate-100" />
+          </div>
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white md:hidden" />
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-xl">

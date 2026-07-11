@@ -29,6 +29,7 @@ export function PropertiesPanel() {
   const repeater = isFooter ? null : getRepeater(section.html);
   const isAccordion = !!repeater && isAccordionSection(section.html);
   const footerCols = isFooter ? getFooterColumns(section.html) : [];
+  const imageItems = getImageItems(section.html);
   const assets = project?.assets;
   const backgroundImage = (style["background-image"] ?? "")
     .replace(/^url\(|\)$/g, "")
@@ -38,21 +39,42 @@ export function PropertiesPanel() {
     return String(path || "")
       .replace(/^url\((['"]?)/, "")
       .replace(/['"]?\)$/, "")
-      .replace(/^['"]|['"]$/g, "");
+      .replace(/^['"]|['"]$/g, "")
+      .replace(/^\.\//, "")
+      .replace(/^\//, "");
   }
 
   function resolveAssetSrc(path?: string) {
     const normalizedPath = normalizeAssetPath(path);
-    if (/^images\//.test(normalizedPath)) {
-      const filename = normalizedPath.replace(/^images\//, "");
+    if (/^(images\/|\.\/images\/|\/images\/)/.test(normalizedPath)) {
+      const filename = normalizedPath.replace(/^(\.\/)?(\/)?images\//, "");
       return project?.assets?.[filename] ?? normalizedPath;
     }
     return normalizedPath;
   }
 
   function downloadAssetByPath(path?: string) {
-    if (!path || !project?.assets) return;
+    if (!path) return;
     const normalizedPath = normalizeAssetPath(path);
+    if (/^data:/.test(normalizedPath)) {
+      const m = /^data:([^;]+);base64,(.*)$/.exec(normalizedPath);
+      if (!m) return;
+      const mime = m[1] || 'application/octet-stream';
+      const b64 = m[2];
+      const byteChars = atob(b64);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const u8 = new Uint8Array(byteNumbers);
+      const blob = new Blob([u8], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `asset.${mime.split('/')[1] || 'bin'}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    if (!project?.assets) return;
     const m = /images\/([^"'\/\s]+)$/.exec(normalizedPath);
     if (!m) return;
     const filename = m[1];
@@ -157,6 +179,15 @@ export function PropertiesPanel() {
                       <div className="h-12 w-32 overflow-hidden rounded-md border border-input bg-background flex items-center justify-center">
                         {brand.src ? (
                           <img src={resolveAssetSrc(brand.src)} alt="logo" className="max-h-full max-w-full object-contain" />
+                        ) : brand.hasPlaceholder ? (
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 21h18" />
+                              <path d="M7 17V8" />
+                              <path d="M17 17V5" />
+                              <path d="M12 17V11" />
+                            </svg>
+                          </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">No logo</span>
                         )}
@@ -179,8 +210,9 @@ export function PropertiesPanel() {
                           if (!f) return;
                           const r = new FileReader();
                           r.onload = () => {
-                            const path = addAsset(String(r.result), f.name.split(".").pop());
-                            updateHtml(setBrandImage(section.html, path));
+                            const dataUrl = String(r.result);
+                            const assetPath = addAsset(dataUrl, f.name.split(".").pop());
+                            updateHtml(setBrandImage(section.html, assetPath));
                             pushHistory();
                           };
                           r.readAsDataURL(f);
@@ -559,6 +591,50 @@ export function PropertiesPanel() {
           </Group>
         )}
 
+        {imageItems.length > 0 && (
+          <Group title="Images">
+            {imageItems.map((item, index) => (
+              <div key={`${item.label}-${index}`} className="space-y-2 rounded-md border border-input bg-background p-2">
+                <div className="text-xs font-semibold text-muted-foreground">{item.label}</div>
+                <input
+                  className={inputCls}
+                  value={item.alt}
+                  placeholder="Alt text"
+                  onChange={(e) => updateHtml(updateImageItem(section.html, index, { alt: e.target.value }))}
+                  onBlur={pushHistory}
+                />
+                <input
+                  className={inputCls}
+                  value={item.src}
+                  placeholder="Image URL"
+                  onChange={(e) => updateHtml(updateImageItem(section.html, index, { src: e.target.value }))}
+                  onBlur={pushHistory}
+                />
+                <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+                  <UploadCloud className="h-4 w-4" />
+                  Upload image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      const r = new FileReader();
+                      r.onload = () => {
+                        const path = addAsset(String(r.result), f.name.split(".").pop());
+                        updateHtml(updateImageItem(section.html, index, { src: path }));
+                        pushHistory();
+                      };
+                      r.readAsDataURL(f);
+                    }}
+                  />
+                </label>
+              </div>
+            ))}
+          </Group>
+        )}
+
         <Group title="Background">
           <Field label="Color">
             <ColorInput
@@ -703,14 +779,14 @@ export function PropertiesPanel() {
             </select>
           </Field>
           <Field label="Duration">
-            <input className={inputCls} value={String(section.animation?.duration ?? "")} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), duration: Number(e.target.value) || undefined } })} onBlur={pushHistory} placeholder="ms" />
+            <input className={inputCls} value={String(section.animation?.duration ?? "")} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", duration: Number(e.target.value) || undefined } })} onBlur={pushHistory} placeholder="ms" />
           </Field>
           <Field label="Delay">
-            <input className={inputCls} value={String(section.animation?.delay ?? "")} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), delay: Number(e.target.value) || undefined } })} onBlur={pushHistory} placeholder="ms" />
+            <input className={inputCls} value={String(section.animation?.delay ?? "")} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", delay: Number(e.target.value) || undefined } })} onBlur={pushHistory} placeholder="ms" />
           </Field>
           <Field label="Repeat">
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={!!section.animation?.repeat} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), repeat: e.target.checked } })} onBlur={pushHistory} />
+              <input type="checkbox" checked={!!section.animation?.repeat} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", repeat: e.target.checked } })} onBlur={pushHistory} />
               <span className="text-xs">Repeat animation</span>
             </label>
           </Field>
@@ -816,7 +892,7 @@ function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: 
 
 // --- Helpers and DOM manipulation functions ---
 
-const textSelector = "h1,h2,h3,h4,h5,h6,p,a,button,summary";
+const textSelector = "h1,h2,h3,h4,h5,h6,p,a,button,summary,li,span,strong,em,small,blockquote,cite,div,label";
 const menuSelector = "nav ul li a, ul li a";
 
 function parseHtml(html: string) {
@@ -940,47 +1016,63 @@ function setNavForce(html: string, enabled: boolean, color?: string) {
 
 // ------------------------ Brand helpers ------------------------
 
+function findBrandElement(doc: Document) {
+  const header = doc.body.querySelector('header');
+  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
+  const anchors = header ? Array.from(header.querySelectorAll('a')) : [];
+  if (nav) anchors.push(...Array.from(nav.querySelectorAll('a')));
+  const brandAnchor =
+    anchors.find((a) => !a.closest('ul') && !a.closest('li') && !a.closest('[data-wto-nav-menu]') && ((a.getAttribute('href') || '').trim() === '#top' || (header && a.closest('header') && !a.closest('nav')))) ||
+    anchors.find((a) => !a.closest('ul') && !a.closest('li') && !a.closest('[data-wto-nav-menu]')) ||
+    null;
+  if (brandAnchor) return brandAnchor as HTMLElement;
+  const fallback = doc.body.querySelector('header') || doc.body.querySelector('nav') || doc.body.querySelector('[data-wto-nav]') || doc.body.querySelector('a') || doc.body.querySelector('div') || doc.body;
+  return fallback as HTMLElement;
+}
+
 function findBrandAnchor(html: string) {
   const doc = parseHtml(html);
   if (!doc) return null;
-  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
-  if (!nav) return null;
-  const anchors = Array.from(nav.querySelectorAll('a'));
-  // brand anchor is an anchor that's not inside a list
-  const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li')) ?? null;
+  const brand = findBrandElement(doc);
   if (!brand) return null;
   const img = brand.querySelector('img');
+  const placeholder = brand.querySelector('[data-wto-brand-placeholder]');
   const text = (brand.textContent ?? '').trim();
   const width = img?.getAttribute('width') ?? img?.style.width ?? '';
   const height = img?.getAttribute('height') ?? img?.style.height ?? '';
-  return { src: img?.getAttribute('src') ?? '', text, width, height, mode: img ? 'logo' : text ? 'text' : 'hidden' };
+  return { src: img?.getAttribute('src') ?? '', text, width, height, mode: img || placeholder ? 'logo' : text ? 'text' : 'hidden', hasPlaceholder: !!placeholder };
 }
 
 function setBrandMode(html: string, mode: 'logo' | 'text' | 'hidden', text?: string) {
   const doc = parseHtml(html);
   if (!doc) return html;
-  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
-  if (!nav) return html;
-  const anchors = Array.from(nav.querySelectorAll('a'));
-  const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li')) ?? null;
+  const brand = findBrandElement(doc);
   if (!brand) return html;
   if (mode === 'hidden') {
     brand.setAttribute('style', (brand.getAttribute('style') || '') + ';display:none');
     brand.textContent = '';
     const img = brand.querySelector('img'); if (img) img.remove();
+    const placeholder = brand.querySelector('[data-wto-brand-placeholder]'); if (placeholder) placeholder.remove();
   } else if (mode === 'text') {
     brand.removeAttribute('style');
     const img = brand.querySelector('img'); if (img) img.remove();
+    const placeholder = brand.querySelector('[data-wto-brand-placeholder]'); if (placeholder) placeholder.remove();
     brand.textContent = text || 'Brand';
   } else {
     brand.removeAttribute('style');
+    const img = brand.querySelector('img'); if (img) img.remove();
+    const placeholder = brand.querySelector('[data-wto-brand-placeholder]'); if (placeholder) placeholder.remove();
     brand.textContent = '';
-    let img = brand.querySelector('img');
-    if (!img) {
-      img = doc.createElement('img');
-      img.setAttribute('alt', text || 'logo');
-      img.setAttribute('style', 'height:40px;width:auto;object-fit:contain;');
-      brand.appendChild(img);
+    const existingImg = brand.querySelector('img');
+    if (existingImg) {
+      existingImg.setAttribute('alt', text || 'logo');
+      existingImg.setAttribute('style', 'height:40px;width:auto;object-fit:contain;');
+    } else {
+      const placeholderEl = doc.createElement('span');
+      placeholderEl.setAttribute('data-wto-brand-placeholder', '1');
+      placeholderEl.setAttribute('style', 'display:inline-flex;align-items:center;justify-content:center;height:40px;width:40px;border-radius:999px;background:linear-gradient(135deg,#0f172a,#3b82f6);color:white;');
+      placeholderEl.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M7 17V8"/><path d="M17 17V5"/><path d="M12 17V11"/></svg>';
+      brand.appendChild(placeholderEl);
     }
   }
   return serialize(doc);
@@ -989,10 +1081,7 @@ function setBrandMode(html: string, mode: 'logo' | 'text' | 'hidden', text?: str
 function setBrandText(html: string, text: string) {
   const doc = parseHtml(html);
   if (!doc) return html;
-  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
-  if (!nav) return html;
-  const anchors = Array.from(nav.querySelectorAll('a'));
-  const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li')) ?? null;
+  const brand = findBrandElement(doc);
   if (!brand) return html;
   const img = brand.querySelector('img');
   if (img) {
@@ -1006,12 +1095,14 @@ function setBrandText(html: string, text: string) {
 function setBrandImage(html: string, path: string) {
   const doc = parseHtml(html);
   if (!doc) return html;
-  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
-  if (!nav) return html;
-  const anchors = Array.from(nav.querySelectorAll('a'));
-  const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li')) ?? null;
+  const brand = findBrandElement(doc);
   if (!brand) return html;
-  brand.textContent = '';
+  const placeholder = brand.querySelector('[data-wto-brand-placeholder]'); if (placeholder) placeholder.remove();
+  if (brand.tagName === 'A' || brand.tagName === 'BUTTON') {
+    brand.textContent = '';
+  } else {
+    brand.textContent = '';
+  }
   let img = brand.querySelector('img');
   if (!img) {
     img = doc.createElement('img');
@@ -1020,16 +1111,14 @@ function setBrandImage(html: string, path: string) {
     brand.appendChild(img);
   }
   img.setAttribute('src', path);
+  img.setAttribute('style', 'height:40px;width:auto;object-fit:contain;');
   return serialize(doc);
 }
 
 function setBrandSize(html: string, width?: string, height?: string) {
   const doc = parseHtml(html);
   if (!doc) return html;
-  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
-  if (!nav) return html;
-  const anchors = Array.from(nav.querySelectorAll('a'));
-  const brand = anchors.find((a) => !a.closest('ul') && !a.closest('li')) ?? null;
+  const brand = findBrandElement(doc);
   if (!brand) return html;
   const img = brand.querySelector('img');
   if (!img) return html;
@@ -1050,16 +1139,66 @@ function findHeaderCTAs(html: string) {
   const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
   if (!nav) return [];
   const anchors = Array.from(nav.querySelectorAll('a')).filter((a) => !a.closest('ul') && !a.closest('li'));
-  // exclude brand anchor if present
-  const brand = anchors[0];
-  const ctas = anchors.slice(1).map((a) => ({ text: (a.textContent ?? '').trim(), href: a.getAttribute('href') ?? '#' }));
-  return ctas;
+  return anchors.slice(1).map((a) => ({ text: (a.textContent ?? '').trim(), href: a.getAttribute('href') ?? '#' }));
+}
+
+function setHeaderCTAHref(html: string, href: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
+  if (!nav) return html;
+  const anchors = Array.from(nav.querySelectorAll('a')).filter((a) => !a.closest('ul') && !a.closest('li'));
+  const cta = anchors[1];
+  if (!cta) return html;
+  cta.setAttribute('href', href || '#');
+  if (text !== undefined) cta.textContent = text;
+  return serialize(doc);
+}
+
+function isEditableTextElement(el: HTMLElement) {
+  if (!el) return false;
+  const tag = el.tagName.toLowerCase();
+  if (["script", "style", "svg", "img", "video", "audio", "canvas", "iframe", "input", "textarea", "select"].includes(tag)) return false;
+  if (el.closest("[data-wto-nav], [data-wto-nav-menu], [data-wto-toolbar], [data-wto-ignore-edit]")) return false;
+  const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return false;
+  if (["a", "button", "summary", "h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "span", "strong", "em", "b", "i", "small", "blockquote", "cite", "label"].includes(tag)) return true;
+  if (tag === "div") {
+    const hasInteractiveChild = !!el.querySelector("a,button,input,select,textarea");
+    return !hasInteractiveChild;
+  }
+  return false;
+}
+
+function getImageItems(html: string): { label: string; src: string; alt: string }[] {
+  const doc = parseHtml(html);
+  if (!doc) return [];
+  return Array.from(doc.body.querySelectorAll<HTMLImageElement>("img"))
+    .filter((img) => !img.closest("[data-wto-nav], [data-wto-nav-menu], [data-wto-toolbar], [data-wto-ignore-edit]"))
+    .map((img, index) => ({
+      label: `Image ${index + 1}`,
+      src: img.getAttribute("src") ?? "",
+      alt: img.getAttribute("alt") ?? "",
+    }));
+}
+
+function updateImageItem(html: string, index: number, patch: Partial<{ src: string; alt: string }>) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const items = Array.from(doc.body.querySelectorAll<HTMLImageElement>("img")).filter((img) => !img.closest("[data-wto-nav], [data-wto-nav-menu], [data-wto-toolbar], [data-wto-ignore-edit]"));
+  const img = items[index];
+  if (!img) return html;
+  if (patch.src !== undefined) img.setAttribute("src", patch.src || "");
+  if (patch.alt !== undefined) img.setAttribute("alt", patch.alt || "");
+  return serialize(doc);
 }
 
 function getEditableTextItems(html: string) {
   const doc = parseHtml(html);
   if (!doc) return [];
-  return Array.from(doc.body.querySelectorAll<HTMLElement>(textSelector))
+  const elements = Array.from(doc.body.querySelectorAll<HTMLElement>(textSelector)).filter(isEditableTextElement);
+  return elements
+    .filter((el) => !el.querySelector(textSelector) || !Array.from(el.querySelectorAll<HTMLElement>(textSelector)).some((child) => isEditableTextElement(child)))
     .map((el) => ({
       tag: el.tagName.toLowerCase(),
       label: labelForElement(el),
@@ -1071,9 +1210,7 @@ function getEditableTextItems(html: string) {
 function updateTextItem(html: string, index: number, text: string) {
   const doc = parseHtml(html);
   if (!doc) return html;
-  const items = Array.from(doc.body.querySelectorAll<HTMLElement>(textSelector)).filter((el) =>
-    (el.textContent ?? "").trim(),
-  );
+  const items = Array.from(doc.body.querySelectorAll<HTMLElement>(textSelector)).filter(isEditableTextElement);
   const el = items[index];
   if (!el) return serialize(doc);
 
@@ -1676,6 +1813,23 @@ function getFooterCopyrightFontSize(html: string) {
   if (!el) return '';
   const size = el.getAttribute('style')?.match(/font-size:\s*([^;]+)/)?.[1];
   return size || '';
+}
+
+function setFooterCopyrightFontSize(html: string, size: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const footer = doc.body.querySelector('footer');
+  if (!footer) return html;
+  let el = Array.from(footer.querySelectorAll('*')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('class', 'border-t border-gray-800 py-6 text-center text-xs');
+    footer.appendChild(el);
+  }
+  const style = (el.getAttribute('style') || '').replace(/font-size:\s*[^;]+;?/gi, '').trim();
+  const nextStyle = [style, size ? `font-size:${size}` : ''].filter(Boolean).join(';');
+  el.setAttribute('style', nextStyle);
+  return serialize(doc);
 }
 
 export default PropertiesPanel;

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
 import type { SectionTemplate } from "./sections";
+import type { TemplateDefinition } from "./templates";
 
 export interface PageSection {
   id: string;
@@ -45,6 +46,9 @@ export interface Project {
   createdAt: number;
   updatedAt: number;
   assets?: Record<string, string>;
+  selectedTemplateId?: string | null;
+  description?: string;
+  keywords?: string;
 }
 
 interface HistoryEntry {
@@ -69,7 +73,7 @@ interface BuilderState {
   toggleLeftPanel: () => void;
 
   hydrate: () => void;
-  persist: () => void;
+  persist: () => boolean;
 
   newProject: (name?: string) => string;
   loadProject: (id: string) => void;
@@ -85,6 +89,7 @@ interface BuilderState {
   selectPage: (id: string) => void;
 
   addSection: (tpl: SectionTemplate, index?: number) => string;
+  applyTemplate: (tpl: TemplateDefinition) => void;
   updateSection: (id: string, patch: Partial<PageSection>) => void;
   removeSection: (id: string) => void;
   duplicateSection: (id: string) => void;
@@ -116,6 +121,8 @@ interface BuilderState {
 
 const STORAGE_KEY = "wto-builder-v2";
 const LEGACY_KEY = "wto-builder-v1";
+const DB_NAME = "wto-builder-db";
+const DB_STORE = "projects";
 
 function slugify(s: string) {
   return (
@@ -130,12 +137,17 @@ function slugify(s: string) {
 // Best-effort migration of a legacy Project (with `sections`) into a
 // single-page Project with `pages`.
 function migrateProject(raw: unknown): Project {
-  const p = raw as Partial<Project> & { sections?: PageSection[] };
+  const p = raw as Partial<Project> & { sections?: PageSection[]; description?: string; keywords?: string };
   if (p.pages && p.currentPageId) {
+    const pages: Page[] = p.pages.map((page): Page => ({
+      ...page,
+      description: page.description ?? "",
+      keywords: page.keywords ?? "",
+    }));
     return {
       id: String(p.id),
       name: p.name ?? "Untitled",
-      pages: p.pages,
+      pages,
       currentPageId: p.currentPageId,
       globalCss: p.globalCss ?? "/* Global CSS */\n",
       globalJs: p.globalJs ?? "// Global JS\n",
@@ -146,19 +158,20 @@ function migrateProject(raw: unknown): Project {
     };
   }
   const pageId = nanoid(8);
+  const pages: Page[] = [
+    {
+      id: pageId,
+      name: "Home",
+      slug: "index",
+      sections: p.sections ?? [],
+      description: p.description ?? "",
+      keywords: p.keywords ?? "",
+    },
+  ];
   return {
     id: String(p.id ?? nanoid(8)),
     name: p.name ?? "Untitled",
-    pages: [
-      {
-        id: pageId,
-        name: "Home",
-        slug: "index",
-        sections: p.sections ?? [],
-        description: "",
-        keywords: "",
-      },
-    ],
+    pages,
     currentPageId: pageId,
     globalCss: p.globalCss ?? "/* Global CSS */\n",
     globalJs: p.globalJs ?? "// Global JS\n",
@@ -172,7 +185,7 @@ function migrateProject(raw: unknown): Project {
 function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null; leftPanelOpen?: boolean } {
   if (typeof window === "undefined") return { projects: {}, currentProjectId: null };
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY) ?? sessionStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem(LEGACY_KEY);
     if (!raw) return { projects: {}, currentProjectId: null };
     const parsed = JSON.parse(raw) as { projects: Record<string, unknown>; currentProjectId: string | null };
     const projects: Record<string, Project> = {};
@@ -182,6 +195,49 @@ function loadFromStorage(): { projects: Record<string, Project>; currentProjectI
     return { projects, currentProjectId: parsed.currentProjectId ?? null, leftPanelOpen: (parsed as any).leftPanelOpen };
   } catch {
     return { projects: {}, currentProjectId: null };
+  }
+}
+
+function isStorageAvailable(storage: Storage | null): boolean {
+  if (!storage) return false;
+  try {
+    const testKey = "__wto_storage_test__";
+    storage.setItem(testKey, "1");
+    storage.removeItem(testKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function requestPersistentStorage(): void {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return;
+  const storageApi = (navigator as Navigator & { storage?: { persist?: () => Promise<boolean> } }).storage;
+  if (!storageApi?.persist) return;
+  void storageApi.persist().catch(() => undefined);
+}
+
+function writeToIndexedDB(payload: string): boolean {
+  if (typeof window === "undefined" || !("indexedDB" in window)) return false;
+  try {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DB_STORE)) {
+        db.createObjectStore(DB_STORE);
+      }
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(DB_STORE, "readwrite");
+      tx.objectStore(DB_STORE).put(payload, STORAGE_KEY);
+      tx.oncomplete = () => db.close();
+      tx.onerror = () => db.close();
+    };
+    request.onerror = () => undefined;
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -195,8 +251,7 @@ function emptyProject(name = "Untitled Project"): Project {
     currentPageId: pageId,
     globalCss: "/* Global CSS */\n",
     globalJs: "// Global JS\n",
-    description: "",
-    keywords: "",
+    customHead: "",
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -211,6 +266,8 @@ function getCurrentPage(project: Project | null): Page | null {
 export function pageOf(project: Project | null): Page | null {
   return getCurrentPage(project);
 }
+
+void requestPersistentStorage();
 
 export const useBuilder = create<BuilderState>((set, get) => ({
   projects: {},
@@ -242,22 +299,38 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
 
   persist: () => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined") return false;
     const { projects, currentProjectId } = get();
     const payload = JSON.stringify({ projects, currentProjectId, leftPanelOpen: get().leftPanelOpen });
-    try {
-      localStorage.setItem(STORAGE_KEY, payload);
-      return true;
-    } catch {
+
+    if (isStorageAvailable(window.localStorage)) {
       try {
-        sessionStorage.setItem(STORAGE_KEY, payload);
-        console.warn("Persist failed for localStorage, saved to sessionStorage instead.");
+        localStorage.setItem(STORAGE_KEY, payload);
+        requestPersistentStorage();
         return true;
       } catch (err) {
-        console.error("Persist failed", err);
-        return false;
+        console.warn("localStorage save failed, falling back to other storage options", err);
       }
     }
+
+    if (isStorageAvailable(window.sessionStorage)) {
+      try {
+        sessionStorage.setItem(STORAGE_KEY, payload);
+        requestPersistentStorage();
+        return true;
+      } catch (err) {
+        console.warn("sessionStorage save failed, falling back to IndexedDB", err);
+      }
+    }
+
+    const wroteToIndexedDb = writeToIndexedDB(payload);
+    if (wroteToIndexedDb) {
+      requestPersistentStorage();
+      return true;
+    }
+
+    console.error("Persist failed for all available storage backends.");
+    return false;
   },
 
   leftPanelOpen: true,
@@ -422,12 +495,14 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     });
   },
 
-  addSection: (tpl, index) => {
-    const p = get().currentProject();
-    const page = getCurrentPage(p);
-    if (!p || !page) return;
+  addSection: (tpl: SectionTemplate, index?: number): string => {
+    const project = get().currentProject();
+    if (!project) return "";
+    const page = getCurrentPage(project);
+    if (!page) return "";
+    const sectionId: string = nanoid(8);
     const section: PageSection = {
-      id: nanoid(8),
+      id: sectionId,
       templateId: tpl.id,
       name: tpl.name,
       html: tpl.html,
@@ -438,8 +513,28 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     sections.splice(at, 0, section);
     updatePageSections(set, get, sections);
     get().pushHistory();
-    set({ selectedSectionId: section.id });
-    return section.id;
+    set({ selectedSectionId: sectionId });
+    return sectionId;
+  },
+
+  applyTemplate: (tpl) => {
+    const p = get().currentProject();
+    const page = getCurrentPage(p);
+    if (!p || !page) return;
+    const nextSections = tpl.sections.map((section, index) => ({
+      id: nanoid(8),
+      templateId: `${tpl.id}-${index}`,
+      name: section.name,
+      html: section.html,
+      animation: { type: "fade-up", duration: 700, delay: index * 80 },
+    }));
+    updatePageSections(set, get, nextSections);
+    updateCurrent(set, get, {
+      selectedTemplateId: tpl.id,
+      updatedAt: Date.now(),
+    });
+    set({ selectedSectionId: null });
+    get().pushHistory();
   },
 
   updateSection: (id, patch) => {

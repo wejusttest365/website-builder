@@ -3,11 +3,17 @@ import { buildExportBundle } from "@/lib/builder/preview";
 import type { Project } from "@/lib/builder/store";
 
 export function DemoView({ projectId }: { projectId: string }) {
+  const [mounted, setMounted] = useState(false);
   const [proj, setProj] = useState<Project | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     let timeout: number | null = null;
     const handleResponse = (event: MessageEvent) => {
       if (event.origin !== window.location.origin && event.origin !== 'null') return;
@@ -59,10 +65,10 @@ export function DemoView({ projectId }: { projectId: string }) {
 
     setNotFound(true);
     return () => window.removeEventListener("message", handleResponse);
-  }, [projectId]);
+  }, [mounted, projectId]);
 
   useEffect(() => {
-    if (!proj) return;
+    if (!mounted || !proj) return;
     const handlePreviewMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin && event.origin !== 'null') return;
       const data = event.data as { __wto?: boolean; type?: string; payload?: Record<string, unknown> };
@@ -78,7 +84,9 @@ export function DemoView({ projectId }: { projectId: string }) {
     };
     window.addEventListener("message", handlePreviewMessage);
     return () => window.removeEventListener("message", handlePreviewMessage);
-  }, [proj]);
+  }, [mounted, proj]);
+
+  if (!mounted) return null;
 
   if (notFound) {
     return (
