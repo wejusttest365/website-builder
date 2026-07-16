@@ -1,10 +1,12 @@
-import { TEMPLATE_CATEGORIES, TEMPLATE_DATA_LIBRARY, type TemplateCategory, type TemplateDataDefinition, type TemplateSectionData } from "./template-data";
+import { TEMPLATE_CATEGORIES, TEMPLATE_DATA_LIBRARY, type TemplateCategory, type TemplateDataDefinition, type TemplatePageType, type TemplateSectionData } from "./template-data";
 
-export type { TemplateCategory };
+export type { TemplateCategory, TemplatePageType };
 
 export interface TemplateSectionDefinition {
   name: string;
+  type?: string;
   html: string;
+  content?: Record<string, any>;
   animation?: {
     type?: string;
     duration?: number;
@@ -14,14 +16,40 @@ export interface TemplateSectionDefinition {
   className?: string;
 }
 
+export interface TemplatePageDefinition {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  keywords?: string;
+  sections: TemplateSectionDefinition[];
+}
+
 export interface TemplateDefinition {
   id: string;
   name: string;
   category: TemplateCategory;
+  pageType?: TemplatePageType;
   description: string;
   accent: string;
   thumbnail: string;
+  previewImages?: string[];
+  sharedSections?: TemplateSectionDefinition[];
+  pages?: TemplatePageDefinition[];
   sections: TemplateSectionDefinition[];
+  price?: string;
+  isPremium?: boolean;
+  tags?: string[];
+  author?: string;
+  version?: string;
+  createdDate?: string;
+  updatedDate?: string;
+  featured?: boolean;
+  metadata?: {
+    provider?: string;
+    tier?: string;
+    license?: string;
+  };
 }
 
 export { TEMPLATE_CATEGORIES };
@@ -39,13 +67,25 @@ const makeLink = (href: string, label: string, className = "") =>
 
 const renderHeader = (content: Record<string, any>) => {
   const brand = content.brand ?? "Brand";
+  const brandHref = escapeHtml(content.brandHref ?? "#top");
   const links = (content.links ?? []).map((link: any) => makeLink(link.href, link.label, "text-sm font-medium text-slate-600 transition hover:text-slate-900")).join("");
   const cta = content.cta ? makeLink(content.cta.href, content.cta.label, "hidden rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 sm:inline-flex") : "";
+  const topBar = content.topBar ? `
+  <div class="hidden border-b border-slate-200 bg-slate-950 text-slate-200 md:block">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-2 lg:px-10">
+      <div class="flex flex-wrap items-center gap-4 text-sm font-medium">
+        ${content.topBar.phone ? `<a href="${escapeHtml(content.topBar.phoneHref ?? `tel:${content.topBar.phone}`)}" class="transition hover:text-white">${escapeHtml(content.topBar.phone)}</a>` : ""}
+        ${content.topBar.email ? `<a href="${escapeHtml(content.topBar.emailHref ?? `mailto:${content.topBar.email}`)}" class="transition hover:text-white">${escapeHtml(content.topBar.email)}</a>` : ""}
+      </div>
+      ${content.topBar.note ? `<div class="text-sm text-slate-300">${escapeHtml(content.topBar.note)}</div>` : ""}
+    </div>
+  </div>` : "";
 
   return `
 <header class="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur">
+  ${topBar}
   <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-10">
-    <a href="#top" class="text-lg font-semibold tracking-tight text-slate-900">${escapeHtml(brand)}</a>
+    <a href="${brandHref}" class="text-lg font-semibold tracking-tight text-slate-900">${escapeHtml(brand)}</a>
     <nav data-wto-nav class="relative flex items-center gap-3">
       <button data-wto-nav-btn aria-label="Open menu" class="rounded-full border border-slate-300 p-2 text-slate-700 md:hidden">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg>
@@ -77,18 +117,52 @@ const renderHero = (content: Record<string, any>) => `
   </div>
 </section>`;
 
+const renderBanner = (content: Record<string, any>) => {
+  const breadcrumbs = Array.isArray(content.breadcrumbs)
+    ? `<nav class="text-sm text-slate-300" aria-label="Breadcrumb"><ol class="inline-flex items-center gap-2 flex-wrap">${content.breadcrumbs
+        .map((crumb: any, index: number) => `
+          <li class="inline-flex items-center gap-2">
+            ${index > 0 ? `<span class="text-slate-400">/</span>` : ""}
+            ${crumb.href ? `<a href="${escapeHtml(crumb.href)}" class="text-slate-200 hover:text-white">${escapeHtml(crumb.label)}</a>` : `<span>${escapeHtml(crumb.label)}</span>`}
+          </li>`)
+        .join("")}</ol></nav>`
+    : "";
+
+  return `
+<section class="w-full overflow-hidden bg-slate-950 text-white">
+  <div class="relative">
+    <img src="${escapeHtml(content.image ?? "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1400&q=80")}" alt="${escapeHtml(content.title ?? "Page banner")}" class="absolute inset-0 h-full w-full object-cover" />
+    <div class="absolute inset-0 bg-slate-950/65"></div>
+    <div class="relative mx-auto max-w-6xl px-6 py-24 lg:px-10 lg:py-32">
+      <div class="max-w-3xl rounded-[2rem] border border-white/10 bg-slate-950/75 p-8 shadow-2xl backdrop-blur">
+        ${breadcrumbs}
+        <p class="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-300">${escapeHtml(content.eyebrow ?? "Page banner")}</p>
+        <h1 class="mt-4 text-4xl font-black tracking-tight sm:text-5xl">${escapeHtml(content.title ?? "Your page title goes here.")}</h1>
+        <p class="mt-5 text-lg text-slate-200">${escapeHtml(content.body ?? "A strong, page-specific banner that keeps the message clear and the imagery dramatic.")}</p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          ${content.primaryCta ? makeLink(content.primaryCta.href, content.primaryCta.label, "rounded-full bg-emerald-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-400") : ""}
+          ${content.secondaryCta ? makeLink(content.secondaryCta.href, content.secondaryCta.label, "rounded-full border border-white/20 px-5 py-3 text-sm font-semibold text-white/90 hover:border-white/40 hover:text-white") : ""}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>`;
+};
+
 const renderAbout = (content: Record<string, any>) => `
 <section id="about" class="w-full bg-white">
   <div class="mx-auto grid max-w-7xl gap-10 px-6 py-20 lg:grid-cols-[0.8fr_1.2fr] lg:px-10">
     <div>
       <p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">${escapeHtml(content.eyebrow ?? "About")}</p>
       <h2 class="mt-3 text-3xl font-black text-slate-900">${escapeHtml(content.title ?? "Built for clarity, momentum, and lasting first impressions.")}</h2>
-    </div>
-    <div class="space-y-4 text-lg text-slate-600">
-      <p>${escapeHtml(content.body ?? "A polished website experience combining strategy, refined visuals, and intentional storytelling.")}</p>
-      ${Array.isArray(content.bullets) ? `<ul class="space-y-3 text-base">
+      <p class="mt-6 text-lg text-slate-600">${escapeHtml(content.body ?? "A polished website experience combining strategy, refined visuals, and intentional storytelling.")}</p>
+      ${Array.isArray(content.bullets) ? `<ul class="mt-8 space-y-3 text-base text-slate-600">
         ${content.bullets.map((b: string) => `<li class="flex gap-2"><span class="mt-1 h-2.5 w-2.5 rounded-full bg-slate-900"></span><span>${escapeHtml(b)}</span></li>`).join("")}
       </ul>` : ""}
+      ${content.cta ? `<div class="mt-8"><a href="${escapeHtml(content.cta.href)}" class="inline-flex rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800">${escapeHtml(content.cta.label)}</a></div>` : ""}
+    </div>
+    <div class="rounded-[2rem] overflow-hidden border border-slate-200 bg-slate-100">
+      <img src="${escapeHtml(content.image ?? "https://images.unsplash.com/photo-1516321497487-e288fb19713f?auto=format&fit=crop&w=1000&q=80")}" alt="About visual" class="h-full w-full object-cover" />
     </div>
   </div>
 </section>`;
@@ -122,9 +196,13 @@ const renderServices = (content: Record<string, any>) => `
     </div>
     <div class="mt-12 grid gap-6 md:grid-cols-3">
       ${(content.items ?? []).map((item: any) => `
-        <div class="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-          <h3 class="text-xl font-semibold text-slate-900">${escapeHtml(item.title ?? "Service")}</h3>
-          <p class="mt-3 text-slate-600">${escapeHtml(item.body ?? "Premium support tailored to your goals.")}</p>
+        <div class="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
+          ${item.image ? `<div class="h-56 overflow-hidden bg-slate-100"><img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title ?? "Service")}" class="h-full w-full object-cover" /></div>` : ""}
+          <div class="p-8">
+            <h3 class="text-xl font-semibold text-slate-900">${escapeHtml(item.title ?? "Service")}</h3>
+            <p class="mt-3 text-slate-600">${escapeHtml(item.body ?? "Premium support tailored to your goals.")}</p>
+            ${item.cta ? `<div class="mt-6"><a href="${escapeHtml(item.cta.href)}" class="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">${escapeHtml(item.cta.label)}</a></div>` : ""}
+          </div>
         </div>
       `).join("")}
     </div>
@@ -132,7 +210,6 @@ const renderServices = (content: Record<string, any>) => `
 </section>`;
 
 const renderProcess = (content: Record<string, any>) => `
-<section id="process" class="w-full bg-white">
   <div class="mx-auto max-w-7xl px-6 py-20 lg:px-10">
     <div class="max-w-2xl">
       <p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">${escapeHtml(content.eyebrow ?? "Process")}</p>
@@ -160,6 +237,120 @@ const renderStats = (content: Record<string, any>) => `
       </div>
     `).join("")}
   </div>
+</section>`;
+
+const renderCarousel = (content: Record<string, any>) => `
+<section id="carousel" class="w-full bg-white">
+  <div class="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+    <div class="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+      <div class="max-w-2xl">
+        <p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">${escapeHtml(content.eyebrow ?? "Featured")}</p>
+        <h2 class="mt-3 text-3xl font-black text-slate-900 sm:text-4xl">${escapeHtml(content.title ?? "A glimpse of our training experience.")}</h2>
+        <p class="mt-4 text-lg text-slate-600">${escapeHtml(content.body ?? "A quick tour of the experiences students can expect in our classroom and behind the wheel.")}</p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          ${content.primaryCta ? makeLink(content.primaryCta.href, content.primaryCta.label, "rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800") : ""}
+          ${content.secondaryCta ? makeLink(content.secondaryCta.href, content.secondaryCta.label, "rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-100") : ""}
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-sm uppercase tracking-[0.3em] text-slate-500">
+        <span>01</span>
+        <span class="h-0.5 w-10 bg-slate-900"></span>
+        <span>03</span>
+      </div>
+    </div>
+    <div class="mt-12 overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-100 p-4">
+      <div class="flex gap-4 overflow-x-auto pb-4 scrollbar-none" data-carousel-track style="transition: transform 0.5s ease-in-out; transform: translateX(0%);">
+        ${(content.slides ?? []).map((slide: any) => `
+          <article class="min-w-[300px] shrink-0 rounded-[1.75rem] bg-white shadow-sm overflow-hidden">
+            <img src="${escapeHtml(slide.image ?? "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1200&q=80" )}" alt="${escapeHtml(slide.title ?? "Slide")}" class="h-64 w-full object-cover" />
+            <div class="p-6">
+              <p class="text-xs uppercase tracking-[0.3em] text-slate-500">${escapeHtml(slide.label ?? "Program")}</p>
+              <h3 class="mt-3 text-xl font-semibold text-slate-900">${escapeHtml(slide.title ?? "Drive with confidence")}</h3>
+              <p class="mt-3 text-slate-600">${escapeHtml(slide.body ?? "A focused training experience for new drivers.")}</p>
+              ${slide.href ? makeLink(slide.href, slide.cta ?? "Learn more", "mt-6 inline-flex rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800") : ""}
+            </div>
+          </article>
+        `).join("")}
+      </div>
+    </div>
+  </div>
+</section>`;
+
+const renderCarouselFull = (content: Record<string, any>) => `
+<section id="carousel-full" class="w-full bg-slate-950 text-white overflow-hidden">
+  <div class="relative w-full h-[520px] md:h-[680px]">
+    <div class="absolute inset-0 overflow-hidden">
+      <div class="w-full h-full flex carousel-track" data-carousel-track style="transition: transform 0.5s ease-in-out; transform: translateX(0%);">
+        ${(content.slides ?? []).map((slide: any) => `
+          <div class="relative w-full flex-shrink-0 h-full">
+            <img src="${escapeHtml(slide.image ?? "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80")}" alt="${escapeHtml(slide.title ?? "Slide")}" class="h-full w-full object-cover" />
+            <div class="absolute inset-0 bg-black/30"></div>
+            <div class="absolute left-6 right-6 bottom-10 max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950/75 p-8 shadow-2xl backdrop-blur sm:left-12 sm:right-auto">
+              <p class="text-sm uppercase tracking-[0.3em] text-cyan-300">${escapeHtml(slide.label ?? "Program")}</p>
+              <h2 class="mt-3 text-4xl font-black sm:text-5xl">${escapeHtml(slide.title ?? "Drive with confidence")}</h2>
+              <p class="mt-4 text-lg text-slate-200">${escapeHtml(slide.body ?? "A focused training experience for new drivers.")}</p>
+              ${slide.href ? makeLink(slide.href, slide.cta ?? "Learn more", "mt-6 inline-flex rounded-full bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400") : ""}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+    <button type="button" class="absolute left-4 top-1/2 z-20 -translate-y-1/2 rounded-full bg-white/20 p-3 text-white shadow-lg transition hover:bg-white/30" data-carousel-prev aria-label="Previous">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg>
+    </button>
+    <button type="button" class="absolute right-4 top-1/2 z-20 -translate-y-1/2 rounded-full bg-white/20 p-3 text-white shadow-lg transition hover:bg-white/30" data-carousel-next aria-label="Next">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19l7-7-7-7"/></svg>
+    </button>
+  </div>
+  <script>
+    (function() {
+      var script = document.currentScript || document.scripts[document.scripts.length - 1];
+      var section = script ? script.parentElement : null;
+      if (!section) return;
+      var track = section.querySelector('[data-carousel-track]');
+      var prevBtn = section.querySelector('[data-carousel-prev]');
+      var nextBtn = section.querySelector('[data-carousel-next]');
+      if (!track || !prevBtn || !nextBtn) return;
+      var slideCount = Math.max(1, track.children.length);
+      var currentIndex = 0;
+      var autoMove = true;
+      var autoMoveInterval = 5000;
+      var autoMoveTimer = null;
+      function stopAutoMove() {
+        if (autoMoveTimer) {
+          clearInterval(autoMoveTimer);
+          autoMoveTimer = null;
+        }
+      }
+      function startAutoMove() {
+        stopAutoMove();
+        if (!autoMove) return;
+        autoMoveTimer = setInterval(function() {
+          currentIndex = (currentIndex + 1) % slideCount;
+          update();
+        }, autoMoveInterval);
+      }
+      function update() {
+        track.style.transform = 'translateX(-' + currentIndex * 100 + '%)';
+      }
+      prevBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = (currentIndex - 1 + slideCount) % slideCount;
+        update();
+        if (autoMove) startAutoMove();
+      });
+      nextBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = (currentIndex + 1) % slideCount;
+        update();
+        if (autoMove) startAutoMove();
+      });
+      update();
+      startAutoMove();
+    })();
+  </script>
 </section>`;
 
 const renderWhyChooseUs = (content: Record<string, any>) => `
@@ -342,12 +533,16 @@ const renderContact = (content: Record<string, any>) => `
   </div>
 </section>`;
 
-const renderCta = (content: Record<string, any>) => `
+const renderCta = (content: Record<string, any>) => {
+  const isGreen = content.variant === "green";
+  const bgClasses = isGreen ? "from-emerald-700 to-emerald-800" : "from-slate-900 to-slate-700";
+  const textColor = isGreen ? "text-white" : "text-white";
+  return `
 <section id="contact" class="w-full bg-slate-50">
   <div class="mx-auto max-w-7xl px-6 py-20 lg:px-10">
-    <div class="rounded-[2rem] border border-slate-200 bg-gradient-to-r from-slate-900 to-slate-700 p-10 text-white shadow-xl">
-      <p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-300">${escapeHtml(content.eyebrow ?? "Ready to begin")}</p>
-      <h2 class="mt-3 text-3xl font-black sm:text-4xl">${escapeHtml(content.title ?? "Let’s create a website that feels premium from the first scroll.")}</h2>
+    <div class="rounded-[2rem] border border-slate-200 bg-gradient-to-r ${bgClasses} p-10 shadow-xl">
+      <p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-200">${escapeHtml(content.eyebrow ?? "Ready to begin")}</p>
+      <h2 class="mt-3 text-3xl font-black sm:text-4xl ${textColor}">${escapeHtml(content.title ?? "Let’s create a website that feels premium from the first scroll.")}</h2>
       <p class="mt-4 max-w-2xl text-lg text-slate-200">${escapeHtml(content.body ?? "Thoughtful, polished, and production-ready from the very first draft.")}</p>
       <div class="mt-8 flex flex-wrap gap-3">
         ${content.primaryCta ? makeLink(content.primaryCta.href, content.primaryCta.label, "rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-100") : ""}
@@ -356,8 +551,27 @@ const renderCta = (content: Record<string, any>) => `
     </div>
   </div>
 </section>`;
+};
 
-const renderFooter = (content: Record<string, any>) => `
+const renderFooter = (content: Record<string, any>) => {
+  if (Array.isArray(content.columns)) {
+    return `
+<footer class="w-full border-t border-slate-200 bg-slate-950 text-slate-300">
+  <div class="mx-auto grid max-w-7xl gap-10 px-6 py-16 lg:grid-cols-${content.columns.length} lg:px-10">
+    ${content.columns.map((column: any) => `
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">${escapeHtml(column.title ?? "")}</p>
+        ${Array.isArray(column.items) ? `<div class="mt-4 space-y-3 text-sm">${column.items.map((item: any) => item.href ? `<a href="${escapeHtml(item.href)}" class="block transition hover:text-white">${escapeHtml(item.label ?? item.text ?? "")}</a>` : `<p>${escapeHtml(item.text ?? "")}</p>`).join("")}</div>` : ""}
+      </div>
+    `).join("")}
+  </div>
+  <div class="border-t border-slate-800 px-6 py-6 text-sm text-slate-500 lg:px-10">
+    <div class="max-w-7xl mx-auto text-center lg:text-left">${escapeHtml(content.legal ?? "© 2026 DriveWell Academy. All rights reserved.")}</div>
+  </div>
+</footer>`;
+  }
+
+  return `
 <footer class="w-full border-t border-slate-200 bg-slate-950 text-slate-300">
   <div class="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-10 lg:flex-row lg:items-center lg:justify-between lg:px-10">
     <div>
@@ -369,6 +583,9 @@ const renderFooter = (content: Record<string, any>) => `
     </nav>
   </div>
 </footer>`;
+};
+
+const renderRaw = (content: Record<string, any>) => content.html ?? "";
 
 const renderSection = (section: TemplateSectionData) => {
   const content = section.content ?? {};
@@ -377,6 +594,8 @@ const renderSection = (section: TemplateSectionData) => {
       return renderHeader(content);
     case "hero":
       return renderHero(content);
+    case "banner":
+      return renderBanner(content);
     case "about":
       return renderAbout(content);
     case "features":
@@ -385,6 +604,10 @@ const renderSection = (section: TemplateSectionData) => {
       return renderServices(content);
     case "process":
       return renderProcess(content);
+    case "carousel":
+      return renderCarousel(content);
+    case "carousel-full":
+      return renderCarouselFull(content);
     case "stats":
       return renderStats(content);
     case "why-us":
@@ -409,16 +632,29 @@ const renderSection = (section: TemplateSectionData) => {
       return renderCta(content);
     case "footer":
       return renderFooter(content);
+    case "raw":
+      return renderRaw(content);
     default:
       return `<section class="w-full bg-white"><div class="mx-auto max-w-7xl px-6 py-16 lg:px-10"><p class="text-sm text-slate-500">${escapeHtml(section.name)}</p></div></section>`;
   }
 };
 
+const renderTemplateSections = (sections: TemplateSectionData[]) =>
+  sections.map((section) => ({
+    name: section.name,
+    type: section.type,
+    html: renderSection(section),
+    style: section.style,
+    className: section.className,
+    animation: { type: "fade-up", duration: 700, delay: 0 },
+  }));
+
 export const TEMPLATE_LIBRARY: TemplateDefinition[] = TEMPLATE_DATA_LIBRARY.map((template: TemplateDataDefinition) => ({
   ...template,
-  sections: template.sections.map((section) => ({
-    name: section.name,
-    html: renderSection(section),
-    animation: { type: "fade-up", duration: 700, delay: 0 },
+  sharedSections: template.sharedSections ? renderTemplateSections(template.sharedSections) : undefined,
+  sections: renderTemplateSections(template.pages?.[0]?.sections ?? template.sections ?? []),
+  pages: template.pages?.map((page) => ({
+    ...page,
+    sections: renderTemplateSections(page.sections ?? []),
   })),
 }));

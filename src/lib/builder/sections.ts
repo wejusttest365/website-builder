@@ -15,6 +15,7 @@ const grad = (from: string, to: string) => `linear-gradient(135deg, ${from}, ${t
 export const CATEGORIES = [
   "Navigation",
   "Hero",
+  "Banners",
   "About",
   "Features",
   "Services",
@@ -70,24 +71,111 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
   </div>
 </nav>`,
   },
+  {
+    id: "nav-driving-academy",
+    name: "Driving Academy Header",
+    category: "Navigation",
+    thumbBg: grad("#15803d", "#166534"),
+    html: `<header class="w-full bg-white shadow-sm">
+  <div class="border-b border-slate-200 bg-[#064e1f]">
+    <div class="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-2 text-sm text-slate-100 md:flex-row md:items-center md:justify-between">
+      <div class="flex flex-wrap items-center gap-4 font-medium">
+        <a href="tel:1-800-555-1234" class="transition hover:text-white">1-800-555-1234</a>
+        <a href="mailto:hello@drivewell.com" class="transition hover:text-white">hello@drivewell.com</a>
+      </div>
+      <div class="flex items-center gap-3 text-xs uppercase tracking-[0.3em] text-slate-200">Premium Driving School</div>
+    </div>
+  </div>
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+    <a href="#" class="text-lg font-black tracking-tight text-slate-900">DriveWell Academy</a>
+    <ul data-wto-nav-menu class="hidden items-center gap-8 text-sm font-medium text-slate-700 md:flex">
+      <li><a href="index.html" class="transition hover:text-slate-900">Home</a></li>
+      <li><a href="about.html" class="transition hover:text-slate-900">About</a></li>
+      <li><a href="services.html" class="transition hover:text-slate-900">Services</a></li>
+      <li><a href="faqs.html" class="transition hover:text-slate-900">FAQs</a></li>
+      <li><a href="contact.html" class="transition hover:text-slate-900">Contact</a></li>
+      <li><a href="#" class="rounded-full border border-slate-300 px-3 py-2 text-slate-700 transition hover:border-slate-400 hover:text-slate-900">Student login</a></li>
+    </ul>
+    <button data-wto-nav-btn aria-label="Open menu" class="rounded-full border border-slate-300 p-2 text-slate-700 md:hidden">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg>
+    </button>
+  </div>
+</header>`,
+  },
+  {
+    id: "topbar-classic",
+    name: "Information Bar · Classic",
+    category: "Navigation",
+    thumbBg: grad("#0f172a", "#334155"),
+    html: `<section data-wto-topbar="true" class="w-full bg-slate-950 text-slate-100">
+  <div class="mx-auto max-w-7xl px-6 py-3 grid gap-3 md:grid-cols-[1.2fr_0.8fr] items-center">
+    <div class="flex flex-wrap items-center gap-4 text-sm">
+      <div data-wto-phone="true" class="font-medium">+1 (800) 555-1234</div>
+      <div data-wto-email="true">hello@drivewell.com</div>
+      <div data-wto-address="true" class="text-slate-300">123 Main St, City</div>
+      <div data-wto-hours="true" class="text-slate-300">Mon–Fri 9am–6pm</div>
+    </div>
+    <div class="flex flex-wrap items-center justify-end gap-3">
+      <div data-wto-note="true" class="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-100">Free lesson available this month</div>
+      <a data-wto-topbar-button="true" href="#" class="inline-flex items-center rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400">Book now</a>
+      <div class="flex items-center gap-2">
+        <a data-wto-social="facebook" href="https://facebook.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 text-slate-100 hover:bg-white/20 transition" title="Facebook"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
+        <a data-wto-social="twitter" href="https://twitter.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 text-slate-100 hover:bg-white/20 transition" title="Twitter"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23.953 4.57a10 10 0 002.856-3.51 10 10 0 01-2.837.856c1.02-.608 1.8-1.572 2.165-2.723-.954.565-2.01.978-3.127 1.195a4.948 4.948 0 00-8.455 4.516 14.01 14.01 0 01-10.175-5.154 4.957 4.957 0 001.532 6.61 4.92 4.92 0 01-2.24-.616c-.054 2.281 1.581 4.415 3.949 4.89-.69.188-1.41.188-2.126.063.598 1.86 2.359 3.201 4.423 3.242-1.56 1.223-3.5 1.954-5.604 1.954-.364 0-.721-.021-1.076-.062 1.966 1.26 4.3 2.002 6.817 2.002 8.18 0 12.638-6.762 12.638-12.637 0-.192-.004-.385-.012-.577.867-.627 1.619-1.413 2.214-2.312z"/></svg></a>
+        <a data-wto-social="instagram" href="https://instagram.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 text-slate-100 hover:bg-white/20 transition" title="Instagram"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.5" fill="currentColor"/></svg></a>
+        <a data-wto-social="linkedin" href="https://linkedin.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 text-slate-100 hover:bg-white/20 transition" title="LinkedIn"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.475-2.236-1.986-2.236-1.081 0-1.722.722-2.004 1.418-.103.249-.129.597-.129.945v5.442h-3.554s.05-8.836 0-9.756h3.15v1.381c.43-.664 1.199-1.61 2.923-1.61 2.135 0 3.74 1.39 3.74 4.377v5.608zM5.337 8.855c-1.144 0-1.915-.759-1.915-1.71 0-.951.77-1.71 1.944-1.71 1.174 0 1.915.759 1.915 1.71 0 .951-.74 1.71-1.944 1.71zm1.575 11.597H3.762V9.557h3.15v10.895zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg></a>
+      </div>
+    </div>
+  </div>
+</section>`,
+  },
+  {
+    id: "topbar-modern",
+    name: "Information Bar · Modern",
+    category: "Navigation",
+    thumbBg: grad("#e2e8f0", "#f8fafc"),
+    html: `<section data-wto-topbar="true" class="w-full bg-white text-slate-900">
+  <div class="mx-auto max-w-7xl px-6 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="flex flex-wrap items-center gap-3 text-sm text-slate-700">
+      <div data-wto-note="true" class="rounded-full bg-slate-900/5 px-3 py-1">Open enrollment ends soon.</div>
+      <span data-wto-phone="true" class="font-semibold text-slate-900">+1 800 555 1234</span>
+      <span data-wto-email="true">hello@drivewell.com</span>
+      <span data-wto-hours="true">Mon–Fri 9am–6pm</span>
+      <span data-wto-address="true">123 Main St, City</span>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 justify-end">
+      <a data-wto-topbar-button="true" href="#" class="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Contact us</a>
+      <div class="flex items-center gap-2">
+        <a data-wto-social="facebook" href="https://facebook.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition" title="Facebook"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
+        <a data-wto-social="twitter" href="https://twitter.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition" title="Twitter"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23.953 4.57a10 10 0 002.856-3.51 10 10 0 01-2.837.856c1.02-.608 1.8-1.572 2.165-2.723-.954.565-2.01.978-3.127 1.195a4.948 4.948 0 00-8.455 4.516 14.01 14.01 0 01-10.175-5.154 4.957 4.957 0 001.532 6.61 4.92 4.92 0 01-2.24-.616c-.054 2.281 1.581 4.415 3.949 4.89-.69.188-1.41.188-2.126.063.598 1.86 2.359 3.201 4.423 3.242-1.56 1.223-3.5 1.954-5.604 1.954-.364 0-.721-.021-1.076-.062 1.966 1.26 4.3 2.002 6.817 2.002 8.18 0 12.638-6.762 12.638-12.637 0-.192-.004-.385-.012-.577.867-.627 1.619-1.413 2.214-2.312z"/></svg></a>
+        <a data-wto-social="instagram" href="https://instagram.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition" title="Instagram"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.5" fill="currentColor"/></svg></a>
+        <a data-wto-social="linkedin" href="https://linkedin.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition" title="LinkedIn"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.475-2.236-1.986-2.236-1.081 0-1.722.722-2.004 1.418-.103.249-.129.597-.129.945v5.442h-3.554s.05-8.836 0-9.756h3.15v1.381c.43-.664 1.199-1.61 2.923-1.61 2.135 0 3.74 1.39 3.74 4.377v5.608zM5.337 8.855c-1.144 0-1.915-.759-1.915-1.71 0-.951.77-1.71 1.944-1.71 1.174 0 1.915.759 1.915 1.71 0 .951-.74 1.71-1.944 1.71zm1.575 11.597H3.762V9.557h3.15v10.895zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg></a>
+      </div>
+    </div>
+  </div>
+</section>`,
+  },
 
   // HERO
   {
-    id: "hero-split",
-    name: "Split Hero",
-    category: "Hero",
-    thumbBg: grad("#f97316", "#f43f5e"),
-    html: `<section class="w-full bg-gradient-to-br from-indigo-50 to-white">
-  <div class="max-w-6xl mx-auto px-6 py-24 grid md:grid-cols-2 gap-12 items-center">
-    <div>
-      <h1 class="text-5xl font-black leading-tight text-gray-900">Build stunning websites in minutes.</h1>
-      <p class="mt-6 text-lg text-gray-600">Drag, drop, and launch. No code needed — just pure creative freedom for beginners and pros alike.</p>
-      <div class="mt-8 flex gap-4">
-        <a href="#" class="px-6 py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700">Start Free</a>
-        <a href="#" class="px-6 py-3 rounded-lg border border-gray-300 text-gray-800 font-semibold hover:bg-gray-50">Watch Demo</a>
+    id: "banner-image",
+    name: "Image Banner",
+    category: "Banners",
+    thumbBg: grad("#0f766e", "#14b8a6"),
+    html: `<section class="w-full overflow-hidden bg-slate-950 text-white">
+  <div class="relative">
+    <img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&q=80" alt="Driving banner" class="absolute inset-0 h-full w-full object-cover" />
+    <div class="absolute inset-0 bg-slate-950/55"></div>
+    <div class="relative mx-auto max-w-6xl px-6 py-24 lg:px-10 lg:py-32">
+      <div class="max-w-3xl rounded-[2rem] border border-white/10 bg-slate-950/80 p-8 shadow-2xl backdrop-blur">
+        <div class="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-300">Banner</div>
+        <h1 class="mt-4 text-4xl font-black tracking-tight sm:text-5xl">A bold image banner for any page.</h1>
+        <p class="mt-6 text-lg text-slate-200">Create a reusable page banner with strong imagery, overlay, and calls to action for section landing pages.</p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href="#" class="rounded-full bg-emerald-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-400">Start now</a>
+          <a href="#" class="rounded-full border border-white/20 px-5 py-3 text-sm font-semibold text-white/90 hover:border-white/40 hover:text-white">Learn more</a>
+        </div>
       </div>
     </div>
-    <div class="rounded-2xl overflow-hidden aspect-[4/3] shadow-2xl"><img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1200&q=80" alt="Website preview" class="w-full h-full object-cover" /></div>
   </div>
 </section>`,
   },
@@ -103,6 +191,135 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
     <p class="mt-6 text-xl text-gray-600">Powerful. Fast. Beautiful. Everything you need in one place.</p>
     <div class="mt-10 flex justify-center gap-4"><a href="#" class="px-8 py-4 rounded-lg bg-gray-900 text-white font-semibold hover:bg-gray-800">Get Started Free</a></div>
   </div>
+</section>`,
+  },
+  {
+    id: "hero-carousel",
+    name: "Hero Carousel",
+    category: "Hero",
+    thumbBg: grad("#0f766e", "#14b8a6"),
+    html: `<section class="w-full bg-slate-950 text-white">
+  <div class="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+    <div class="grid gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+      <div class="max-w-xl">
+        <p class="text-sm uppercase tracking-[0.3em] text-cyan-300">Premium driving academy</p>
+        <h1 class="mt-6 text-5xl font-black tracking-tight">A training experience built for confident drivers.</h1>
+        <p class="mt-6 text-lg text-slate-300">A premium hero carousel that shows your programs, student wins, and training highlights with bold imagery.</p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href="#contact" class="rounded-full bg-cyan-500 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400">Register now</a>
+          <a href="#about" class="rounded-full border border-white/20 px-6 py-3 text-sm font-semibold text-white/90 hover:text-white">Learn more</a>
+        </div>
+      </div>
+      <div class="relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/80 p-4">
+        <div class="flex gap-4 overflow-x-auto pb-4 scrollbar-none" data-carousel-track style="transition: transform 0.5s ease-in-out; transform: translateX(0%);">
+          <article class="min-w-[300px] shrink-0 rounded-[1.75rem] bg-slate-950 text-white shadow-2xl overflow-hidden">
+            <div class="aspect-[4/3] overflow-hidden">
+              <img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80" alt="Student driving" class="h-full w-full object-cover" data-wto-idx="0" />
+            </div>
+            <div class="p-6">
+              <p class="text-xs uppercase tracking-[0.3em] text-cyan-300">Student success</p>
+              <h2 class="mt-3 text-2xl font-semibold text-white">Confident behind the wheel</h2>
+              <p class="mt-3 text-sm text-slate-300">Hands-on lessons and real-world training for every learner.</p>
+              <a href="#contact" class="mt-6 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-slate-100">Book a lesson</a>
+            </div>
+          </article>
+          <article class="min-w-[300px] shrink-0 rounded-[1.75rem] bg-slate-950 text-white shadow-2xl overflow-hidden">
+            <div class="aspect-[4/3] overflow-hidden">
+              <img src="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80" alt="Classroom training" class="h-full w-full object-cover" data-wto-idx="1" />
+            </div>
+            <div class="p-6">
+              <p class="text-xs uppercase tracking-[0.3em] text-cyan-300">Expert instructors</p>
+              <h2 class="mt-3 text-2xl font-semibold text-white">Support that builds confidence</h2>
+              <p class="mt-3 text-sm text-slate-300">Personal coaching, modern curriculum, and a calm learning environment.</p>
+              <a href="#contact" class="mt-6 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-slate-100">Meet our team</a>
+            </div>
+          </article>
+          <article class="min-w-[300px] shrink-0 rounded-[1.75rem] bg-slate-950 text-white shadow-2xl overflow-hidden">
+            <div class="aspect-[4/3] overflow-hidden">
+              <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1200&q=80" alt="Road training" class="h-full w-full object-cover" data-wto-idx="2" />
+            </div>
+            <div class="p-6">
+              <p class="text-xs uppercase tracking-[0.3em] text-cyan-300">Road-ready</p>
+              <h2 class="mt-3 text-2xl font-semibold text-white">Prepared for every test</h2>
+              <p class="mt-3 text-sm text-slate-300">Practical road practice, checklist training, and confidence for the exam.</p>
+              <a href="#contact" class="mt-6 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-slate-100">Start today</a>
+            </div>
+          </article>
+        </div>
+        <button type="button" class="absolute left-4 top-1/2 -translate-y-1/2 z-20 rounded-full bg-white/10 p-2 text-white shadow-lg hover:bg-white/20" data-carousel-prev aria-label="Previous">←</button>
+        <button type="button" class="absolute right-4 top-1/2 -translate-y-1/2 z-20 rounded-full bg-white/10 p-2 text-white shadow-lg hover:bg-white/20" data-carousel-next aria-label="Next">→</button>
+        <button type="button" class="absolute top-4 right-4 z-20 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/20" data-carousel-autoplay-toggle>
+          Auto: On
+        </button>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function() {
+      var script = document.currentScript || document.scripts[document.scripts.length - 1];
+      var section = script ? script.parentElement : null;
+      if (!section) return;
+      var track = section.querySelector('[data-carousel-track]');
+      var prevBtn = section.querySelector('[data-carousel-prev]');
+      var nextBtn = section.querySelector('[data-carousel-next]');
+      var autoButton = section.querySelector('[data-carousel-autoplay-toggle]');
+      if (!track || !prevBtn || !nextBtn) return;
+      var slideCount = Math.max(1, track.children.length);
+      var currentIndex = 0;
+      var autoMove = true;
+      var autoMoveInterval = 5000;
+      var autoMoveTimer = null;
+      function setAutoplayButton() {
+        if (!autoButton) return;
+        autoButton.textContent = autoMove ? 'Auto: On' : 'Auto: Off';
+      }
+      function stopAutoMove() {
+        if (autoMoveTimer) {
+          clearInterval(autoMoveTimer);
+          autoMoveTimer = null;
+        }
+      }
+      function startAutoMove() {
+        stopAutoMove();
+        if (!autoMove) return;
+        autoMoveTimer = setInterval(function() {
+          currentIndex = (currentIndex + 1) % slideCount;
+          update();
+        }, autoMoveInterval);
+      }
+      function update() {
+        var offset = currentIndex * (100 / slideCount);
+        track.style.transform = 'translateX(-' + offset + '%)';
+      }
+      prevBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = (currentIndex - 1 + slideCount) % slideCount;
+        update();
+        if (autoMove) startAutoMove();
+      });
+      nextBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = (currentIndex + 1) % slideCount;
+        update();
+        if (autoMove) startAutoMove();
+      });
+      if (autoButton) {
+        autoButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          autoMove = !autoMove;
+          setAutoplayButton();
+          if (autoMove) startAutoMove();
+          else stopAutoMove();
+        });
+      }
+      update();
+      setAutoplayButton();
+      startAutoMove();
+    })();
+  </script>
 </section>`,
   },
 
@@ -654,6 +871,44 @@ export const SECTION_LIBRARY: SectionTemplate[] = [
     <div><h4 class="font-semibold text-white">Legal</h4><ul class="mt-3 space-y-2 text-sm"><li><a href="#" class="hover:text-white">Terms</a></li><li><a href="#" class="hover:text-white">Privacy</a></li></ul></div>
   </div>
   <div class="border-t border-gray-800 py-6 text-center text-xs text-gray-500">© 2026 Brand. All rights reserved.</div>
+</footer>`,
+  },
+
+  {
+    id: "footer-contact",
+    name: "Contact Footer",
+    category: "Footer",
+    thumbBg: grad("#0f172a", "#1e293b"),
+    html: `<footer class="w-full bg-slate-950 text-gray-300">
+  <div class="max-w-6xl mx-auto px-6 py-12 grid grid-cols-1 md:grid-cols-3 gap-12">
+    <div>
+      <h3 class="text-lg font-bold text-white mb-4">Contact Info</h3>
+      <div class="space-y-3 text-sm">
+        <div data-wto-phone="true" class="text-sm text-gray-300">+1 (555) 123-4567</div>
+        <div data-wto-email="true" class="text-sm text-gray-300">info@example.com</div>
+        <div data-wto-address="true" class="text-sm text-gray-300">123 Main St, City, State</div>
+      </div>
+    </div>
+    <div>
+      <h4 class="font-semibold text-white mb-4">Quick Links</h4>
+      <ul class="space-y-2 text-sm">
+        <li><a href="#" class="hover:text-white transition">Home</a></li>
+        <li><a href="#" class="hover:text-white transition">About</a></li>
+        <li><a href="#" class="hover:text-white transition">Services</a></li>
+        <li><a href="#" class="hover:text-white transition">Contact</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="font-semibold text-white mb-4">Follow Us</h4>
+      <div class="flex gap-4">
+        <a data-wto-social="facebook" href="https://facebook.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 text-gray-300 hover:text-white hover:bg-white/10 rounded-lg transition" title="Facebook"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
+        <a data-wto-social="twitter" href="https://twitter.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 text-gray-300 hover:text-white hover:bg-white/10 rounded-lg transition" title="Twitter"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23.953 4.57a10 10 0 002.856-3.51 10 10 0 01-2.837.856c1.02-.608 1.8-1.572 2.165-2.723-.954.565-2.01.978-3.127 1.195a4.948 4.948 0 00-8.455 4.516 14.01 14.01 0 01-10.175-5.154 4.957 4.957 0 001.532 6.61 4.928 4.928 0 01-2.24-.616c-.054 2.281 1.581 4.415 3.949 4.89-.69.188-1.41.188-2.126.063.598 1.86 2.359 3.201 4.423 3.242-1.56 1.223-3.5 1.954-5.604 1.954-.364 0-.721-.021-1.076-.062 1.966 1.26 4.3 2.002 6.817 2.002 8.18 0 12.638-6.762 12.638-12.637 0-.192-.004-.385-.012-.577.867-.627 1.619-1.413 2.214-2.312z"/></svg></a>
+        <a data-wto-social="instagram" href="https://instagram.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 text-gray-300 hover:text-white hover:bg-white/10 rounded-lg transition" title="Instagram"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.5" fill="currentColor"/></svg></a>
+        <a data-wto-social="linkedin" href="https://linkedin.com" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-8 h-8 text-gray-300 hover:text-white hover:bg-white/10 rounded-lg transition" title="LinkedIn"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.475-2.236-1.986-2.236-1.081 0-1.722.722-2.004 1.418-.103.249-.129.597-.129.945v5.442h-3.554s.05-8.836 0-9.756h3.554v1.381c.43-.664 1.199-1.61 2.923-1.61 2.135 0 3.74 1.39 3.74 4.377v5.608zM5.337 8.855c-1.144 0-1.915-.759-1.915-1.71 0-.951.77-1.71 1.944-1.71 1.174 0 1.915.759 1.915 1.71 0 .951-.74 1.71-1.944 1.71zm1.575 11.597H3.762V9.557h3.15v10.895zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/></svg></a>
+      </div>
+    </div>
+  </div>
+  <div class="border-t border-gray-800 py-6 text-center text-xs text-gray-500">© 2026 Your Company. All rights reserved.</div>
 </footer>`,
   },
 

@@ -152,5 +152,11 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     min-height: 100%;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-primary) 24%, transparent);
+    color: var(--color-foreground);
   }
 }

@@ -1,19 +1,49 @@
 export type TemplateCategory = "Business" | "Portfolio" | "Freelancer" | "Agency" | "Restaurant";
+export type TemplatePageType = "single-page" | "multi-page";
 
 export interface TemplateSectionData {
   name: string;
   type: string;
   content: Record<string, any>;
+  style?: Record<string, string>;
+  className?: string;
+}
+
+export interface TemplatePageData {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  keywords?: string;
+  sections: TemplateSectionData[];
 }
 
 export interface TemplateDataDefinition {
   id: string;
+  slug?: string;
   name: string;
   category: TemplateCategory;
+  pageType?: TemplatePageType;
   description: string;
   accent: string;
   thumbnail: string;
-  sections: TemplateSectionData[];
+  previewImages?: string[];
+  sharedSections?: TemplateSectionData[];
+  pages?: TemplatePageData[];
+  sections?: TemplateSectionData[];
+  price?: string;
+  isPremium?: boolean;
+  tags?: string[];
+  author?: string;
+  version?: string;
+  createdDate?: string;
+  updatedDate?: string;
+  featured?: boolean;
+  metadata?: {
+    provider?: string;
+    tier?: string;
+    license?: string;
+  };
 }
 
 export const TEMPLATE_CATEGORIES: TemplateCategory[] = [
@@ -29,182 +59,262 @@ const grad = (from: string, to: string) => `linear-gradient(135deg, ${from}, ${t
 export const TEMPLATE_DATA_LIBRARY: TemplateDataDefinition[] = [
   {
     id: "business-crest",
+    slug: "business-crest",
     name: "Crest & Co.",
     category: "Business",
+    pageType: "multi-page",
     description: "A premium, launch-ready business website with trust, services, proof, and a direct conversion path.",
     accent: grad("#2563eb", "#0f766e"),
     thumbnail: "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1200&q=80",
-    sections: [
+    previewImages: [
+      "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1400&q=80",
+      "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1400&q=80",
+    ],
+    isPremium: true,
+    price: "$49",
+    tags: ["Business", "Launch"],
+    author: "Crest Studio",
+    version: "1.0",
+    createdDate: "2026-07-01",
+    updatedDate: "2026-07-10",
+    pages: [
       {
-        name: "Header",
-        type: "header",
-        content: {
-          brand: "Crest & Co.",
-          links: [
-            { label: "About", href: "#about" },
-            { label: "Services", href: "#services" },
-            { label: "Results", href: "#results" },
-            { label: "Contact", href: "#contact" },
-          ],
-          cta: { label: "Book a call", href: "#contact" },
-        },
+        id: "home",
+        name: "Home",
+        slug: "index",
+        description: "A polished homepage with strategic services, credibility, and a clear conversion path.",
+        sections: [
+          {
+            name: "Header",
+            type: "header",
+            content: {
+              brand: "Crest & Co.",
+              brandHref: "index.html",
+              links: [
+                { label: "About", href: "about.html" },
+                { label: "Services", href: "services.html" },
+                { label: "Results", href: "contact.html" },
+              ],
+              cta: { label: "Book a call", href: "contact.html" },
+            },
+          },
+          {
+            name: "Hero",
+            type: "hero",
+            content: {
+              eyebrow: "Trusted by growth-minded teams",
+              title: "A sharper online presence that feels ready for scale.",
+              body: "We partner with leadership teams to create polished digital experiences that support sales, credibility, and momentum.",
+              primaryCta: { label: "Book a strategy call", href: "contact.html" },
+              secondaryCta: { label: "Explore services", href: "services.html" },
+              image: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1400&q=80",
+            },
+          },
+          {
+            name: "Features",
+            type: "features",
+            content: {
+              eyebrow: "What we do best",
+              title: "A clear service stack for teams that need momentum without the scramble.",
+              body: "We pair strategy, design, and rollout support so your digital presence feels premium from the start.",
+              items: [
+                { title: "Positioning & messaging", body: "Sharper narratives that help your business feel easier to trust." },
+                { title: "Launch-ready websites", body: "Fast-moving builds that still feel thoughtful, premium, and cohesive." },
+                { title: "Ongoing refinement", body: "Delivery support that helps you adapt and improve after launch." },
+              ],
+            },
+          },
+          {
+            name: "Stats",
+            type: "stats",
+            content: {
+              items: [
+                { value: "4.9/5", label: "Average client rating" },
+                { value: "120+", label: "Projects launched" },
+                { value: "15 hrs", label: "Average response time" },
+                { value: "98%", label: "Client retention" },
+              ],
+            },
+          },
+          {
+            name: "Footer",
+            type: "footer",
+            content: {
+              brand: "Crest & Co.",
+              links: [
+                { label: "About", href: "about.html" },
+                { label: "Services", href: "services.html" },
+                { label: "Contact", href: "contact.html" },
+              ],
+            },
+          },
+        ],
       },
       {
-        name: "Hero",
-        type: "hero",
-        content: {
-          eyebrow: "Trusted by growth-minded teams",
-          title: "A sharper online presence that feels ready for scale.",
-          body: "We partner with leadership teams to create polished digital experiences that support sales, credibility, and momentum.",
-          primaryCta: { label: "Book a strategy call", href: "#contact" },
-          secondaryCta: { label: "Explore services", href: "#services" },
-          image: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1400&q=80",
-        },
-      },
-      {
-        name: "Features",
-        type: "features",
-        content: {
-          eyebrow: "What we do best",
-          title: "A clear service stack for teams that need momentum without the scramble.",
-          body: "We pair strategy, design, and rollout support so your digital presence feels premium from the start.",
-          items: [
-            { title: "Positioning & messaging", body: "Sharper narratives that help your business feel easier to trust." },
-            { title: "Launch-ready websites", body: "Fast-moving builds that still feel thoughtful, premium, and cohesive." },
-            { title: "Ongoing refinement", body: "Delivery support that helps you adapt and improve after launch." },
-          ],
-        },
-      },
-      {
-        name: "Stats",
-        type: "stats",
-        content: {
-          items: [
-            { value: "4.9/5", label: "Average client rating" },
-            { value: "120+", label: "Projects launched" },
-            { value: "15 hrs", label: "Average response time" },
-            { value: "98%", label: "Client retention" },
-          ],
-        },
-      },
-      {
-        name: "Why Choose Us",
-        type: "why-us",
-        content: {
-          eyebrow: "Why teams hire us",
-          title: "Support that feels calm, clear, and built for growth.",
-          body: "A thoughtful blend of strategy, design, and delivery keeps every launch moving smoothly.",
-          items: [
-            { title: "Senior guidance", body: "Experienced partners who can shape the work without adding unnecessary complexity." },
-            { title: "Clear execution", body: "A structured approach that keeps teams aligned and decisions moving forward." },
-            { title: "Design that converts", body: "Each touchpoint is shaped to feel premium while still being straightforward to use." },
-          ],
-        },
-      },
-      {
+        id: "about",
         name: "About",
-        type: "about",
-        content: {
-          eyebrow: "About",
-          title: "Clear strategy, refined design, and disciplined delivery.",
-          body: "We help modern companies communicate with confidence through thoughtful websites, positioning, and campaign systems.",
-          bullets: [
-            "Positioning and messaging that feels consistent across every touchpoint",
-            "Design systems built for clarity, speed, and conversion",
-            "Senior support from initial concept through launch and refinement",
-          ],
-          image: "https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1000&q=80",
-        },
+        slug: "about",
+        description: "A company page that highlights experience, approach, and credibility.",
+        sections: [
+          {
+            name: "Header",
+            type: "header",
+            content: {
+              brand: "Crest & Co.",
+              brandHref: "index.html",
+              links: [
+                { label: "Home", href: "index.html" },
+                { label: "Services", href: "services.html" },
+                { label: "Contact", href: "contact.html" },
+              ],
+            },
+          },
+          {
+            name: "About",
+            type: "about",
+            content: {
+              eyebrow: "About us",
+              title: "We help teams move faster with calm, confident digital experiences.",
+              body: "Crest & Co. blends strategy, design, and launch support to create websites that feel premium, practical, and polished.",
+              bullets: [
+                "Executive-level positioning and narrative clarity",
+                "Visual systems designed for trust and momentum",
+                "Delivery support that keeps every launch running smoothly",
+              ],
+              image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1000&q=80",
+            },
+          },
+          {
+            name: "Services",
+            type: "services",
+            content: {
+              eyebrow: "What we do",
+              title: "A service model built around clarity and measurable impact.",
+              body: "We help companies refine positioning, design premium experiences, and launch with confidence.",
+              items: [
+                { title: "Strategy & messaging", body: "Focused positioning that helps your offer feel easier to understand and buy." },
+                { title: "Experience design", body: "High-end pages built for credibility, clarity, and conversion." },
+                { title: "Launch support", body: "A steady rollout process that keeps your team aligned and on schedule." },
+              ],
+            },
+          },
+          {
+            name: "Footer",
+            type: "footer",
+            content: {
+              brand: "Crest & Co.",
+              links: [
+                { label: "Home", href: "index.html" },
+                { label: "Services", href: "services.html" },
+                { label: "Contact", href: "contact.html" },
+              ],
+            },
+          },
+        ],
       },
       {
+        id: "services",
         name: "Services",
-        type: "services",
-        content: {
-          eyebrow: "Services",
-          title: "Everything you need to launch with confidence.",
-          body: "A modern service stack built around clarity, execution, and measurable momentum.",
-          items: [
-            { title: "Brand systems", body: "Visual identity and messaging that make your business easier to trust." },
-            { title: "Product storytelling", body: "Conversion-focused pages, flows, and messaging grounded in customer needs." },
-            { title: "Launch support", body: "Hands-on rollout direction so your team can move quickly without missing details." },
-          ],
-        },
+        slug: "services",
+        description: "A services page that outlines the agency’s offering and process.",
+        sections: [
+          {
+            name: "Header",
+            type: "header",
+            content: {
+              brand: "Crest & Co.",
+              brandHref: "index.html",
+              links: [
+                { label: "Home", href: "index.html" },
+                { label: "About", href: "about.html" },
+                { label: "Contact", href: "contact.html" },
+              ],
+            },
+          },
+          {
+            name: "Services",
+            type: "services",
+            content: {
+              eyebrow: "Our services",
+              title: "A service offering for teams that need premium, conversion-focused websites.",
+              body: "From launch strategy to polished delivery, our work keeps your digital presence feeling confident and aligned.",
+              items: [
+                { title: "Brand strategy", body: "Positioning and messaging that feel consistent across every channel." },
+                { title: "Website design", body: "Thoughtful pages that support trust, clarity, and action." },
+                { title: "Campaign launches", body: "A launch-ready process for products, services, and strategic initiatives." },
+              ],
+            },
+          },
+          {
+            name: "Process",
+            type: "process",
+            content: {
+              eyebrow: "How we work",
+              title: "A structured rollout with clear milestones and collaboration points.",
+              steps: [
+                { title: "Discover", body: "We align goals, audiences, and messaging needs." },
+                { title: "Design", body: "We craft polished visual systems and page experiences." },
+                { title: "Deliver", body: "We launch with flexibility and thoughtful follow-through." },
+              ],
+            },
+          },
+          {
+            name: "Footer",
+            type: "footer",
+            content: {
+              brand: "Crest & Co.",
+              links: [
+                { label: "Home", href: "index.html" },
+                { label: "About", href: "about.html" },
+                { label: "Contact", href: "contact.html" },
+              ],
+            },
+          },
+        ],
       },
       {
-        name: "Process",
-        type: "process",
-        content: {
-          eyebrow: "How we work",
-          title: "A calm, collaborative process from first conversation to launch.",
-          steps: [
-            { title: "Discover", body: "We align on goals, audiences, and the problems that matter most." },
-            { title: "Design", body: "We shape the experience around clarity, pace, and conversion." },
-            { title: "Deliver", body: "We refine, launch, and support the rollout with measurable care." },
-          ],
-        },
-      },
-      {
-        name: "Results",
-        type: "testimonials",
-        content: {
-          eyebrow: "Client results",
-          title: "Trusted by companies that need a high-end digital presence.",
-          items: [
-            { quote: "The team brought structure to our story and helped us look more premium from day one.", name: "Alicia Lewis", role: "Founder, Northwind Labs" },
-          ],
-        },
-      },
-      {
-        name: "Pricing",
-        type: "pricing",
-        content: {
-          eyebrow: "Simple engagement options",
-          title: "Choose the support model that fits your launch timeline.",
-          plans: [
-            { name: "Launch", price: "$4.5k", description: "Perfect for a refined website refresh or focused campaign rollout.", features: ["1–2 week kickoff", "Design and implementation", "Launch support"] },
-            { name: "Growth", price: "$8.5k", description: "For teams looking for a full digital presence and ongoing optimization.", features: ["Full website build", "Messaging and content direction", "Strategy workshops"] },
-          ],
-        },
-      },
-      {
-        name: "FAQ",
-        type: "faq",
-        content: {
-          eyebrow: "Frequently asked",
-          title: "Everything you need to know before we begin.",
-          items: [
-            { question: "How quickly can you start?", answer: "Most engagements begin within one week of our intro conversation." },
-            { question: "Do you support ongoing optimization?", answer: "Yes. We can stay involved after launch for updates, refinements, and conversion improvements." },
-          ],
-        },
-      },
-      {
-        name: "CTA",
-        type: "cta",
-        content: {
-          eyebrow: "Ready to begin",
-          title: "Let’s create a website that feels premium from the first scroll.",
-          body: "We help teams launch with intention, confidence, and a clear path to growth.",
-          primaryCta: { label: "Schedule a call", href: "#contact" },
-          secondaryCta: { label: "View our process", href: "#process" },
-        },
-      },
-      {
-        name: "Footer",
-        type: "footer",
-        content: {
-          brand: "Crest & Co.",
-          links: [
-            { label: "About", href: "#about" },
-            { label: "Services", href: "#services" },
-            { label: "Results", href: "#results" },
-            { label: "Contact", href: "#contact" },
-          ],
-          social: [
-            { label: "Instagram", href: "https://instagram.com" },
-            { label: "LinkedIn", href: "https://linkedin.com" },
-          ],
-        },
+        id: "contact",
+        name: "Contact",
+        slug: "contact",
+        description: "A conversion-focused contact page with a clear next step.",
+        sections: [
+          {
+            name: "Header",
+            type: "header",
+            content: {
+              brand: "Crest & Co.",
+              brandHref: "index.html",
+              links: [
+                { label: "Home", href: "index.html" },
+                { label: "About", href: "about.html" },
+                { label: "Services", href: "services.html" },
+              ],
+            },
+          },
+          {
+            name: "Contact",
+            type: "contact",
+            content: {
+              eyebrow: "Get in touch",
+              title: "Talk to our team about your next growth-focused website.",
+              body: "We’re ready to help ambitious businesses launch with a premium site and clear digital strategy.",
+              details: ["hello@crestco.com", "New York, NY", "Response within 24 hours"],
+              primaryCta: { label: "Email us", href: "mailto:hello@crestco.com" },
+            },
+          },
+          {
+            name: "Footer",
+            type: "footer",
+            content: {
+              brand: "Crest & Co.",
+              links: [
+                { label: "Home", href: "index.html" },
+                { label: "About", href: "about.html" },
+                { label: "Services", href: "services.html" },
+              ],
+            },
+          },
+        ],
       },
     ],
   },
@@ -215,6 +325,8 @@ export const TEMPLATE_DATA_LIBRARY: TemplateDataDefinition[] = [
     description: "An editorial portfolio for photographers, creatives, and boutique studios seeking a refined online presence.",
     accent: grad("#7c3aed", "#db2777"),
     thumbnail: "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=1200&q=80",
+    pageType: "single-page",
+    tags: ["Portfolio", "Creative"],
     sections: [
       {
         name: "Header",
@@ -678,10 +790,537 @@ export const TEMPLATE_DATA_LIBRARY: TemplateDataDefinition[] = [
     ],
   },
   {
+    id: "agency-deepdigital",
+    slug: "agency-deepdigital",
+    name: "DeepDigital",
+    category: "Agency",
+    pageType: "single-page",
+    description: "A premium dark agency landing page with bold neon accents, strategic sections, and a strong digital brand presence.",
+    accent: grad("#030712", "#0dc3d6"),
+    thumbnail: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
+    previewImages: [
+      "https://images.unsplash.com/photo-1521033719794-41049d18a7e8?auto=format&fit=crop&w=1400&q=80",
+      "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=1400&q=80",
+    ],
+    isPremium: true,
+    price: "$69",
+    tags: ["Agency", "Creative", "Premium"],
+    author: "DeepDigital Studio",
+    version: "1.0",
+    createdDate: "2026-07-15",
+    updatedDate: "2026-07-15",
+    sections: [
+      {
+        name: "Header",
+        type: "header",
+        content: {
+          brand: "DeepDigital",
+          links: [
+            { label: "Home", href: "#top" },
+            { label: "About", href: "#about" },
+            { label: "Services", href: "#services" },
+            { label: "Works", href: "#work" },
+            { label: "Blog", href: "#blog" },
+            { label: "Contact", href: "#contact" },
+          ],
+          cta: { label: "1-800-123-4567", href: "tel:1-800-123-4567" },
+        },
+      },
+      {
+        name: "Hero",
+        type: "hero",
+        content: {
+          eyebrow: "/02",
+          title: "Bold digital experiences for ambitious brands.",
+          body: "DeepDigital builds immersive websites, brand systems, and product experiences with a premium dark aesthetic.",
+          primaryCta: { label: "Start a project", href: "#contact" },
+          secondaryCta: { label: "View work", href: "#work" },
+          image: "https://images.unsplash.com/photo-1517487881594-2787fef5ebf7?auto=format&fit=crop&w=1400&q=80",
+        },
+      },
+      {
+        name: "About",
+        type: "about",
+        content: {
+          eyebrow: "Who We Are",
+          title: "We’re a strategic digital agency that brings bold ideas to life.",
+          body: "From brand storytelling to immersive digital product experiences, we help ambitious companies stand out with clarity and confidence.",
+          bullets: [
+            "A creative team built for modern digital brands",
+            "Design systems that feel sharp, immersive, and memorable",
+            "Launch support focused on impact, conversion, and growth",
+          ],
+          image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=1000&q=80",
+        },
+      },
+      {
+        name: "Key offering",
+        type: "features",
+        content: {
+          eyebrow: "What We Believe",
+          title: "We create digital experiences with strategy, clarity, and modern form.",
+          body: "A strategic approach that balances visual impact with measurable business value.",
+          items: [
+            { title: "What We Believe", body: "Design should feel intelligent, bold, and easy to understand." },
+            { title: "What We Do", body: "We build websites, campaigns, and experiences that move audiences." },
+            { title: "World Offices", body: "Remote-first teams working across global markets for fast, high-quality delivery." },
+            { title: "Media Center", body: "Content systems that support launches, storytelling, and audience growth." },
+            { title: "Our People", body: "A small team of specialists focused on strategy, design, and execution." },
+            { title: "Social Impact", body: "Digital experiences created with thoughtful brand purpose in mind." },
+          ],
+        },
+      },
+      {
+        name: "Process",
+        type: "process",
+        content: {
+          eyebrow: "Our Process",
+          title: "A concise workflow for planning, building, and launching premium digital products.",
+          steps: [
+            { title: "Planning", body: "We define goals, audience, and the strategic path for your digital launch." },
+            { title: "Organization", body: "We structure work, timelines, and creative direction for efficient delivery." },
+            { title: "Management", body: "We keep the project aligned to quality, brand, and user experience standards." },
+            { title: "Support", body: "We stay invested after launch with optimization and ongoing collaboration." },
+          ],
+        },
+      },
+      {
+        name: "Latest Projects",
+        type: "portfolio",
+        content: {
+          eyebrow: "Latest Projects",
+          title: "A selection of recent work that balances visual confidence with thoughtful detail.",
+          items: [
+            { title: "Dolore Magna", body: "A dark product launch for a modern studio.", image: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=1200&q=80" },
+            { title: "11 Coaching", body: "A premium website for a high-performance coaching brand.", image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80" },
+            { title: "Acknowledging", body: "A bold digital experience with strong brand presence.", image: "https://images.unsplash.com/photo-1517487881594-2787fef5ebf7?auto=format&fit=crop&w=1200&q=80" },
+          ],
+        },
+      },
+      {
+        name: "Latest News",
+        type: "raw",
+        content: {
+          html: `<section id="blog" class="w-full bg-white"><div class="mx-auto max-w-7xl px-6 py-20 lg:px-10"><div class="max-w-2xl"><p class="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500">Latest News</p><h2 class="mt-3 text-3xl font-black text-slate-900 sm:text-4xl">Insights from our studio.</h2><p class="mt-4 text-lg text-slate-600">Discover the latest in digital experience design, brand launches, and creative strategy.</p></div><div class="mt-12 grid gap-6 lg:grid-cols-3"><article class="rounded-[1.75rem] border border-slate-200 bg-white p-8 shadow-sm"><p class="text-xs uppercase tracking-[0.3em] text-slate-500">May 22, 2024</p><h3 class="mt-4 text-xl font-semibold text-slate-900">Sample post with image</h3><p class="mt-3 text-slate-600">Insightful looks at the latest trends in modern digital design.</p></article><article class="rounded-[1.75rem] border border-slate-200 bg-white p-8 shadow-sm"><p class="text-xs uppercase tracking-[0.3em] text-slate-500">May 18, 2024</p><h3 class="mt-4 text-xl font-semibold text-slate-900">Post with carousel</h3><p class="mt-3 text-slate-600">A look at interactive experiences and immersive media layouts.</p></article><article class="rounded-[1.75rem] border border-slate-200 bg-white p-8 shadow-sm"><p class="text-xs uppercase tracking-[0.3em] text-slate-500">May 12, 2024</p><h3 class="mt-4 text-xl font-semibold text-slate-900">Sample post with YouTube video</h3><p class="mt-3 text-slate-600">Storytelling through video, motion, and brand-driven narratives.</p></article></div></div></section>`,
+        },
+      },
+      {
+        name: "Contact",
+        type: "contact",
+        content: {
+          eyebrow: "Contact Us",
+          title: "Reach out to start a bold new project.",
+          body: "Tell us about your goals and we’ll craft a premium digital experience built for growth.",
+          details: [
+            "hello@deepdigital.com",
+            "Remote-first, global clients",
+            "Response within 24 hours",
+          ],
+        },
+      },
+      {
+        name: "Footer",
+        type: "footer",
+        content: {
+          brand: "DeepDigital",
+          links: [
+            { label: "Blog", href: "#blog" },
+            { label: "About", href: "#about" },
+            { label: "Social", href: "#social" },
+            { label: "Contact", href: "#contact" },
+          ],
+          social: [
+            { label: "Twitter", href: "https://twitter.com" },
+            { label: "Facebook", href: "https://facebook.com" },
+            { label: "YouTube", href: "https://youtube.com" },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: "academy-drivewell",
+    slug: "academy-drivewell",
+    name: "DriveWell Academy",
+    category: "Business",
+    pageType: "multi-page",
+    description: "A premium multipage driving academy website with bold green branding, a top contact bar, and a polished student-focused layout.",
+    accent: grad("#0f4d1a", "#16a34a"),
+    thumbnail: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1200&q=80",
+    previewImages: [
+      "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1400&q=80",
+      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
+    ],
+    isPremium: true,
+    price: "$69",
+    tags: ["Business", "Education", "Agency"],
+    author: "DriveWell Studio",
+    createdDate: "2026-07-15",
+    updatedDate: "2026-07-15",
+    sharedSections: [
+      {
+        name: "Header",
+        type: "header",
+        content: {
+          topBar: {
+            phone: "1-800-555-1234",
+            email: "hello@drivewell.com",
+          },
+          brand: "DriveWell Academy",
+          brandHref: "index.html",
+          links: [
+            { label: "Home", href: "index.html" },
+            { label: "About", href: "about.html" },
+            { label: "Services", href: "services.html" },
+            { label: "FAQs", href: "faqs.html" },
+            { label: "Contact", href: "contact.html" },
+          ],
+          cta: { label: "Register", href: "#contact" },
+        },
+      },
+      {
+        name: "Footer",
+        type: "footer",
+        content: {
+          brand: "DriveWell Academy",
+          links: [
+            { label: "Home", href: "index.html" },
+            { label: "About", href: "about.html" },
+            { label: "Services", href: "services.html" },
+            { label: "Contact", href: "contact.html" },
+          ],
+          social: [
+            { label: "Facebook", href: "https://facebook.com" },
+            { label: "Instagram", href: "https://instagram.com" },
+          ],
+        },
+      },
+    ],
+    pages: [
+      {
+        id: "home",
+        name: "Home",
+        slug: "index",
+        description: "Home page with the exact driving school sections shown in the screenshot.",
+        sections: [
+          {
+            name: "Hero Carousel",
+            type: "carousel-full",
+            content: {
+              eyebrow: "Welcome to",
+              title: "DriveWell Academy",
+              body: "Professional driver education with flexible schedules, expert instructors, and a modern student experience.",
+              slides: [
+                {
+                  label: "Student success",
+                  title: "Confident behind the wheel",
+                  body: "Hands-on lessons and real-world training for every learner.",
+                  image: "https://images.unsplash.com/photo-1519985176271-adb1088fa94c?auto=format&fit=crop&w=1200&q=80",
+                  href: "#contact",
+                  cta: "Book a lesson",
+                },
+                {
+                  label: "Expert instructors",
+                  title: "Support that builds confidence",
+                  body: "Personal coaching, modern curriculum, and a calm learning environment.",
+                  image: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1200&q=80",
+                  href: "#contact",
+                  cta: "Meet our team",
+                },
+                {
+                  label: "Road-ready",
+                  title: "Prepared for every test",
+                  body: "Practical road practice, checklist training, and confidence for the exam.",
+                  image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
+                  href: "#contact",
+                  cta: "Start today",
+                },
+              ],
+            },
+          },
+          {
+            name: "Programs",
+            type: "services",
+            content: {
+              eyebrow: "Services",
+              title: "Our driving programs",
+              body: "Structured courses for teens, adults, and road test preparation with supportive classroom and behind-the-wheel training.",
+              items: [
+                {
+                  title: "Teen Program",
+                  body: "In-car and classroom lessons designed for new teen drivers.",
+                  image: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=900&q=80",
+                  cta: { label: "Register", href: "#contact" },
+                },
+                {
+                  title: "Adult Program",
+                  body: "Flexible lessons for adults who need evening and weekend options.",
+                  image: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=80",
+                  cta: { label: "Register", href: "#contact" },
+                },
+                {
+                  title: "Road Skills Test",
+                  body: "Expert coaching to prepare students for the licensing exam.",
+                  image: "https://images.unsplash.com/photo-1519985176271-adb1088fa94c?auto=format&fit=crop&w=900&q=80",
+                  cta: { label: "Register", href: "#contact" },
+                },
+              ],
+            },
+          },
+          {
+            name: "About",
+            type: "about",
+            content: {
+              eyebrow: "About us",
+              title: "Locally owned and focused on safety, confidence, and real results.",
+              body: "We are fully licensed and members of the Driving School Association of Louisiana and the Driving School Association of the Americas.",
+              bullets: [
+                "Instructors who teach safe driving practices",
+                "Personalized lesson plans for every student",
+                "Courses for every age and experience level",
+              ],
+              image: "https://images.unsplash.com/photo-1520946379778-6c055cc9b132?auto=format&fit=crop&w=1000&q=80",
+              cta: { label: "Learn more about us", href: "#contact" },
+            },
+          },
+          {
+            name: "CTA",
+            type: "cta",
+            content: {
+              variant: "green",
+              eyebrow: "Looking for a trusted local driving school?",
+              title: "Register today for your drivers ed program.",
+              body: "A confident, safe driving future begins with the right training and support.",
+              primaryCta: { label: "Register now", href: "#contact" },
+            },
+          },
+        ],
+      },
+      {
+        id: "about",
+        name: "About",
+        slug: "about",
+        description: "About page that matches the screenshot layout for the academy.",
+        sections: [
+          {
+            name: "Banner",
+            type: "banner",
+            content: {
+              eyebrow: "About Us",
+              title: "We are DriveWell Academy.",
+              body: "Our goal is to see zero accidents on the highways through confident, practical driver education.",
+              breadcrumbs: [
+                { label: "Home", href: "index.html" },
+                { label: "About", href: "about.html" },
+              ],
+              primaryCta: { label: "Register", href: "#contact" },
+              secondaryCta: { label: "Contact us", href: "#contact" },
+              image: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1400&q=80",
+            },
+          },
+          {
+            name: "Mission",
+            type: "about",
+            content: {
+              eyebrow: "Our motto",
+              title: "We are a locally owned and operated driver education facility.",
+              body: "We offer 38 and 14 hour courses for all ages of drivers, and we are committed to providing positive solutions so every student becomes the safest driver they can be.",
+              bullets: [
+                "Locally licensed instructors",
+                "Supportive and structured lessons",
+                "Committed to student safety and competence",
+              ],
+              image: "https://images.unsplash.com/photo-1522107171-5c1af67f0f9f?auto=format&fit=crop&w=1000&q=80",
+              cta: { label: "Learn more about us", href: "#contact" },
+            },
+          },
+          {
+            name: "Why choose us",
+            type: "features",
+            content: {
+              eyebrow: "Why choose us",
+              title: "Why students choose our academy",
+              body: "Experienced instructors, excellent service, and flexible hours designed for every learner.",
+              items: [
+                { title: "Experienced instructors", body: "Certified trainers who focus on safe driving practices." },
+                { title: "Excellent service", body: "Every step is smooth, reliable, and hassle-free." },
+                { title: "Flexible hours", body: "Lessons that fit your schedule with evenings and weekends available." },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        id: "services",
+        name: "Services",
+        slug: "services",
+        description: "Detailed service offerings for DriveWell Academy.",
+        sections: [
+          {
+            name: "Banner",
+            type: "banner",
+            content: {
+              eyebrow: "Our Programs",
+              title: "Driver education designed for every student.",
+              body: "From beginner lessons to licensing prep, our programs give learners confidence behind the wheel.",
+              breadcrumbs: [
+                { label: "Home", href: "index.html" },
+                { label: "Services", href: "services.html" },
+              ],
+              primaryCta: { label: "Enroll now", href: "#contact" },
+              secondaryCta: { label: "See pricing", href: "#contact" },
+              image: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1400&q=80",
+            },
+          },
+          {
+            name: "Programs",
+            type: "services",
+            content: {
+              eyebrow: "Programs",
+              title: "Comprehensive driver training for teens, adults, and test prep.",
+              body: "Structured courses, experienced instructors, and flexible scheduling to help every learner succeed.",
+              items: [
+                {
+                  title: "Teen Driver Education",
+                  body: "In-car and classroom lessons crafted for new teen drivers.",
+                  image: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=900&q=80",
+                  cta: { label: "Register", href: "#contact" },
+                },
+                {
+                  title: "Adult Lessons",
+                  body: "Evening and weekend sessions for adult learners and license renewals.",
+                  image: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=80",
+                  cta: { label: "Register", href: "#contact" },
+                },
+                {
+                  title: "License Prep",
+                  body: "Road test coaching and confidence-building practice for every student.",
+                  image: "https://images.unsplash.com/photo-1519985176271-adb1088fa94c?auto=format&fit=crop&w=900&q=80",
+                  cta: { label: "Register", href: "#contact" },
+                },
+              ],
+            },
+          },
+          {
+            name: "CTA",
+            type: "cta",
+            content: {
+              variant: "green",
+              eyebrow: "Ready to start?",
+              title: "Book your first lesson with DriveWell Academy.",
+              body: "Our team makes driver training easy, safe, and supportive for every student.",
+              primaryCta: { label: "Book a lesson", href: "#contact" },
+            },
+          },
+        ],
+      },
+      {
+        id: "faqs",
+        name: "FAQs",
+        slug: "faqs",
+        description: "Frequently asked questions for students and families.",
+        sections: [
+          {
+            name: "Banner",
+            type: "banner",
+            content: {
+              eyebrow: "FAQ",
+              title: "Questions about lessons, licensing, and schedules.",
+              body: "Everything you need to know before your first lesson with DriveWell Academy.",
+              breadcrumbs: [
+                { label: "Home", href: "index.html" },
+                { label: "FAQs", href: "faqs.html" },
+              ],
+              primaryCta: { label: "Contact us", href: "#contact" },
+              secondaryCta: { label: "Learn more", href: "#contact" },
+              image: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1400&q=80",
+            },
+          },
+          {
+            name: "FAQ",
+            type: "faq",
+            content: {
+              eyebrow: "FAQs",
+              title: "Common questions, answered clearly.",
+              body: "Understand how our courses work, what to expect, and how to get started.",
+              items: [
+                { question: "What age can I start lessons?", answer: "Students can begin driver education as soon as they are eligible for a learner's permit." },
+                { question: "Do you offer weekend classes?", answer: "Yes, we provide evening and weekend sessions for busy learners." },
+                { question: "Can I use my own car for practice?", answer: "Instructors can train in our vehicles or yours depending on licensing requirements." },
+              ],
+            },
+          },
+          {
+            name: "Contact CTA",
+            type: "cta",
+            content: {
+              variant: "green",
+              eyebrow: "Still have questions?",
+              title: "Reach out and we’ll help you choose the right course.",
+              body: "Our staff is here to guide you through scheduling, pricing, and next steps.",
+              primaryCta: { label: "Get in touch", href: "#contact" },
+            },
+          },
+        ],
+      },
+      {
+        id: "contact",
+        name: "Contact",
+        slug: "contact",
+        description: "Contact page for DriveWell Academy.",
+        sections: [
+          {
+            name: "Banner",
+            type: "banner",
+            content: {
+              eyebrow: "Contact",
+              title: "Get in touch with DriveWell Academy.",
+              body: "Questions about registration, lessons, or scheduling? We’re here to help.",
+              breadcrumbs: [
+                { label: "Home", href: "index.html" },
+                { label: "Contact", href: "contact.html" },
+              ],
+              primaryCta: { label: "Call now", href: "tel:1-800-555-1234" },
+              secondaryCta: { label: "Email us", href: "mailto:hello@drivewell.com" },
+              image: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1400&q=80",
+            },
+          },
+          {
+            name: "Map",
+            type: "map",
+            content: {
+              eyebrow: "Visit us",
+              title: "Find our training center in the local area.",
+              body: "We’re easy to reach and ready to support new drivers with flexible lesson options.",
+              details: [
+                "123 Main Street, Springfield, USA",
+                "Phone: 1-800-555-1234",
+                "Email: hello@drivewell.com",
+              ],
+              placeholder: "Map placeholder",
+            },
+          },
+          {
+            name: "Contact CTA",
+            type: "cta",
+            content: {
+              variant: "green",
+              eyebrow: "Ready to register?",
+              title: "Book your first training session today.",
+              body: "Secure your spot in our next available class and start driving with confidence.",
+              primaryCta: { label: "Register now", href: "#contact" },
+            },
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "restaurant-luna",
     name: "Luna Bistro",
     category: "Restaurant",
     description: "A warm, polished restaurant website built for reservations, atmosphere, and memorable dining experiences.",
+
     accent: grad("#b45309", "#dc2626"),
     thumbnail: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80",
     sections: [

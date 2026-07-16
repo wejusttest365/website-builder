@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { nanoid } from "nanoid";
 import type { SectionTemplate } from "./sections";
 import type { TemplateDefinition } from "./templates";
+import { createImageAssetReference, normalizeAssetMap, saveImageBlob, type BuilderAssetEntry } from "./image-storage";
 
 export interface PageSection {
   id: string;
@@ -25,6 +26,48 @@ export interface PageSection {
   sharedKey?: string;
 }
 
+export interface PageSeo {
+  title?: string;
+  description?: string;
+  keywords?: string;
+  canonicalUrl?: string;
+  robots?: string;
+  author?: string;
+  language?: string;
+  viewport?: string;
+  charset?: string;
+  openGraphTitle?: string;
+  openGraphDescription?: string;
+  openGraphImage?: string;
+  openGraphUrl?: string;
+  twitterCard?: string;
+  twitterTitle?: string;
+  twitterDescription?: string;
+  twitterImage?: string;
+  structuredData?: string;
+  customHeadHtml?: string;
+  customCss?: string;
+  customJs?: string;
+}
+
+export interface ProjectSeo {
+  googleAnalyticsId?: string;
+  googleTagManagerId?: string;
+  googleSearchConsoleVerification?: string;
+  googleSiteVerification?: string;
+  bingVerification?: string;
+  facebookPixelId?: string;
+  metaPixelId?: string;
+  googleAdsConversionId?: string;
+  googleAdsConversionLabel?: string;
+  themeColor?: string;
+  favicon?: string;
+  appleTouchIcon?: string;
+  language?: string;
+  viewport?: string;
+  charset?: string;
+}
+
 export interface Page {
   id: string;
   name: string;
@@ -33,6 +76,7 @@ export interface Page {
   hidden?: boolean;
   description?: string; // SEO meta description
   keywords?: string; // SEO meta keywords
+  seo?: PageSeo;
 }
 
 export interface Project {
@@ -43,9 +87,10 @@ export interface Project {
   globalCss: string;
   globalJs: string;
   customHead: string; // Custom HTML for head (GA tracking, etc.)
+  seo?: ProjectSeo;
   createdAt: number;
   updatedAt: number;
-  assets?: Record<string, string>;
+  assets?: Record<string, BuilderAssetEntry>;
   selectedTemplateId?: string | null;
   description?: string;
   keywords?: string;
@@ -58,19 +103,30 @@ interface HistoryEntry {
   globalJs: string;
 }
 
+interface SelectedElementInfo {
+  kind: "section" | "text" | "image" | "link" | "container";
+  index: number | null;
+  tag?: string;
+}
+
 interface BuilderState {
   projects: Record<string, Project>;
   currentProjectId: string | null;
   selectedSectionId: string | null;
+  selectedElement: SelectedElementInfo | null;
+  selectedElementStyle: Record<string, string> | null;
   device: "desktop" | "tablet" | "mobile";
   dark: boolean;
   history: HistoryEntry[];
   historyIndex: number;
   hydrated: boolean;
   leftPanelOpen: boolean;
+  leftPanelView: "pages" | "templates" | "sections" | "widgets" | "media" | "styles" | "settings";
 
   setLeftPanelOpen: (v: boolean) => void;
   toggleLeftPanel: () => void;
+  setLeftPanelView: (view: "pages" | "templates" | "sections" | "widgets" | "media" | "styles" | "settings") => void;
+  setSelectedElementStyle: (style: Record<string, string> | null) => void;
 
   hydrate: () => void;
   persist: () => boolean;
@@ -97,10 +153,13 @@ interface BuilderState {
   toggleCollapsed: (id: string) => void;
   toggleHidden: (id: string) => void;
   selectSection: (id: string | null) => void;
+  selectElement: (value: SelectedElementInfo | null) => void;
 
   setGlobalCss: (v: string) => void;
   setGlobalJs: (v: string) => void;
   setCustomHead: (v: string) => void;
+  setPageSeo: (id: string, patch: Partial<PageSeo>) => void;
+  setProjectSeo: (patch: Partial<ProjectSeo>) => void;
   setPageDescription: (id: string, v: string) => void;
   setPageKeywords: (id: string, v: string) => void;
   setSectionHtml: (id: string, html: string) => void;
@@ -182,7 +241,7 @@ function migrateProject(raw: unknown): Project {
   };
 }
 
-function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null; leftPanelOpen?: boolean } {
+function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null; leftPanelOpen?: boolean; leftPanelView?: "pages" | "templates" | "sections" | "widgets" | "media" | "styles" | "settings" } {
   if (typeof window === "undefined") return { projects: {}, currentProjectId: null };
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY) ?? sessionStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem(LEGACY_KEY);
@@ -190,9 +249,16 @@ function loadFromStorage(): { projects: Record<string, Project>; currentProjectI
     const parsed = JSON.parse(raw) as { projects: Record<string, unknown>; currentProjectId: string | null };
     const projects: Record<string, Project> = {};
     for (const [id, p] of Object.entries(parsed.projects || {})) {
-      projects[id] = migrateProject(p);
+      const migrated = migrateProject(p);
+      migrated.assets = normalizeAssetMap(migrated.assets as Record<string, unknown> | undefined) as Record<string, BuilderAssetEntry> | undefined;
+      projects[id] = migrated;
     }
-    return { projects, currentProjectId: parsed.currentProjectId ?? null, leftPanelOpen: (parsed as any).leftPanelOpen };
+    return {
+      projects,
+      currentProjectId: parsed.currentProjectId ?? null,
+      leftPanelOpen: (parsed as any).leftPanelOpen,
+      leftPanelView: (parsed as any).leftPanelView,
+    };
   } catch {
     return { projects: {}, currentProjectId: null };
   }
@@ -273,6 +339,8 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   projects: {},
   currentProjectId: null,
   selectedSectionId: null,
+  selectedElement: null,
+  selectedElementStyle: null,
   device: "desktop",
   dark: false,
   history: [],
@@ -281,7 +349,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
 
   hydrate: () => {
     if (get().hydrated) return;
-    const { projects, currentProjectId, leftPanelOpen } = loadFromStorage();
+    const { projects, currentProjectId, leftPanelOpen, leftPanelView } = loadFromStorage();
     let pid = currentProjectId;
     let projs = projects;
     if (!pid || !projs[pid]) {
@@ -289,7 +357,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       projs = { ...projs, [proj.id]: proj };
       pid = proj.id;
     }
-    set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: leftPanelOpen ?? true });
+    set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: leftPanelOpen ?? true, leftPanelView: leftPanelView ?? "pages" });
     const p = projs[pid];
     const page = getCurrentPage(p)!;
     set({
@@ -301,7 +369,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   persist: () => {
     if (typeof window === "undefined") return false;
     const { projects, currentProjectId } = get();
-    const payload = JSON.stringify({ projects, currentProjectId, leftPanelOpen: get().leftPanelOpen });
+    const payload = JSON.stringify({ projects, currentProjectId, leftPanelOpen: get().leftPanelOpen, leftPanelView: get().leftPanelView });
 
     if (isStorageAvailable(window.localStorage)) {
       try {
@@ -334,8 +402,11 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
 
   leftPanelOpen: true,
+  leftPanelView: "pages",
   setLeftPanelOpen: (v) => set({ leftPanelOpen: v }),
   toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
+  setLeftPanelView: (view) => set({ leftPanelView: view }),
+  setSelectedElementStyle: (style) => set({ selectedElementStyle: style }),
 
   currentProject: () => {
     const { projects, currentProjectId } = get();
@@ -519,22 +590,91 @@ export const useBuilder = create<BuilderState>((set, get) => ({
 
   applyTemplate: (tpl) => {
     const p = get().currentProject();
-    const page = getCurrentPage(p);
-    if (!p || !page) return;
-    const nextSections = tpl.sections.map((section, index) => ({
+    if (!p) return;
+
+    const createSection = (section: any, key?: string, delayOffset = 0): PageSection => {
+      const shared: "header" | "footer" | undefined = section.type === "header" ? "header" : section.type === "footer" ? "footer" : undefined;
+      return {
+        id: nanoid(8),
+        templateId: `${tpl.id}-${section.name}-${key ?? nanoid(8)}`,
+        name: section.name,
+        html: section.html,
+        animation: { type: "fade-up", duration: 700, delay: delayOffset },
+        ...(shared ? { shared, sharedKey: key } : {}),
+      };
+    };
+
+    const resetProjectBase: Partial<Project> = {
+      name: tpl.name,
+      selectedTemplateId: tpl.id,
+      globalCss: "/* Global CSS */\n",
+      globalJs: "// Global JS\n",
+      customHead: "",
+      seo: undefined,
+      assets: {},
+      description: undefined,
+      keywords: undefined,
+      updatedAt: Date.now(),
+    };
+
+    const buildTemplatePage = (pageDef: any) => {
+      const sharedHeader = (tpl.sharedSections ?? []).filter((section) => section.type === "header");
+      const sharedFooter = (tpl.sharedSections ?? []).filter((section) => section.type === "footer");
+      const pageSections: PageSection[] = [];
+
+      sharedHeader.forEach((section, index) => {
+        pageSections.push(createSection(section, `${tpl.id}-shared-header-${index}`, index * 80));
+      });
+      pageDef.sections.forEach((section: any, index: number) => {
+        pageSections.push(createSection(section, undefined, sharedHeader.length * 80 + index * 80));
+      });
+      sharedFooter.forEach((section, index) => {
+        pageSections.push(createSection(section, `${tpl.id}-shared-footer-${index}`, (sharedHeader.length + pageDef.sections.length + index) * 80));
+      });
+
+      return {
+        id: nanoid(8),
+        name: pageDef.name ?? "Home",
+        slug: slugify(pageDef.slug ?? pageDef.name ?? "index"),
+        description: pageDef.description,
+        keywords: pageDef.keywords,
+        sections: pageSections,
+      };
+    };
+
+    if (tpl.pages && tpl.pages.length > 0) {
+      const pages = tpl.pages.map(buildTemplatePage);
+      const firstPageId = pages[0].id;
+      updateCurrent(set, get, {
+        ...resetProjectBase,
+        pages,
+        currentPageId: firstPageId,
+      });
+      set({ selectedSectionId: null, selectedElement: null, selectedElementStyle: null, history: [{ pageId: firstPageId, sections: JSON.parse(JSON.stringify(pages[0].sections)), globalCss: resetProjectBase.globalCss ?? "", globalJs: resetProjectBase.globalJs ?? "" }], historyIndex: 0 });
+      get().persist();
+      return;
+    }
+
+    const sections = tpl.sections.map((section, index) => ({
       id: nanoid(8),
       templateId: `${tpl.id}-${index}`,
       name: section.name,
       html: section.html,
       animation: { type: "fade-up", duration: 700, delay: index * 80 },
     }));
-    updatePageSections(set, get, nextSections);
+    const page = {
+      id: nanoid(8),
+      name: "Home",
+      slug: "index",
+      sections,
+    };
     updateCurrent(set, get, {
-      selectedTemplateId: tpl.id,
-      updatedAt: Date.now(),
+      ...resetProjectBase,
+      pages: [page],
+      currentPageId: page.id,
     });
-    set({ selectedSectionId: null });
-    get().pushHistory();
+    set({ selectedSectionId: null, selectedElement: null, selectedElementStyle: null, history: [{ pageId: page.id, sections: JSON.parse(JSON.stringify(page.sections)), globalCss: resetProjectBase.globalCss ?? "", globalJs: resetProjectBase.globalJs ?? "" }], historyIndex: 0 });
+    get().persist();
   },
 
   updateSection: (id, patch) => {
@@ -652,26 +792,23 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     updatePageSections(set, get, sections);
   },
 
-  selectSection: (id) => set({ selectedSectionId: id }),
+  selectSection: (id) => set({ selectedSectionId: id, selectedElement: null, selectedElementStyle: null }),
+  selectElement: (value) => set({ selectedElement: value, selectedElementStyle: null }),
 
-  addAsset: (dataUrl, extHint) => {
-    const p = get().currentProject();
-    if (!p) return "";
-    const mimeMatch = /^data:([^;]+);/.exec(dataUrl);
-    const mime = mimeMatch?.[1] ?? "image/png";
-    const ext =
-      extHint?.replace(/^\./, "").toLowerCase() ||
-      (mime.split("/")[1] || "png").replace("jpeg", "jpg");
-    const assets = { ...(p.assets ?? {}) };
-    let n = Object.keys(assets).length + 1;
-    let filename = `image-${n}.${ext}`;
-    while (assets[filename]) {
-      n += 1;
-      filename = `image-${n}.${ext}`;
+  addAsset: (dataUrl, filenameHint) => {
+    try {
+      const p = get().currentProject();
+      if (!p) return "";
+      const { ref, blob } = createImageAssetReference(dataUrl, filenameHint);
+      void saveImageBlob(ref.imageId, ref.filename, blob, ref.mimeType);
+      const assets = { ...(p.assets ?? {}) } as Record<string, BuilderAssetEntry>;
+      assets[ref.filename] = ref;
+      updateCurrent(set, get, { assets });
+      return `images/${ref.filename}`;
+    } catch (err) {
+      console.error("addAsset failed", err);
+      return "";
     }
-    assets[filename] = dataUrl;
-    updateCurrent(set, get, { assets });
-    return `images/${filename}`;
   },
 
   setGlobalCss: (v) => {
@@ -683,18 +820,51 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   setCustomHead: (v) => {
     updateCurrent(set, get, { customHead: v });
   },
+  setPageSeo: (id, patch) => {
+    const p = get().currentProject();
+    if (!p) return;
+    updateCurrent(set, get, {
+      pages: p.pages.map((pg) => {
+        if (pg.id !== id) return pg;
+        const nextSeo = { ...pg.seo, ...patch };
+        const nextPage: Page = { ...pg, seo: nextSeo };
+        if (patch.description !== undefined) nextPage.description = patch.description;
+        if (patch.keywords !== undefined) nextPage.keywords = patch.keywords;
+        return nextPage;
+      }),
+    });
+  },
+  setProjectSeo: (patch) => {
+    updateCurrent(set, get, {
+      seo: { ...get().currentProject()?.seo, ...patch },
+    });
+  },
   setPageDescription: (id, v) => {
     const p = get().currentProject();
     if (!p) return;
     updateCurrent(set, get, {
-      pages: p.pages.map((pg) => (pg.id === id ? { ...pg, description: v } : pg)),
+      pages: p.pages.map((pg) => {
+        if (pg.id !== id) return pg;
+        return {
+          ...pg,
+          description: v,
+          seo: { ...pg.seo, description: v },
+        };
+      }),
     });
   },
   setPageKeywords: (id, v) => {
     const p = get().currentProject();
     if (!p) return;
     updateCurrent(set, get, {
-      pages: p.pages.map((pg) => (pg.id === id ? { ...pg, keywords: v } : pg)),
+      pages: p.pages.map((pg) => {
+        if (pg.id !== id) return pg;
+        return {
+          ...pg,
+          keywords: v,
+          seo: { ...pg.seo, keywords: v },
+        };
+      }),
     });
   },
   setSectionHtml: (id, html) => {

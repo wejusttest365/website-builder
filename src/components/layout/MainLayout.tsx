@@ -9,14 +9,10 @@ export function MainLayout({ children }: { children: ReactNode }) {
     if (typeof document === "undefined") return;
     const html = document.documentElement;
     const body = document.body;
-    const prevHtmlOverflow = html.style.overflow;
-    const prevBodyOverflow = body.style.overflow;
-    html.style.overflow = "hidden";
-    body.style.overflow = "hidden";
-    return () => {
-      html.style.overflow = prevHtmlOverflow;
-      body.style.overflow = prevBodyOverflow;
-    };
+    // Avoid mutating global html/body overflow which can cause layout
+    // shifts when file pickers or dialogs open. Keep layout constrained
+    // using component-level styles instead.
+    return undefined;
   }, []);
 
   return (

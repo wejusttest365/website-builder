@@ -1,29 +1,42 @@
-import { useState } from "react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useMounted } from "@/hooks/use-mounted";
-
-const navItems = [
-  { label: "Dashboard", to: "/dashboard" },
-  { label: "Templates", to: "/templates" },
-  { label: "Pricing", to: "/pricing" },
-  { label: "Documentation", to: "/documentation" },
-];
-
-const actionItems = [
-  { label: "Login", to: "/login" },
-  { label: "Sign Up", to: "/signup", primary: true },
-];
-
-function isActive(pathname: string, to: string) {
-  if (to === "/") return pathname === to;
-  return pathname === to || pathname.startsWith(to + "/");
-}
+import { useBuilder } from "@/lib/builder/store";
+import { buildSiteExport } from "@/lib/builder/preview";
+import JSZip from "jszip";
+import { Download, Moon, Sun, Undo2, Redo2, Monitor, Tablet, Smartphone, Save } from "lucide-react";
 
 export function Header() {
-  const router = useRouter();
-  const pathname = router.state.location.pathname || "/";
-  const [menuOpen, setMenuOpen] = useState(false);
   const mounted = useMounted();
+  const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
+  const dark = useBuilder((s) => s.dark);
+  const device = useBuilder((s) => s.device);
+  const toggleDark = useBuilder((s) => s.toggleDark);
+  const undo = useBuilder((s) => s.undo);
+  const redo = useBuilder((s) => s.redo);
+  const persist = useBuilder((s) => s.persist);
+  const setDevice = useBuilder((s) => s.setDevice);
+
+  async function downloadZip() {
+    if (!project || !mounted) return;
+    const exportData = await buildSiteExport(project);
+    const zip = new JSZip();
+
+    for (const file of exportData.files) {
+      if (file.base64) {
+        zip.file(file.path, file.base64, { base64: true });
+      } else {
+        zip.file(file.path, file.content);
+      }
+    }
+
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${project.name.replace(/\s+/g, "-").toLowerCase()}.zip`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   if (!mounted) {
     return (
@@ -61,101 +74,79 @@ export function Header() {
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
-          {navItems.map((item) => {
-            const active = isActive(pathname, item.to);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-
         <div className="hidden items-center gap-2 md:flex">
-          {actionItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                item.primary
-                  ? "bg-slate-900 text-white hover:bg-slate-800"
-                  : "text-slate-600 hover:bg-slate-900 hover:bg-slate-100"
-              }`}
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            title="Undo"
+            onClick={undo}
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            title="Redo"
+            onClick={redo}
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${device === "desktop" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}
+            title="Desktop preview"
+            onClick={() => setDevice("desktop")}
+          >
+            <Monitor className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${device === "tablet" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}
+            title="Tablet preview"
+            onClick={() => setDevice("tablet")}
+          >
+            <Tablet className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${device === "mobile" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"}`}
+            title="Mobile preview"
+            onClick={() => setDevice("mobile")}
+          >
+            <Smartphone className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            title="Save"
+            onClick={persist}
+          >
+            <Save className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {project ? (
+            <button
+              type="button"
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+              onClick={downloadZip}
             >
-              {item.label}
-            </Link>
-          ))}
+              <Download className="w-4 h-4" />
+              <span className="hidden md:inline">Export ZIP</span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            aria-label="Toggle theme"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+            onClick={toggleDark}
+          >
+            {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
         </div>
 
-        <button
-          type="button"
-          aria-label="Toggle menu"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 md:hidden"
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          <span className="block h-0.5 w-5 rounded-full bg-slate-700"></span>
-          <span className="mt-1 block h-0.5 w-5 rounded-full bg-slate-700"></span>
-          <span className="mt-1 block h-0.5 w-5 rounded-full bg-slate-700"></span>
-        </button>
       </div>
-
-      {menuOpen ? (
-        <div className="border-t border-slate-200 bg-white px-4 py-3 md:hidden">
-          <div className="space-y-2">
-            {navItems.map((item) => {
-              const active = isActive(pathname, item.to);
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
-                  }`}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-          <div className="mt-3 flex flex-col gap-2">
-            {actionItems.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={`block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  item.primary
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-                onClick={() => setMenuOpen(false)}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-slate-400" /> Theme toggle
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
-              <span className="h-7 w-7 rounded-full bg-slate-100 text-center leading-7">U</span> Avatar
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
-              <span className="h-7 w-7 rounded-full bg-slate-100 text-center leading-7">S</span> Settings
-            </span>
-          </div>
-        </div>
-      ) : null}
     </header>
   );
 }

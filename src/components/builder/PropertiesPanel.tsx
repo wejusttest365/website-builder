@@ -1,14 +1,138 @@
 import { useBuilder, pageOf } from "@/lib/builder/store";
 import { nanoid } from "nanoid";
-import { Plus, Trash2, Copy, Eye, EyeOff, UploadCloud } from "lucide-react";
-import type { ReactNode } from "react";
+import { Plus, Trash2, Copy, Eye, EyeOff, UploadCloud, Facebook, Twitter, Instagram, Linkedin, ChevronUp, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+
+const inputCls =
+  "w-full px-2 py-1 rounded border border-input bg-background/90 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
+const selectCls = inputCls + " max-w-[10rem]";
+
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        {title}
+      </div>
+      <div className="space-y-1">{children}</div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="w-full">
+      <div className="text-xs text-muted-foreground mb-1">{label}</div>
+      <div onMouseDown={(e) => e.stopPropagation()}>{children}</div>
+    </div>
+  );
+}
+
+function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: string) => void; onBlur: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [pickerPosition, setPickerPosition] = useState({ top: 8, left: 8 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  const normalizedValue = (value || "").trim();
+  const swatchValue = /^#/.test(normalizedValue) ? normalizedValue : "#ffffff";
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const width = 220;
+      const height = 120;
+      const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.left));
+      const top = Math.min(window.innerHeight - height - 12, Math.max(12, rect.bottom + 8));
+      setPickerPosition({ top, left });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
+
+  return (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        ref={triggerRef}
+        onClick={() => setOpen((prev) => !prev)}
+        onBlur={onBlur}
+        className="h-8 w-9 shrink-0 rounded border border-input bg-background p-1 shadow-sm transition hover:bg-accent"
+        aria-label="Open color picker"
+      >
+        <span className="block h-full w-full rounded-sm border border-black/10" style={{ backgroundColor: swatchValue }} />
+      </button>
+      <input
+        className={inputCls}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        placeholder="transparent"
+      />
+      {open && (
+        <div
+          ref={popoverRef}
+          className="fixed z-[1000] w-[220px] rounded-lg border border-border bg-popover p-3 shadow-xl"
+          style={{ top: pickerPosition.top, left: pickerPosition.left }}
+        >
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={swatchValue}
+              onChange={(e) => onChange(e.target.value)}
+              onBlur={onBlur}
+              className="h-9 w-9 cursor-pointer rounded border border-input bg-background p-0"
+            />
+            <input
+              className="h-9 w-full rounded border border-input bg-background px-2 text-sm"
+              value={normalizedValue || ""}
+              onChange={(e) => onChange(e.target.value)}
+              onBlur={onBlur}
+              placeholder="#ffffff"
+            />
+          </div>
+          <div className="mt-2 text-[11px] text-muted-foreground">The picker stays inside the builder window.</div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function PropertiesPanel() {
   const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
   const selectedId = useBuilder((s) => s.selectedSectionId);
+  const selectedElement = useBuilder((s) => s.selectedElement);
+  const selectedElementStyle = useBuilder((s) => s.selectedElementStyle);
   const updateSection = useBuilder((s) => s.updateSection);
   const pushHistory = useBuilder((s) => s.pushHistory);
   const addAsset = useBuilder((s) => s.addAsset);
+
+  // Hooks must run unconditionally — define local React hooks here
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const draggedIndexRef = useRef<number | null>(null);
 
   const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === selectedId) ?? null;
 
@@ -23,13 +147,31 @@ export function PropertiesPanel() {
 
   const style = section.style ?? {};
   const isFooter = /^\s*<footer\b/i.test(section.html);
+  const isTopBar = /data-wto-topbar\b/i.test(section.html);
+  const isHeaderLike = (section as any).shared === "header" || /<header\b/i.test(section.html) || /<nav\b/i.test(section.html) || /\[data-wto-nav\]/i.test(section.html);
+  const isTeamSection = /<section\b[^>]*\b(id=["']?team["']?)|Meet the team|Trusted by teams/i.test(section.html);
+  const isElementSelected = Boolean(selectedElement && selectedElement.kind !== "section");
+  const showSectionControls = !isElementSelected;
   const textItems = getEditableTextItems(section.html);
   const menuItems = isFooter ? [] : getMenuItems(section.html);
   const linkItems = getLinkItems(section.html);
   const repeater = isFooter ? null : getRepeater(section.html);
   const isAccordion = !!repeater && isAccordionSection(section.html);
   const footerCols = isFooter ? getFooterColumns(section.html) : [];
+  const teamGridColumns = isTeamSection ? getTeamGridColumnCount(section.html) : null;
+  const selectedTeamGridItem = isTeamSection
+    ? getTeamGridItemInfo(section.html, selectedElement?.index ?? 0) ?? getFirstTeamGridItemInfo(section.html)
+    : null;
+  const selectedTeamGridGap = selectedTeamGridItem ? getTeamGridGap(section.html) : "";
+  const showHeaderMenuControls = isHeaderLike;
   const imageItems = getImageItems(section.html);
+  const selectedTextItem = selectedElement?.kind === "text" && selectedElement.index != null ? textItems[selectedElement.index] ?? null : null;
+  const selectedImageItem = selectedElement?.kind === "image" && selectedElement.index != null ? imageItems[selectedElement.index] ?? null : null;
+  const selectedLinkItem = selectedElement?.kind === "link" && selectedElement.index != null ? linkItems[selectedElement.index] ?? null : null;
+  const sectionLinkItems = linkItems;
+  const selectedContainerStyle = selectedElement?.kind === "container" && selectedElement.index != null ? getContainerStyleState(section.html, selectedElement.index) : null;
+  const selectedLinkStyle = selectedElement?.kind === "link" && selectedElement.index != null ? getLinkStyleState(section.html, selectedElement.index) : null;
+  const selectedContainerTypography = selectedElement?.kind === "container" && selectedElement.index != null ? getContainerTypographyState(section.html, selectedElement.index) : null;
   const assets = project?.assets;
   const backgroundImage = (style["background-image"] ?? "")
     .replace(/^url\(|\)$/g, "")
@@ -48,7 +190,10 @@ export function PropertiesPanel() {
     const normalizedPath = normalizeAssetPath(path);
     if (/^(images\/|\.\/images\/|\/images\/)/.test(normalizedPath)) {
       const filename = normalizedPath.replace(/^(\.\/)?(\/)?images\//, "");
-      return project?.assets?.[filename] ?? normalizedPath;
+      const asset = project?.assets?.[filename];
+      if (!asset) return normalizedPath;
+      if (typeof asset === "string") return asset;
+      return asset.previewSrc || asset.src || normalizedPath;
     }
     return normalizedPath;
   }
@@ -78,8 +223,10 @@ export function PropertiesPanel() {
     const m = /images\/([^"'\/\s]+)$/.exec(normalizedPath);
     if (!m) return;
     const filename = m[1];
-    const dataUrl = project.assets?.[filename];
-    if (!dataUrl) return;
+    const asset = project.assets[filename];
+    if (!asset) return;
+    const dataUrl = typeof asset === 'string' ? asset : asset.previewSrc || asset.src;
+    if (!dataUrl || typeof dataUrl !== 'string') return;
     try {
       const parts = dataUrl.split(',');
       const meta = parts[0];
@@ -119,10 +266,68 @@ export function PropertiesPanel() {
 
   const updateHtml = (html: string) => updateSection(section.id, { html });
 
+  const selectedTypographyState = (() => {
+    if (selectedElement && selectedElementStyle) {
+      return {
+        fontFamily: selectedElementStyle.fontFamily || '',
+        fontSize: selectedElementStyle.fontSize || '',
+        color: selectedElementStyle.color || '',
+        fontWeight: selectedElementStyle.fontWeight || '',
+        lineHeight: selectedElementStyle.lineHeight || '',
+        textAlign: selectedElementStyle.textAlign || '',
+        letterSpacing: selectedElementStyle.letterSpacing || '',
+        textTransform: selectedElementStyle.textTransform || '',
+      };
+    }
+    if (selectedElement?.kind === 'text' && selectedTextItem) return selectedTextItem;
+    if (selectedElement?.kind === 'link' && selectedLinkStyle) return selectedLinkStyle;
+    if (selectedElement?.kind === 'container' && selectedContainerTypography) return selectedContainerTypography;
+    return {
+      fontFamily: style['font-family'] || '',
+      fontSize: style['font-size'] || '',
+      color: style['color'] || '',
+      fontWeight: style['font-weight'] || '',
+      lineHeight: style['line-height'] || '',
+      textAlign: style['text-align'] || '',
+      letterSpacing: style['letter-spacing'] || '',
+      textTransform: style['text-transform'] || '',
+    };
+  })();
+
+  const typographyTargetLabel = (() => {
+    if (selectedElement?.kind === 'text') return selectedTextItem?.label || 'Text';
+    if (selectedElement?.kind === 'link') return 'Link';
+    if (selectedElement?.kind === 'container') return 'Container';
+    return 'Section';
+  })();
+
+  function applyTypographyChange(key: string, value: string) {
+    if (!section) return;
+    if (selectedElement?.kind === 'text' && selectedElement.index != null) {
+      updateHtml(setTextItemStyle(section.html, selectedElement.index, { [key]: value } as any));
+      pushHistory();
+      return;
+    }
+    if (selectedElement?.kind === 'link' && selectedElement.index != null) {
+      updateHtml(setLinkStyle(section.html, selectedElement.index, { [key]: value } as any));
+      pushHistory();
+      return;
+    }
+    if (selectedElement?.kind === 'container' && selectedElement.index != null) {
+      updateHtml(setContainerTypography(section.html, selectedElement.index, { [key]: value } as any));
+      pushHistory();
+      return;
+    }
+    set(key, value);
+  }
+
   return (
-    <div className="h-full min-w-0 bg-card flex flex-col">
-      <div className="p-4 border-b border-border">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground">Section</div>
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-transparent">
+      <div className="p-3 border-b border-border/70 bg-card/55 backdrop-blur">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+          <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
+          <span>Section</span>
+        </div>
         <input
           value={section.name}
           onChange={(e) => updateSection(section.id, { name: e.target.value })}
@@ -130,9 +335,203 @@ export function PropertiesPanel() {
           className="mt-1 w-full text-base font-semibold bg-transparent focus:outline-none"
         />
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5 text-sm">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-3 pb-4 space-y-4 text-sm" style={{ scrollbarGutter: "stable" }}>
+        {/* Removed helper box per UX request: element controls now appear inline */}
+
+        {sectionLinkItems.length > 0 ? (
+          <Group title="Section CTAs">
+            <div className="space-y-2 rounded-3xl border border-input/80 bg-background p-3">
+              {sectionLinkItems.map((link, index) => (
+                <div key={`${link.text || 'action'}-${index}`} className="space-y-2 rounded-3xl border border-slate-700/80 bg-background p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">{link.text || `Action ${index + 1}`}</div>
+                      <div className="text-[11px] text-slate-500">{link.href || "#"}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition hover:bg-accent"
+                        title={link.hidden ? "Show CTA" : "Hide CTA"}
+                        onClick={() => {
+                          updateHtml(toggleLinkVisibility(section.html, index));
+                          pushHistory();
+                        }}
+                      >
+                        {link.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition hover:bg-accent"
+                        title="Delete CTA"
+                        onClick={() => {
+                          updateHtml(removeLinkItem(section.html, index));
+                          pushHistory();
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <Field label="Href">
+                    <input
+                      className={inputCls}
+                      value={link.href}
+                      placeholder="# or https://..."
+                      onChange={(e) => updateHtml(updateLinkItem(section.html, index, { href: e.target.value }))}
+                      onBlur={pushHistory}
+                    />
+                  </Field>
+                  <Field label="Label">
+                    <input
+                      className={inputCls}
+                      value={link.text}
+                      placeholder="Button label"
+                      onChange={(e) => updateHtml(updateLinkItem(section.html, index, { text: e.target.value }))}
+                      onBlur={pushHistory}
+                    />
+                  </Field>
+                </div>
+              ))}
+            </div>
+          </Group>
+        ) : null}
+
+        {/* Typography - unified controls (font family, size, weight, line-height, color, alignment) */}
+        {!isFooter && (
+          <Group title={`Typography · ${typographyTargetLabel}`}>
+            <Field label="Font family">
+              {(() => {
+                const families = [
+                  "ui-sans-serif, system-ui, sans-serif",
+                  "Georgia, serif",
+                  "ui-monospace, monospace",
+                  '"Inter", sans-serif',
+                  '"Poppins", sans-serif',
+                  '"Montserrat", sans-serif',
+                ];
+                const cur = selectedTypographyState.fontFamily || "";
+                const opts = cur && cur.trim() ? (families.includes(cur) ? families : [cur, ...families]) : families;
+                return (
+                  <select
+                    className={selectCls}
+                    value={cur}
+                    onChange={(e) => applyTypographyChange('fontFamily', e.target.value)}
+                    onBlur={pushHistory}
+                  >
+                    {opts.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                );
+              })()}
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Font size">
+                {(() => {
+                  const sizes = ["12px", "13px", "14px", "15px", "16px", "18px", "20px", "24px", "28px", "32px", "36px", "40px", "48px"];
+                  const cur = selectedTypographyState.fontSize || "";
+                  const opts = cur && cur.trim() ? (sizes.includes(cur) ? sizes : [cur, ...sizes]) : sizes;
+                  return (
+                    <select
+                      className={selectCls}
+                      value={cur}
+                      onChange={(e) => applyTypographyChange('fontSize', e.target.value)}
+                      onBlur={pushHistory}
+                    >
+                      {opts.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                })()}
+              </Field>
+              <Field label="Weight">
+                <select
+                  className={selectCls}
+                  value={selectedTypographyState.fontWeight || ""}
+                  onChange={(e) => applyTypographyChange('fontWeight', e.target.value)}
+                  onBlur={pushHistory}
+                >
+                  <option value="">{selectedTypographyState.fontWeight || "Default"}</option>
+                  <option value="400">Regular</option>
+                  <option value="500">Medium</option>
+                  <option value="600">Semibold</option>
+                  <option value="700">Bold</option>
+                </select>
+              </Field>
+            </div>
+            <Field label="Line height">
+              <select
+                className={selectCls}
+                value={selectedTypographyState.lineHeight || ""}
+                onChange={(e) => applyTypographyChange('lineHeight', e.target.value)}
+                onBlur={pushHistory}
+              >
+                <option value="">{selectedTypographyState.lineHeight || "Line height"}</option>
+                <option value="1">1</option>
+                <option value="1.15">1.15</option>
+                <option value="1.25">1.25</option>
+                <option value="1.5">1.5</option>
+                <option value="1.75">1.75</option>
+                <option value="2">2</option>
+              </select>
+            </Field>
+            <Field label="Text color">
+              <ColorInput
+                value={selectedTypographyState.color || ""}
+                onChange={(v) => applyTypographyChange('color', v)}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Align">
+                <select
+                  className={selectCls}
+                  value={selectedTypographyState.textAlign || ""}
+                  onChange={(e) => applyTypographyChange('textAlign', e.target.value)}
+                  onBlur={pushHistory}
+                >
+                  <option value="">{selectedTypographyState.textAlign || "Default"}</option>
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                  <option value="justify">Justify</option>
+                </select>
+              </Field>
+              <Field label="Case">
+                <select
+                  className={selectCls}
+                  value={selectedTypographyState.textTransform || ""}
+                  onChange={(e) => applyTypographyChange('textTransform', e.target.value)}
+                  onBlur={pushHistory}
+                >
+                  <option value="">{selectedTypographyState.textTransform || "Default"}</option>
+                  <option value="none">None</option>
+                  <option value="uppercase">Uppercase</option>
+                  <option value="lowercase">Lowercase</option>
+                  <option value="capitalize">Capitalize</option>
+                </select>
+              </Field>
+            </div>
+            <Field label="Spacing">
+              <input
+                className={inputCls}
+                value={selectedTypographyState.letterSpacing || ""}
+                placeholder="0.5px"
+                onChange={(e) => applyTypographyChange('letterSpacing', e.target.value)}
+                onBlur={pushHistory}
+              />
+            </Field>
+          </Group>
+        )}
+
         {/* Brand / Logo controls moved into scrollable area so it scrolls with the panel */}
-        {(() => {
+        {showSectionControls && isHeaderLike && (() => {
           const brand = findBrandAnchor(section.html);
           if (!brand) return null;
           const brandMode = brand.mode || (brand.src ? "logo" : brand.text ? "text" : "hidden");
@@ -210,10 +609,14 @@ export function PropertiesPanel() {
                           if (!f) return;
                           const r = new FileReader();
                           r.onload = () => {
-                            const dataUrl = String(r.result);
-                            const assetPath = addAsset(dataUrl, f.name.split(".").pop());
-                            updateHtml(setBrandImage(section.html, assetPath));
-                            pushHistory();
+                            try {
+                              const dataUrl = String(r.result);
+                              const assetPath = addAsset(dataUrl, f.name);
+                              updateHtml(setBrandImage(section.html, assetPath));
+                              pushHistory();
+                            } catch (err) {
+                              console.error("brand upload failed", err);
+                            }
                           };
                           r.readAsDataURL(f);
                         }}
@@ -242,14 +645,27 @@ export function PropertiesPanel() {
                   if (!cta) return null;
                   return (
                     <div className="mt-2 space-y-2">
-                      <Field label="CTA text">
-                        <input
-                          className={inputCls}
-                          value={cta.text}
-                          onChange={(e) => updateHtml(setHeaderCTAHref(section.html, cta.href || "#", e.target.value))}
-                          onBlur={pushHistory}
-                        />
-                      </Field>
+                      <div className="grid grid-cols-[1fr_auto] gap-2">
+                        <Field label="CTA text">
+                          <input
+                            className={inputCls}
+                            value={cta.text}
+                            onChange={(e) => updateHtml(setHeaderCTAHref(section.html, cta.href || "#", e.target.value))}
+                            onBlur={pushHistory}
+                          />
+                        </Field>
+                        <button
+                          type="button"
+                          className="mt-6 inline-flex h-10 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
+                          title={cta.hidden ? "Show CTA button" : "Hide CTA button"}
+                          onClick={() => {
+                            updateHtml(toggleHeaderCTAVisibility(section.html));
+                            pushHistory();
+                          }}
+                        >
+                          {cta.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                       <Field label="CTA link">
                         <input
                           className={inputCls}
@@ -268,124 +684,304 @@ export function PropertiesPanel() {
         })()}
 
         {isFooter && (
-          <Group title={`Footer Columns (${footerCols.length})`}>
+          <Group title="Typography">
             <div className="space-y-3">
-              {footerCols.map((col, ci) => (
-                <div key={ci} className="rounded-md border border-input p-2 space-y-1.5 bg-background">
-                  <div className="flex items-center justify-between gap-2">
+              {/* Font Family - Full Width */}
+              <div>
+                <select className={selectCls} value={getFooterFontFamily(section.html)} onChange={(e) => updateHtml(setFooterTextStyle(section.html, { fontFamily: e.target.value }))} onBlur={pushHistory}>
+                  <option value="">{getFooterFontFamily(section.html) || "Default"}</option>
+                  <option value="ui-sans-serif, system-ui, sans-serif">Sans (system)</option>
+                  <option value="Georgia, serif">Serif</option>
+                  <option value="ui-monospace, monospace">Mono</option>
+                  <option value='"Inter", sans-serif'>Inter</option>
+                  <option value='"Poppins", sans-serif'>Poppins</option>
+                  <option value='"Montserrat", sans-serif'>Montserrat</option>
+                </select>
+              </div>
+
+              {/* Weight & Size - Two Columns */}
+              <div className="grid grid-cols-2 gap-2">
+                <select className={selectCls} value={getFooterFontWeight(section.html)} onChange={(e) => updateHtml(setFooterTextStyle(section.html, { fontWeight: e.target.value }))} onBlur={pushHistory}>
+                  <option value="">{getFooterFontWeight(section.html) || "Default"}</option>
+                  <option value="400">Regular</option>
+                  <option value="500">Medium</option>
+                  <option value="600">Semibold</option>
+                  <option value="700">Bold</option>
+                </select>
+                <select className={selectCls} value={getFooterTextSize(section.html)} onChange={(e) => updateHtml(setFooterTextStyle(section.html, { fontSize: e.target.value }))} onBlur={pushHistory}>
+                  <option value="">{getFooterTextSize(section.html) || "Default"}</option>
+                  <option value="12px">12</option>
+                  <option value="14px">14</option>
+                  <option value="16px">16</option>
+                  <option value="18px">18</option>
+                  <option value="20px">20</option>
+                  <option value="24px">24</option>
+                </select>
+              </div>
+
+              {/* Line Height - Dropdown */}
+                <select className={selectCls} value={getFooterLineHeight(section.html)} onChange={(e) => updateHtml(setFooterTextStyle(section.html, { lineHeight: e.target.value }))} onBlur={pushHistory}>
+                <option value="">{getFooterLineHeight(section.html) || "Line height"}</option>
+                <option value="1">1</option>
+                <option value="1.15">1.15</option>
+                <option value="1.5">1.5</option>
+                <option value="1.75">1.75</option>
+                <option value="2">2</option>
+              </select>
+            </div>
+          </Group>
+        )}
+
+        {isFooter && (
+          <Group title="Alignment">
+            <div className="flex gap-1">
+              {[
+                { value: 'left', icon: '☰', title: 'Left' },
+                { value: 'center', icon: '≡', title: 'Center' },
+                { value: 'right', icon: '☰', title: 'Right' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  title={opt.title}
+                  className={`flex-1 h-8 flex items-center justify-center rounded text-sm transition border ${getFooterTextAlign(section.html) === opt.value ? 'bg-foreground text-background border-foreground' : 'border-input hover:bg-accent'}`}
+                  onClick={() => {
+                    updateHtml(setFooterTextStyle(section.html, { textAlign: opt.value }));
+                    pushHistory();
+                  }}
+                >
+                  {opt.icon}
+                </button>
+              ))}
+            </div>
+          </Group>
+        )}
+
+        {isFooter && (
+          <Group title="Color">
+            <ColorInput
+              value={getFooterTextColor(section.html) || ""}
+              onChange={(v) => updateHtml(setFooterTextStyle(section.html, { color: v }))}
+              onBlur={pushHistory}
+            />
+          </Group>
+        )}
+        {isFooter && (
+          <Group title="Contact Info">
+            <Field label="Phone">
+              <input
+                className={inputCls}
+                value={getFooterPhone(section.html)}
+                placeholder="+1 (555) 123-4567"
+                onChange={(e) => updateHtml(setFooterPhone(section.html, e.target.value))}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <Field label="Email">
+              <input
+                className={inputCls}
+                value={getFooterEmail(section.html)}
+                placeholder="info@example.com"
+                onChange={(e) => updateHtml(setFooterEmail(section.html, e.target.value))}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <Field label="Address">
+              <input
+                className={inputCls}
+                value={getFooterAddress(section.html)}
+                placeholder="123 Main St, City, State"
+                onChange={(e) => updateHtml(setFooterAddress(section.html, e.target.value))}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <div className="mt-3">
+              <div className="text-xs text-muted-foreground mb-2 font-medium">Social Links</div>
+              <div className="space-y-2">
+                {[
+                  { key: 'facebook', icon: Facebook, placeholder: 'https://facebook.com/yourpage' },
+                  { key: 'twitter', icon: Twitter, placeholder: 'https://twitter.com/yourhandle' },
+                  { key: 'instagram', icon: Instagram, placeholder: 'https://instagram.com/yourprofile' },
+                  { key: 'linkedin', icon: Linkedin, placeholder: 'https://linkedin.com/company/yourcompany' },
+                ].map(({ key, icon: IconComponent, placeholder }) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <div className="w-8 h-8 flex items-center justify-center text-muted-foreground flex-shrink-0">
+                      <IconComponent className="w-4 h-4" />
+                    </div>
                     <input
                       className={inputCls}
-                      value={col.heading}
-                      placeholder="Column heading"
-                      onChange={(e) => updateHtml(setFooterColumnHeading(section.html, ci, e.target.value))}
+                      value={getFooterSocialLink(section.html, key)}
+                      placeholder={placeholder}
+                      onChange={(e) => updateHtml(setFooterSocialLink(section.html, key, e.target.value))}
                       onBlur={pushHistory}
                     />
                     <button
                       type="button"
-                      title="Delete column"
-                      className="p-1.5 hover:bg-destructive/10 text-destructive rounded disabled:opacity-30"
-                      disabled={footerCols.length <= 1}
+                      title={getFooterSocialVisibility(section.html, key) ? 'Hide' : 'Show'}
+                      className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded flex-shrink-0"
                       onClick={() => {
-                        updateHtml(removeFooterColumn(section.html, ci));
+                        updateHtml(setFooterSocialVisibility(section.html, key, !getFooterSocialVisibility(section.html, key)));
+                        pushHistory();
+                      }}
+                    >
+                      {getFooterSocialVisibility(section.html, key) ? (
+                        <Eye className="w-4 h-4" />
+                      ) : (
+                        <EyeOff className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Group>
+        )}
+
+        {isTopBar && (
+          <Group title="Information Bar">
+            <Field label="Phone">
+              <input
+                className={inputCls}
+                value={getTopBarPhone(section.html)}
+                placeholder="+1 (800) 555-1234"
+                onChange={(e) => updateHtml(setTopBarPhone(section.html, e.target.value))}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <Field label="Email">
+              <input
+                className={inputCls}
+                value={getTopBarEmail(section.html)}
+                placeholder="hello@drivewell.com"
+                onChange={(e) => updateHtml(setTopBarEmail(section.html, e.target.value))}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <Field label="Address">
+              <input
+                className={inputCls}
+                value={getTopBarAddress(section.html)}
+                placeholder="123 Main St, City"
+                onChange={(e) => updateHtml(setTopBarAddress(section.html, e.target.value))}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <Field label="Hours">
+              <input
+                className={inputCls}
+                value={getTopBarHours(section.html)}
+                placeholder="Mon–Fri 9am–6pm"
+                onChange={(e) => updateHtml(setTopBarHours(section.html, e.target.value))}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <Field label="Announcement">
+              <input
+                className={inputCls}
+                value={getTopBarNote(section.html)}
+                placeholder="Free lesson available this month"
+                onChange={(e) => updateHtml(setTopBarNote(section.html, e.target.value))}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <Field label="Button label">
+              <input
+                className={inputCls}
+                value={getTopBarButtonText(section.html)}
+                placeholder="Book now"
+                onChange={(e) => updateHtml(setTopBarButtonText(section.html, e.target.value))}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <Field label="Button link">
+              <input
+                className={inputCls}
+                value={getTopBarButtonHref(section.html)}
+                placeholder="#"
+                onChange={(e) => updateHtml(setTopBarButtonHref(section.html, e.target.value))}
+                onBlur={pushHistory}
+              />
+            </Field>
+            <div className="mt-3">
+              <div className="text-xs text-muted-foreground mb-2 font-medium">Social Links</div>
+              <div className="space-y-2">
+                {[
+                  { key: 'facebook', icon: Facebook, placeholder: 'https://facebook.com/yourpage' },
+                  { key: 'twitter', icon: Twitter, placeholder: 'https://twitter.com/yourhandle' },
+                  { key: 'instagram', icon: Instagram, placeholder: 'https://instagram.com/yourprofile' },
+                  { key: 'linkedin', icon: Linkedin, placeholder: 'https://linkedin.com/company/yourcompany' },
+                ].map(({ key, icon: IconComponent, placeholder }) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <div className="w-8 h-8 flex items-center justify-center text-muted-foreground flex-shrink-0">
+                      <IconComponent className="w-4 h-4" />
+                    </div>
+                    <input
+                      className={inputCls}
+                      value={getTopBarSocialLink(section.html, key)}
+                      placeholder={placeholder}
+                      onChange={(e) => updateHtml(setTopBarSocialLink(section.html, key, e.target.value))}
+                      onBlur={pushHistory}
+                    />
+                    <button
+                      type="button"
+                      title={getTopBarSocialVisibility(section.html, key) ? 'Hide' : 'Show'}
+                      className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded flex-shrink-0"
+                      onClick={() => {
+                        updateHtml(setTopBarSocialVisibility(section.html, key, !getTopBarSocialVisibility(section.html, key)));
+                        pushHistory();
+                      }}
+                    >
+                      {getTopBarSocialVisibility(section.html, key) ? (
+                        <Eye className="w-4 h-4" />
+                      ) : (
+                        <EyeOff className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Group>
+        )}
+
+        {showHeaderMenuControls && (
+          <Group title="Menu Items">
+            <div className="space-y-2">
+              {menuItems.length > 0 ? (
+                menuItems.map((item, index) => (
+                  <div key={`${item.text}-${index}`} className="grid grid-cols-[1fr_74px_28px] gap-1.5">
+                    <input
+                      className={inputCls}
+                      value={item.text}
+                      aria-label={`Menu item ${index + 1} label`}
+                      onChange={(e) => updateHtml(updateMenuItem(section.html, index, { text: e.target.value }))}
+                      onBlur={pushHistory}
+                    />
+                    <input
+                      className={inputCls}
+                      value={item.href}
+                      aria-label={`Menu item ${index + 1} link`}
+                      onChange={(e) => updateHtml(updateMenuItem(section.html, index, { href: e.target.value }))}
+                      onBlur={pushHistory}
+                    />
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center justify-center rounded-md border border-input text-destructive hover:bg-destructive/10"
+                      title="Remove menu item"
+                      onClick={() => {
+                        updateHtml(removeMenuItem(section.html, index));
                         pushHistory();
                       }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <div className="space-y-1">
-                    {col.items.map((it, ii) => (
-                      <div key={ii} className="grid grid-cols-[1fr_1fr_28px] gap-1.5">
-                        <input
-                          className={inputCls}
-                          value={it.text}
-                          placeholder="Label"
-                          onChange={(e) =>
-                            updateHtml(updateFooterColumnItem(section.html, ci, ii, { text: e.target.value }))
-                          }
-                          onBlur={pushHistory}
-                        />
-                        <input
-                          className={inputCls}
-                          value={it.href}
-                          placeholder="#"
-                          onChange={(e) =>
-                            updateHtml(updateFooterColumnItem(section.html, ci, ii, { href: e.target.value }))
-                          }
-                          onBlur={pushHistory}
-                        />
-                        <button
-                          type="button"
-                          className="inline-flex h-8 items-center justify-center rounded-md border border-input text-destructive hover:bg-destructive/10"
-                          title="Remove item"
-                          onClick={() => {
-                            updateHtml(removeFooterColumnItem(section.html, ci, ii));
-                            pushHistory();
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      className="inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-input bg-background text-[11px] font-medium hover:bg-accent"
-                      onClick={() => {
-                        updateHtml(addFooterColumnItem(section.html, ci));
-                        pushHistory();
-                      }}
-                    >
-                      <Plus className="h-3 w-3" /> Add menu item
-                    </button>
-                  </div>
+                ))
+              ) : (
+                <div className="rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground">
+                  No menu items detected in this header. Add one below to edit it here.
                 </div>
-              ))}
-              <button
-                type="button"
-                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-xs font-medium hover:bg-accent"
-                onClick={() => {
-                  updateHtml(addFooterColumn(section.html));
-                  pushHistory();
-                }}
-              >
-                <Plus className="h-3.5 w-3.5" /> Add column
-              </button>
-            </div>
-          </Group>
-        )}
-
-        {menuItems.length > 0 && (
-          <Group title="Menu Items">
-            <div className="space-y-2">
-              {menuItems.map((item, index) => (
-                <div key={`${item.text}-${index}`} className="grid grid-cols-[1fr_74px_28px] gap-1.5">
-                  <input
-                    className={inputCls}
-                    value={item.text}
-                    aria-label={`Menu item ${index + 1} label`}
-                    onChange={(e) => updateHtml(updateMenuItem(section.html, index, { text: e.target.value }))}
-                    onBlur={pushHistory}
-                  />
-                  <input
-                    className={inputCls}
-                    value={item.href}
-                    aria-label={`Menu item ${index + 1} link`}
-                    onChange={(e) => updateHtml(updateMenuItem(section.html, index, { href: e.target.value }))}
-                    onBlur={pushHistory}
-                  />
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center justify-center rounded-md border border-input text-destructive hover:bg-destructive/10"
-                    title="Remove menu item"
-                    onClick={() => {
-                      updateHtml(removeMenuItem(section.html, index));
-                      pushHistory();
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
+              )}
               <button
                 type="button"
                 className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-xs font-medium hover:bg-accent"
@@ -400,49 +996,115 @@ export function PropertiesPanel() {
           </Group>
         )}
 
-        {repeater && repeater.items.length > 1 && (
+        {teamGridColumns != null && (
+          <Group title="Columns">
+            <div className="rounded-md border border-input bg-background p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
+                  title="Remove a column"
+                  onClick={() => {
+                    updateHtml(setTeamGridColumnCount(section.html, Math.max(1, teamGridColumns - 1)));
+                    pushHistory();
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+                <div className="text-sm font-medium">{teamGridColumns} columns</div>
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
+                  title="Add a column"
+                  onClick={() => {
+                    updateHtml(addTeamGridColumn(section.html, selectedElement?.index ?? undefined));
+                    pushHistory();
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+              <Field label="Grid columns">
+                <select
+                  className={selectCls}
+                  value={String(teamGridColumns)}
+                  onChange={(e) => {
+                    updateHtml(setTeamGridColumnCount(section.html, Number(e.target.value)));
+                    pushHistory();
+                  }}
+                  onBlur={pushHistory}
+                >
+                  {[1, 2, 3, 4, 5, 6].map((count) => (
+                    <option key={count} value={count}>{count}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </Group>
+        )}
+
+        {repeater && repeater.items.length > 0 && (
           <Group title={`Items (${repeater.items.length})`}>
             <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-semibold text-muted-foreground">Items ({repeater.items.length})</div>
+                <div>
+                  <button type="button" title="Add item" className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-2 py-1 text-xs" onClick={() => { updateHtml(addRepeaterItem(section.html)); pushHistory(); }}>
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
               {repeater.items.map((it, i) => (
-                <div key={i} className="rounded-md border border-input p-2 space-y-1.5 bg-background">
-                  <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                <div key={i} className="rounded-2xl border border-input bg-background p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-3 text-xs font-semibold text-muted-foreground mb-3">
                     <span>Item {i + 1}</span>
                     <div className="flex gap-1">
                       <button
                         type="button"
+                        title="Move up"
+                        disabled={i === 0}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent disabled:opacity-50"
+                        onClick={() => { updateHtml(moveRepeaterItem(section.html, i, -1)); pushHistory(); }}
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Move down"
+                        disabled={i === repeater.items.length - 1}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent disabled:opacity-50"
+                        onClick={() => { updateHtml(moveRepeaterItem(section.html, i, 1)); pushHistory(); }}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
                         title="Duplicate"
-                        className="p-1 hover:bg-accent rounded"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
                         onClick={() => {
                           updateHtml(duplicateRepeaterItem(section.html, i));
                           pushHistory();
                         }}
                       >
-                        <Copy className="h-3.5 w-3.5" />
+                        <Copy className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
                         title="Delete"
                         disabled={repeater.items.length <= 1}
-                        className="p-1 hover:bg-destructive/10 text-destructive rounded disabled:opacity-30"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-destructive hover:bg-destructive/10 disabled:opacity-50"
                         onClick={() => {
                           updateHtml(removeRepeaterItem(section.html, i));
                           pushHistory();
                         }}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
                   {!isAccordion && (
                     <>
-                      <input
-                        className={inputCls}
-                        placeholder="Image URL"
-                        value={it.image}
-                        onChange={(e) => updateHtml(setRepeaterItemImage(section.html, i, e.target.value))}
-                        onBlur={pushHistory}
-                      />
-                      <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+                      <label className="inline-flex items-center gap-2 rounded-2xl border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
                         <UploadCloud className="h-4 w-4" />
                         Upload image
                         <input
@@ -454,9 +1116,13 @@ export function PropertiesPanel() {
                             if (!f) return;
                             const r = new FileReader();
                             r.onload = () => {
-                              const path = addAsset(String(r.result), f.name.split(".").pop());
-                              updateHtml(setRepeaterItemImage(section.html, i, path));
-                              pushHistory();
+                              try {
+                                const path = addAsset(String(r.result), f.name);
+                                updateHtml(setRepeaterItemImage(section.html, i, path));
+                                pushHistory();
+                              } catch (err) {
+                                console.error("repeater image upload failed", err);
+                              }
                             };
                             r.readAsDataURL(f);
                           }}
@@ -472,23 +1138,29 @@ export function PropertiesPanel() {
                     </>
                   )}
                   {it.hasTitle && (
-                    <input
-                      className={inputCls}
-                      placeholder="Title"
-                      value={it.title}
-                      onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "title", e.target.value))}
-                      onBlur={pushHistory}
-                    />
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Question</div>
+                      <input
+                        className={inputCls}
+                        placeholder="Question"
+                        value={it.title}
+                        onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "title", e.target.value))}
+                        onBlur={pushHistory}
+                      />
+                    </div>
                   )}
                   {it.hasBody && (
-                    <textarea
-                      className={inputCls}
-                      rows={2}
-                      placeholder="Body"
-                      value={it.body}
-                      onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "body", e.target.value))}
-                      onBlur={pushHistory}
-                    />
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Answer</div>
+                      <textarea
+                        className={inputCls}
+                        rows={2}
+                        placeholder="Answer"
+                        value={it.body}
+                        onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "body", e.target.value))}
+                        onBlur={pushHistory}
+                      />
+                    </div>
                   )}
                   {it.hasLink && !isAccordion && (
                     <input
@@ -527,7 +1199,7 @@ export function PropertiesPanel() {
           </Group>
         )}
 
-        {linkItems.length > 0 && (
+        {showSectionControls && linkItems.length > 0 && (
           <Group title="Links & Buttons">
             <div className="space-y-2">
               {linkItems.map((item, index) => (
@@ -575,39 +1247,141 @@ export function PropertiesPanel() {
           </Group>
         )}
 
-        {textItems.length > 0 && (
-          <Group title="Text Content">
-            {textItems.slice(0, 10).map((item, index) => (
-              <Field key={`${item.tag}-${index}`} label={item.label}>
+        {selectedElement?.kind === "text" && selectedTextItem && (
+          <Group title="Text">
+            <div className="space-y-2 rounded-md border border-input bg-background p-2">
+              <Field label={selectedTextItem.label}>
                 <input
                   className={inputCls}
-                  value={item.text}
-                  aria-label={`${item.label} text`}
-                  onChange={(e) => updateHtml(updateTextItem(section.html, index, e.target.value))}
+                  value={selectedTextItem.text}
+                  aria-label={`${selectedTextItem.label} text`}
+                  onChange={(e) => updateHtml(updateTextItem(section.html, selectedElement.index ?? 0, e.target.value))}
                   onBlur={pushHistory}
                 />
               </Field>
-            ))}
+              <Field label="Tag">
+                <select
+                  className={inputCls}
+                  value={selectedTextItem.tag || "p"}
+                  onChange={(e) => {
+                    updateHtml(setTextItemTag(section.html, selectedElement.index ?? 0, e.target.value));
+                    pushHistory();
+                  }}
+                >
+                  <option value="h1">H1</option>
+                  <option value="h2">H2</option>
+                  <option value="h3">H3</option>
+                  <option value="h4">H4</option>
+                  <option value="h5">H5</option>
+                  <option value="h6">H6</option>
+                  <option value="p">Paragraph</option>
+                  <option value="span">Span</option>
+                </select>
+              </Field>
+            </div>
           </Group>
         )}
 
-        {imageItems.length > 0 && (
+        {selectedElement?.kind === "image" && selectedImageItem ? (
+          <Group title="Image">
+            <div className="space-y-2 rounded-md border border-input bg-background p-2">
+              <div className="text-xs font-semibold text-muted-foreground">{selectedImageItem.label}</div>
+              <label className="text-xs font-medium text-muted-foreground">ALT</label>
+              <input
+                className={inputCls}
+                value={selectedImageItem.alt}
+                placeholder="ALT"
+                onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { alt: e.target.value }))}
+                onBlur={pushHistory}
+              />
+              <Field label="Width">
+                <input
+                  className={inputCls}
+                  value={selectedImageItem.width || ""}
+                  placeholder="100%"
+                  onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { width: e.target.value }))}
+                  onBlur={pushHistory}
+                />
+              </Field>
+              <Field label="Height">
+                <input
+                  className={inputCls}
+                  value={selectedImageItem.height || ""}
+                  placeholder="auto"
+                  onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { height: e.target.value }))}
+                  onBlur={pushHistory}
+                />
+              </Field>
+              <Field label="Fit">
+                <select
+                    className={inputCls}
+                    value={selectedImageItem.objectFit || ""}
+                    onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { objectFit: e.target.value }))}
+                    onBlur={pushHistory}
+                  >
+                    <option value="">{selectedImageItem.objectFit || "Default"}</option>
+                  <option value="cover">Cover</option>
+                  <option value="contain">Contain</option>
+                  <option value="fill">Fill</option>
+                  <option value="none">None</option>
+                  <option value="scale-down">Scale down</option>
+                </select>
+              </Field>
+              <Field label="Radius">
+                <input
+                  className={inputCls}
+                  value={selectedImageItem.borderRadius || ""}
+                  placeholder="16px"
+                  onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { borderRadius: e.target.value }))}
+                  onBlur={pushHistory}
+                />
+              </Field>
+              <Field label="Opacity">
+                <input
+                  className={inputCls}
+                  value={selectedImageItem.opacity || ""}
+                  placeholder="1"
+                  onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { opacity: e.target.value }))}
+                  onBlur={pushHistory}
+                />
+              </Field>
+              <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+                <UploadCloud className="h-4 w-4" />
+                Upload image
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      const r = new FileReader();
+                      r.onload = () => {
+                        try {
+                          const path = addAsset(String(r.result), f.name);
+                          updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { src: path }));
+                          pushHistory();
+                        } catch (err) {
+                          console.error("selected image upload failed", err);
+                        }
+                      };
+                      r.readAsDataURL(f);
+                    }}
+                />
+              </label>
+            </div>
+          </Group>
+        ) : !isElementSelected && imageItems.length > 0 && (
           <Group title="Images">
             {imageItems.map((item, index) => (
               <div key={`${item.label}-${index}`} className="space-y-2 rounded-md border border-input bg-background p-2">
                 <div className="text-xs font-semibold text-muted-foreground">{item.label}</div>
+                <label className="text-xs font-medium text-muted-foreground">ALT</label>
                 <input
                   className={inputCls}
                   value={item.alt}
-                  placeholder="Alt text"
+                  placeholder="ALT"
                   onChange={(e) => updateHtml(updateImageItem(section.html, index, { alt: e.target.value }))}
-                  onBlur={pushHistory}
-                />
-                <input
-                  className={inputCls}
-                  value={item.src}
-                  placeholder="Image URL"
-                  onChange={(e) => updateHtml(updateImageItem(section.html, index, { src: e.target.value }))}
                   onBlur={pushHistory}
                 />
                 <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
@@ -622,9 +1396,13 @@ export function PropertiesPanel() {
                       if (!f) return;
                       const r = new FileReader();
                       r.onload = () => {
-                        const path = addAsset(String(r.result), f.name.split(".").pop());
-                        updateHtml(updateImageItem(section.html, index, { src: path }));
-                        pushHistory();
+                        try {
+                          const path = addAsset(String(r.result), f.name);
+                          updateHtml(updateImageItem(section.html, index, { src: path }));
+                          pushHistory();
+                        } catch (err) {
+                          console.error("image list upload failed", err);
+                        }
                       };
                       r.readAsDataURL(f);
                     }}
@@ -635,129 +1413,160 @@ export function PropertiesPanel() {
           </Group>
         )}
 
-        <Group title="Background">
-          <Field label="Color">
-            <ColorInput
-              value={style["background-color"] ?? ""}
-              onChange={(v) => set("background-color", v)}
-              onBlur={pushHistory}
-            />
-          </Field>
-          <Field label="Image URL">
-            <input
-              className={inputCls}
-              value={(style["background-image"] ?? "").replace(/^url\(|\)$/g, "").replace(/^["']|["']$/g, "")}
-              onChange={(e) => set("background-image", e.target.value ? `url("${e.target.value}")` : "")}
-              onBlur={pushHistory}
-              placeholder="https://…"
-            />
-          </Field>
-          <Field label="Upload">
-            <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
-              <UploadCloud className="h-4 w-4" />
-              Upload Image
-              <input
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (!f) return;
-                  const r = new FileReader();
-                  r.onload = () => {
-                    const path = addAsset(String(r.result), f.name.split(".").pop());
-                    set("background-image", `url("${path}")`);
-                    pushHistory();
-                  };
-                  r.readAsDataURL(f);
-                }}
-              />
-            </label>
-          </Field>
-          {backgroundImage && /^images\//.test(backgroundImage) && (
-            <Field label="Download">
+        {/* Container group removed per user request */}
+
+        {isElementSelected && selectedElement && selectedElement.kind !== "text" ? null : null}
+
+        {/* If an individual link/button is selected, show href input */}
+        {selectedElement && (selectedElement.kind === 'link' || selectedElement.tag === 'a' || selectedElement.tag === 'button') ? (
+          (() => {
+            const idx = selectedElement.index ?? -1;
+            const linkList = getLinkItems(section.html);
+            const curHref = idx >= 0 && linkList[idx] ? linkList[idx].href : '';
+            if (idx < 0) return null;
+            return (
+              <Group title="Link">
+                <div className="space-y-2 rounded-md border border-input bg-background p-2">
+                  <Field label="Href">
+                    <input
+                      className={inputCls}
+                      value={curHref}
+                      placeholder="# or https://..."
+                      onChange={(e) => {
+                        updateHtml(updateLinkItem(section.html, idx, { href: e.target.value }));
+                      }}
+                      onBlur={pushHistory}
+                    />
+                  </Field>
+                </div>
+              </Group>
+            );
+          })()
+        ) : null}
+
+        {selectedTeamGridItem ? (
+          <Group title="Columns">
+            <div className="rounded-md border border-input bg-background p-3 space-y-3">
+              <div className="space-y-2">
+                {selectedTeamGridItem.children.map((_, index) => (
+                  <div key={index} className="flex items-center justify-between rounded-md border border-slate-200/80 bg-slate-50 px-3 py-2">
+                    <span className="text-sm font-medium text-slate-700">Column {index + 1}</span>
+                    <button
+                      type="button"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
+                      title={`Delete column ${index + 1}`}
+                      disabled={selectedTeamGridItem.children.length <= 1}
+                      onClick={() => {
+                        updateHtml(removeTeamGridColumnByIndex(section.html, index));
+                        pushHistory();
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
               <button
                 type="button"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
-                onClick={() => downloadAssetByPath(backgroundImage)}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-sm font-medium text-muted-foreground hover:bg-accent"
+                onClick={() => {
+                  updateHtml(addTeamGridColumn(section.html, selectedElement?.index ?? 0));
+                  pushHistory();
+                }}
               >
-                Download
+                <Plus className="h-4 w-4" /> Add column
               </button>
-            </Field>
-          )}
-        </Group>
+              <Field label="Grid gap">
+                <input
+                  className={inputCls}
+                  value={selectedTeamGridGap}
+                  placeholder="e.g. 1.5rem"
+                  onChange={(e) => updateHtml(setTeamGridGap(section.html, e.target.value))}
+                  onBlur={pushHistory}
+                />
+              </Field>
+            </div>
+          </Group>
+        ) : null}
 
-        <Group title="Text">
-          <Field label="Text color">
-            <ColorInput
-              value={style["color"] ?? ""}
-              onChange={(v) => set("color", v)}
-              onBlur={pushHistory}
-            />
-          </Field>
-        </Group>
+        {showSectionControls ? (
+          <>
+            <Group title="Background">
+              <Field label="Color">
+                <ColorInput
+                  value={style["background-color"] ?? ""}
+                  onChange={(v) => set("background-color", v)}
+                  onBlur={pushHistory}
+                />
+              </Field>
+              <Field label="Image URL">
+                <input
+                  className={inputCls}
+                  value={(style["background-image"] ?? "").replace(/^url\(|\)$/g, "").replace(/^['\"]|['\"]$/g, "")}
+                  onChange={(e) => set("background-image", e.target.value ? `url("${e.target.value}")` : "")}
+                  onBlur={pushHistory}
+                  placeholder="https://…"
+                />
+              </Field>
+              <Field label="Upload">
+                <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+                  <UploadCloud className="h-4 w-4" />
+                  Upload Image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      const r = new FileReader();
+                      r.onload = () => {
+                        try {
+                          const path = addAsset(String(r.result), f.name);
+                          set("background-image", `url("${path}")`);
+                          pushHistory();
+                        } catch (err) {
+                          console.error("background upload failed", err);
+                        }
+                      };
+                      r.readAsDataURL(f);
+                    }}
+                  />
+                </label>
+              </Field>
+              {backgroundImage && /^images\//.test(backgroundImage) && (
+                <Field label="Download">
+                  <button
+                    type="button"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
+                    onClick={() => downloadAssetByPath(backgroundImage)}
+                  >
+                    Download
+                  </button>
+                </Field>
+              )}
+            </Group>
 
-        <Group title="Spacing">
-          <Field label="Padding">
-            <input className={inputCls} value={style["padding"] ?? ""} onChange={(e) => set("padding", e.target.value)} onBlur={pushHistory} placeholder="e.g. 40px 20px" />
-          </Field>
-          <Field label="Margin">
-            <input className={inputCls} value={style["margin"] ?? ""} onChange={(e) => set("margin", e.target.value)} onBlur={pushHistory} placeholder="e.g. 0" />
-          </Field>
-        </Group>
+            <Group title="Style">
+              <Field label="Border Radius">
+                <input className={inputCls} value={style["border-radius"] ?? ""} onChange={(e) => set("border-radius", e.target.value)} onBlur={pushHistory} placeholder="e.g. 16px" />
+              </Field>
+              <Field label="Shadow">
+                <select
+                  className={inputCls}
+                  value={style["box-shadow"] ?? ""}
+                  onChange={(e) => set("box-shadow", e.target.value)}
+                  onBlur={pushHistory}
+                >
+                  <option value="">None</option>
+                  <option value="0 1px 2px rgba(0,0,0,.06)">Subtle</option>
+                  <option value="0 4px 10px rgba(0,0,0,.08)">Soft</option>
+                  <option value="0 10px 30px rgba(0,0,0,.15)">Medium</option>
+                  <option value="0 25px 50px -12px rgba(0,0,0,.25)">Large</option>
+                </select>
+              </Field>
+            </Group>
 
-        <Group title="Layout">
-          <Field label="Width">
-            <input className={inputCls} value={style["width"] ?? ""} onChange={(e) => set("width", e.target.value)} onBlur={pushHistory} placeholder="e.g. 100%" />
-          </Field>
-          <Field label="Height">
-            <input className={inputCls} value={style["height"] ?? ""} onChange={(e) => set("height", e.target.value)} onBlur={pushHistory} placeholder="auto" />
-          </Field>
-          <Field label="Border Radius">
-            <input className={inputCls} value={style["border-radius"] ?? ""} onChange={(e) => set("border-radius", e.target.value)} onBlur={pushHistory} placeholder="e.g. 16px" />
-          </Field>
-          <Field label="Shadow">
-            <select
-              className={inputCls}
-              value={style["box-shadow"] ?? ""}
-              onChange={(e) => set("box-shadow", e.target.value)}
-              onBlur={pushHistory}
-            >
-              <option value="">None</option>
-              <option value="0 1px 2px rgba(0,0,0,.06)">Subtle</option>
-              <option value="0 4px 10px rgba(0,0,0,.08)">Soft</option>
-              <option value="0 10px 30px rgba(0,0,0,.15)">Medium</option>
-              <option value="0 25px 50px -12px rgba(0,0,0,.25)">Large</option>
-            </select>
-          </Field>
-        </Group>
-
-        <Group title="Typography">
-          <Field label="Text align">
-            <select className={inputCls} value={style["text-align"] ?? ""} onChange={(e) => set("text-align", e.target.value)} onBlur={pushHistory}>
-              <option value="">Default</option>
-              <option value="left">Left</option>
-              <option value="center">Center</option>
-              <option value="right">Right</option>
-            </select>
-          </Field>
-          <Field label="Font family">
-            <select className={inputCls} value={style["font-family"] ?? ""} onChange={(e) => set("font-family", e.target.value)} onBlur={pushHistory}>
-              <option value="">Default</option>
-              <option value="ui-sans-serif, system-ui, sans-serif">Sans (system)</option>
-              <option value="Georgia, serif">Serif</option>
-              <option value="ui-monospace, monospace">Mono</option>
-              <option value='"Inter", sans-serif'>Inter</option>
-              <option value='"Poppins", sans-serif'>Poppins</option>
-            </select>
-          </Field>
-          <Field label="Font size">
-            <input className={inputCls} value={style["font-size"] ?? ""} onChange={(e) => set("font-size", e.target.value)} onBlur={pushHistory} placeholder="e.g. 16px" />
-          </Field>
-          <Field label="Line height">
-            <input className={inputCls} value={style["line-height"] ?? ""} onChange={(e) => set("line-height", e.target.value)} onBlur={pushHistory} placeholder="e.g. 1.5" />
-          </Field>
-        </Group>
         <Group title="Animation">
           <Field label="Type">
             <select
@@ -827,73 +1636,374 @@ export function PropertiesPanel() {
             <Field label="Color">
               <ColorInput value={getFooterCopyrightColor(section.html)} onChange={(v) => updateHtml(setFooterCopyrightColor(section.html, v))} onBlur={pushHistory} />
             </Field>
-            <Field label="Font size">
-              <input className={inputCls} value={getFooterCopyrightFontSize(section.html)} onChange={(e) => updateHtml(setFooterCopyrightFontSize(section.html, e.target.value))} onBlur={pushHistory} placeholder="e.g. 12px" />
-            </Field>
           </Group>
         )}
 
-        <Group title="Advanced">
-          <Field label="Section ID">
-            <input className={inputCls} value={section.domId ?? ""} onChange={(e) => updateSection(section.id, { domId: e.target.value })} onBlur={pushHistory} placeholder="my-section" />
-          </Field>
-          <Field label="Custom class">
-            <input className={inputCls} value={section.className ?? ""} onChange={(e) => updateSection(section.id, { className: e.target.value })} onBlur={pushHistory} placeholder="my-class" />
-          </Field>
-        </Group>
+            <Group title="Advanced">
+              <Field label="Section ID">
+                <input className={inputCls} value={section.domId ?? ""} onChange={(e) => updateSection(section.id, { domId: e.target.value })} onBlur={pushHistory} placeholder="my-section" />
+              </Field>
+              <Field label="Custom class">
+                <input className={inputCls} value={section.className ?? ""} onChange={(e) => updateSection(section.id, { className: e.target.value })} onBlur={pushHistory} placeholder="my-class" />
+              </Field>
+            </Group>
+          </>
+        ) : null}
       </div>
     </div>
   );
 }
 
-const inputCls =
-  "w-full px-2.5 py-1.5 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring";
-
-function Group({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-        {title}
-      </div>
-      <div className="space-y-2">{children}</div>
-    </div>
-  );
+function getFooterPhone(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => n.getAttribute && n.getAttribute('data-wto-phone') === 'true') as HTMLElement | undefined;
+  return el ? (el.textContent || '').trim() : '';
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="grid grid-cols-[100px_1fr] items-center gap-2">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {children}
-    </label>
-  );
+function setFooterPhone(html: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const footer = doc.body.querySelector('footer');
+  if (!footer) return html;
+  let el = Array.from(footer.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-phone') === 'true') as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('data-wto-phone', 'true');
+    el.setAttribute('class', 'text-sm text-gray-300');
+    footer.appendChild(el);
+  }
+  el.textContent = text;
+  return serialize(doc);
 }
 
-function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: string) => void; onBlur: () => void }) {
-  return (
-    <div className="flex gap-2">
-      <input
-        type="color"
-        value={/^#/.test(value) ? value : "#ffffff"}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        className="w-9 h-8 rounded border border-input bg-background cursor-pointer"
-      />
-      <input
-        className={inputCls}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        placeholder="transparent"
-      />
-    </div>
-  );
+function getFooterEmail(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => n.getAttribute && n.getAttribute('data-wto-email') === 'true') as HTMLElement | undefined;
+  return el ? (el.textContent || '').trim() : '';
 }
+
+function setFooterEmail(html: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const footer = doc.body.querySelector('footer');
+  if (!footer) return html;
+  let el = Array.from(footer.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-email') === 'true') as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('data-wto-email', 'true');
+    el.setAttribute('class', 'text-sm text-gray-300');
+    footer.appendChild(el);
+  }
+  el.textContent = text;
+  return serialize(doc);
+}
+
+function getFooterAddress(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => n.getAttribute && n.getAttribute('data-wto-address') === 'true') as HTMLElement | undefined;
+  return el ? (el.textContent || '').trim() : '';
+}
+
+function setFooterAddress(html: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const footer = doc.body.querySelector('footer');
+  if (!footer) return html;
+  let el = Array.from(footer.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-address') === 'true') as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('data-wto-address', 'true');
+    el.setAttribute('class', 'text-sm text-gray-300');
+    footer.appendChild(el);
+  }
+  el.textContent = text;
+  return serialize(doc);
+}
+
+function getFooterSocialLink(html: string, social: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => n.getAttribute && n.getAttribute('data-wto-social') === social) as HTMLElement | undefined;
+  return el ? (el.getAttribute('href') || '') : '';
+}
+
+function setFooterSocialLink(html: string, social: string, href: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const footer = doc.body.querySelector('footer');
+  if (!footer) return html;
+  let el = Array.from(footer.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-social') === social) as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('a');
+    el.setAttribute('data-wto-social', social);
+    el.setAttribute('class', 'inline-block text-gray-300 hover:text-white mr-3');
+    el.setAttribute('target', '_blank');
+    el.setAttribute('rel', 'noopener noreferrer');
+    el.textContent = social.charAt(0).toUpperCase() + social.slice(1);
+    footer.appendChild(el);
+  }
+  if (href) el.setAttribute('href', href);
+  else el.removeAttribute('href');
+  return serialize(doc);
+}
+
+function getFooterSocialVisibility(html: string, social: string) {
+  const doc = parseHtml(html);
+  if (!doc) return true;
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => n.getAttribute && n.getAttribute('data-wto-social') === social) as HTMLElement | undefined;
+  if (!el) return true;
+  const style = el.getAttribute('style') || '';
+  return !style.includes('display:none') && !style.includes('display: none');
+}
+
+function setFooterSocialVisibility(html: string, social: string, visible: boolean) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => n.getAttribute && n.getAttribute('data-wto-social') === social) as HTMLElement | undefined;
+  if (!el) return html;
+  const style = (el.getAttribute('style') || '').replace(/display\s*:\s*none\s*;?/gi, '').trim();
+  const nextStyle = visible ? style : (style ? `${style}; display:none` : 'display:none');
+  if (nextStyle) el.setAttribute('style', nextStyle);
+  else el.removeAttribute('style');
+  return serialize(doc);
+}
+
+function getTopBarRoot(doc: Document) {
+  return doc.body.querySelector('section[data-wto-topbar]') as HTMLElement | null;
+}
+
+function getTopBarPhone(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const root = getTopBarRoot(doc);
+  if (!root) return '';
+  const el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-phone') === 'true') as HTMLElement | undefined;
+  return el ? (el.textContent || '').trim() : '';
+}
+
+function setTopBarPhone(html: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const root = getTopBarRoot(doc);
+  if (!root) return html;
+  let el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-phone') === 'true') as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('data-wto-phone', 'true');
+    root.appendChild(el);
+  }
+  el.textContent = text;
+  return serialize(doc);
+}
+
+function getTopBarEmail(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const root = getTopBarRoot(doc);
+  if (!root) return '';
+  const el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-email') === 'true') as HTMLElement | undefined;
+  return el ? (el.textContent || '').trim() : '';
+}
+
+function setTopBarEmail(html: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const root = getTopBarRoot(doc);
+  if (!root) return html;
+  let el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-email') === 'true') as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('data-wto-email', 'true');
+    root.appendChild(el);
+  }
+  el.textContent = text;
+  return serialize(doc);
+}
+
+function getTopBarAddress(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const root = getTopBarRoot(doc);
+  if (!root) return '';
+  const el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-address') === 'true') as HTMLElement | undefined;
+  return el ? (el.textContent || '').trim() : '';
+}
+
+function setTopBarAddress(html: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const root = getTopBarRoot(doc);
+  if (!root) return html;
+  let el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-address') === 'true') as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('data-wto-address', 'true');
+    root.appendChild(el);
+  }
+  el.textContent = text;
+  return serialize(doc);
+}
+
+function getTopBarHours(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const root = getTopBarRoot(doc);
+  if (!root) return '';
+  const el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-hours') === 'true') as HTMLElement | undefined;
+  return el ? (el.textContent || '').trim() : '';
+}
+
+function setTopBarHours(html: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const root = getTopBarRoot(doc);
+  if (!root) return html;
+  let el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-hours') === 'true') as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('data-wto-hours', 'true');
+    root.appendChild(el);
+  }
+  el.textContent = text;
+  return serialize(doc);
+}
+
+function getTopBarNote(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const root = getTopBarRoot(doc);
+  if (!root) return '';
+  const el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-note') === 'true') as HTMLElement | undefined;
+  return el ? (el.textContent || '').trim() : '';
+}
+
+function setTopBarNote(html: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const root = getTopBarRoot(doc);
+  if (!root) return html;
+  let el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-note') === 'true') as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('div');
+    el.setAttribute('data-wto-note', 'true');
+    root.appendChild(el);
+  }
+  el.textContent = text;
+  return serialize(doc);
+}
+
+function getTopBarButtonText(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const root = getTopBarRoot(doc);
+  if (!root) return '';
+  const el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-topbar-button') === 'true') as HTMLElement | undefined;
+  return el ? (el.textContent || '').trim() : '';
+}
+
+function setTopBarButtonText(html: string, text: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const root = getTopBarRoot(doc);
+  if (!root) return html;
+  let el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-topbar-button') === 'true') as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('a');
+    el.setAttribute('data-wto-topbar-button', 'true');
+    el.setAttribute('href', '#');
+    root.appendChild(el);
+  }
+  el.textContent = text;
+  return serialize(doc);
+}
+
+function getTopBarButtonHref(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const root = getTopBarRoot(doc);
+  if (!root) return '';
+  const el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-topbar-button') === 'true') as HTMLElement | undefined;
+  return el ? (el.getAttribute('href') || '') : '';
+}
+
+function setTopBarButtonHref(html: string, href: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const root = getTopBarRoot(doc);
+  if (!root) return html;
+  let el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-topbar-button') === 'true') as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('a');
+    el.setAttribute('data-wto-topbar-button', 'true');
+    root.appendChild(el);
+  }
+  if (href) el.setAttribute('href', href);
+  else el.removeAttribute('href');
+  return serialize(doc);
+}
+
+function getTopBarSocialLink(html: string, social: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const root = getTopBarRoot(doc);
+  if (!root) return '';
+  const el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-social') === social) as HTMLElement | undefined;
+  return el ? (el.getAttribute('href') || '') : '';
+}
+
+function setTopBarSocialLink(html: string, social: string, href: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const root = getTopBarRoot(doc);
+  if (!root) return html;
+  let el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-social') === social) as HTMLElement | undefined;
+  if (!el) {
+    el = doc.createElement('a');
+    el.setAttribute('data-wto-social', social);
+    el.setAttribute('target', '_blank');
+    el.setAttribute('rel', 'noopener noreferrer');
+    root.appendChild(el);
+  }
+  if (href) el.setAttribute('href', href);
+  else el.removeAttribute('href');
+  return serialize(doc);
+}
+
+function getTopBarSocialVisibility(html: string, social: string) {
+  const doc = parseHtml(html);
+  if (!doc) return true;
+  const root = getTopBarRoot(doc);
+  if (!root) return true;
+  const el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-social') === social) as HTMLElement | undefined;
+  if (!el) return true;
+  const style = el.getAttribute('style') || '';
+  return !style.includes('display:none') && !style.includes('display: none');
+}
+
+function setTopBarSocialVisibility(html: string, social: string, visible: boolean) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const root = getTopBarRoot(doc);
+  if (!root) return html;
+  const el = Array.from(root.querySelectorAll('*')).find((n) => n.getAttribute && n.getAttribute('data-wto-social') === social) as HTMLElement | undefined;
+  if (!el) return html;
+  const style = (el.getAttribute('style') || '').replace(/display\s*:\s*none\s*;?/gi, '').trim();
+  const nextStyle = visible ? style : (style ? `${style}; display:none` : 'display:none');
+  if (nextStyle) el.setAttribute('style', nextStyle);
+  else el.removeAttribute('style');
+  return serialize(doc);
+}
+
 
 // --- Helpers and DOM manipulation functions ---
 
 const textSelector = "h1,h2,h3,h4,h5,h6,p,a,button,summary,li,span,strong,em,small,blockquote,cite,div,label";
-const menuSelector = "nav ul li a, ul li a";
+// Menu links can appear in a variety of structures (ul>li>a or inside elements marked
+// with data-wto-nav-menu). Include those so menu items are detected reliably.
+const menuSelector = "nav ul li a, ul li a, [data-wto-nav-menu] a, nav [data-wto-nav-menu] a";
 
 function parseHtml(html: string) {
   if (typeof DOMParser === "undefined") return null;
@@ -1139,7 +2249,15 @@ function findHeaderCTAs(html: string) {
   const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
   if (!nav) return [];
   const anchors = Array.from(nav.querySelectorAll('a')).filter((a) => !a.closest('ul') && !a.closest('li'));
-  return anchors.slice(1).map((a) => ({ text: (a.textContent ?? '').trim(), href: a.getAttribute('href') ?? '#' }));
+  return anchors.slice(1).map((a) => {
+    const style = a.getAttribute('style') ?? '';
+    const hidden = a.getAttribute('data-wto-hidden') === '1' || /display\s*:\s*none/i.test(style);
+    return {
+      text: (a.textContent ?? '').trim(),
+      href: a.getAttribute('href') ?? '#',
+      hidden,
+    };
+  });
 }
 
 function setHeaderCTAHref(html: string, href: string, text: string) {
@@ -1155,11 +2273,30 @@ function setHeaderCTAHref(html: string, href: string, text: string) {
   return serialize(doc);
 }
 
+function toggleHeaderCTAVisibility(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const nav = doc.body.querySelector('nav') ?? doc.body.querySelector('[data-wto-nav]');
+  if (!nav) return html;
+  const anchors = Array.from(nav.querySelectorAll('a')).filter((a) => !a.closest('ul') && !a.closest('li'));
+  const cta = anchors[1];
+  if (!cta) return html;
+  const hidden = cta.getAttribute('data-wto-hidden') === '1';
+  if (hidden) {
+    cta.removeAttribute('data-wto-hidden');
+    cta.style.display = '';
+  } else {
+    cta.setAttribute('data-wto-hidden', '1');
+    cta.style.display = 'none';
+  }
+  return serialize(doc);
+}
+
 function isEditableTextElement(el: HTMLElement) {
   if (!el) return false;
   const tag = el.tagName.toLowerCase();
   if (["script", "style", "svg", "img", "video", "audio", "canvas", "iframe", "input", "textarea", "select"].includes(tag)) return false;
-  if (el.closest("[data-wto-nav], [data-wto-nav-menu], [data-wto-toolbar], [data-wto-ignore-edit]")) return false;
+  if (el.closest("[data-wto-toolbar], [data-wto-ignore-edit], [data-wto-nav-btn]")) return false;
   const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
   if (!text) return false;
   if (["a", "button", "summary", "h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "span", "strong", "em", "b", "i", "small", "blockquote", "cite", "label"].includes(tag)) return true;
@@ -1170,19 +2307,27 @@ function isEditableTextElement(el: HTMLElement) {
   return false;
 }
 
-function getImageItems(html: string): { label: string; src: string; alt: string }[] {
+function getImageItems(html: string): { label: string; src: string; alt: string; width: string; height: string; objectFit: string; borderRadius: string; opacity: string }[] {
   const doc = parseHtml(html);
   if (!doc) return [];
   return Array.from(doc.body.querySelectorAll<HTMLImageElement>("img"))
     .filter((img) => !img.closest("[data-wto-nav], [data-wto-nav-menu], [data-wto-toolbar], [data-wto-ignore-edit]"))
-    .map((img, index) => ({
-      label: `Image ${index + 1}`,
-      src: img.getAttribute("src") ?? "",
-      alt: img.getAttribute("alt") ?? "",
-    }));
+    .map((img, index) => {
+      const styleMap = readStyleMap(img.getAttribute("style") ?? "");
+      return {
+        label: `Image ${index + 1}`,
+        src: img.getAttribute("src") ?? "",
+        alt: img.getAttribute("alt") ?? "",
+        width: styleMap["width"] || "",
+        height: styleMap["height"] || "",
+        objectFit: styleMap["object-fit"] || "",
+        borderRadius: styleMap["border-radius"] || "",
+        opacity: styleMap["opacity"] || "",
+      };
+    });
 }
 
-function updateImageItem(html: string, index: number, patch: Partial<{ src: string; alt: string }>) {
+function updateImageItem(html: string, index: number, patch: Partial<{ src: string; alt: string; width: string; height: string; objectFit: string; borderRadius: string; opacity: string }>) {
   const doc = parseHtml(html);
   if (!doc) return html;
   const items = Array.from(doc.body.querySelectorAll<HTMLImageElement>("img")).filter((img) => !img.closest("[data-wto-nav], [data-wto-nav-menu], [data-wto-toolbar], [data-wto-ignore-edit]"));
@@ -1190,6 +2335,13 @@ function updateImageItem(html: string, index: number, patch: Partial<{ src: stri
   if (!img) return html;
   if (patch.src !== undefined) img.setAttribute("src", patch.src || "");
   if (patch.alt !== undefined) img.setAttribute("alt", patch.alt || "");
+  const styleMap = readStyleMap(img.getAttribute("style") ?? "");
+  if (patch.width !== undefined) (patch.width ? (styleMap["width"] = patch.width) : delete styleMap["width"]);
+  if (patch.height !== undefined) (patch.height ? (styleMap["height"] = patch.height) : delete styleMap["height"]);
+  if (patch.objectFit !== undefined) (patch.objectFit ? (styleMap["object-fit"] = patch.objectFit) : delete styleMap["object-fit"]);
+  if (patch.borderRadius !== undefined) (patch.borderRadius ? (styleMap["border-radius"] = patch.borderRadius) : delete styleMap["border-radius"]);
+  if (patch.opacity !== undefined) (patch.opacity ? (styleMap["opacity"] = patch.opacity) : delete styleMap["opacity"]);
+  img.setAttribute("style", serializeStyleMap(styleMap));
   return serialize(doc);
 }
 
@@ -1199,12 +2351,36 @@ function getEditableTextItems(html: string) {
   const elements = Array.from(doc.body.querySelectorAll<HTMLElement>(textSelector)).filter(isEditableTextElement);
   return elements
     .filter((el) => !el.querySelector(textSelector) || !Array.from(el.querySelectorAll<HTMLElement>(textSelector)).some((child) => isEditableTextElement(child)))
-    .map((el) => ({
-      tag: el.tagName.toLowerCase(),
-      label: labelForElement(el),
-      text: (el.textContent ?? "").replace(/\s+/g, " ").trim(),
-    }))
+    .map((el) => {
+      const styleMap = readStyleMap(el.getAttribute("style") ?? "");
+      return {
+        tag: el.tagName.toLowerCase(),
+        label: labelForElement(el),
+        text: (el.textContent ?? "").replace(/\s+/g, " ").trim(),
+        fontSize: styleMap["font-size"] || el.style.fontSize || "",
+        fontFamily: styleMap["font-family"] || el.style.fontFamily || "",
+        color: styleMap["color"] || el.style.color || "",
+        fontWeight: styleMap["font-weight"] || el.style.fontWeight || "",
+        lineHeight: styleMap["line-height"] || el.style.lineHeight || "",
+        textAlign: styleMap["text-align"] || el.style.textAlign || "",
+        letterSpacing: styleMap["letter-spacing"] || el.style.letterSpacing || "",
+        textTransform: styleMap["text-transform"] || el.style.textTransform || "",
+      };
+    })
     .filter((item) => item.text.length > 0);
+}
+
+function isTextItemInRepeater(html: string, textIndex: number) {
+  const doc = parseHtml(html);
+  if (!doc) return false;
+  const info = findRepeater(doc);
+  if (!info) return false;
+  const container = nodeAtPath(doc.body, info.path);
+  if (!container) return false;
+  const elements = Array.from(doc.body.querySelectorAll<HTMLElement>(textSelector)).filter(isEditableTextElement);
+  const el = elements[textIndex];
+  if (!el) return false;
+  return container.contains(el);
 }
 
 function updateTextItem(html: string, index: number, text: string) {
@@ -1231,13 +2407,122 @@ function updateTextItem(html: string, index: number, text: string) {
   return serialize(doc);
 }
 
-function getMenuItems(html: string): { text: string; href: string }[] {
+function setTextItemStyle(html: string, index: number, patch: Partial<{ fontSize: string; fontFamily: string; color: string; fontWeight: string; lineHeight: string; textAlign: string; letterSpacing: string; textTransform: string }>) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const items = Array.from(doc.body.querySelectorAll<HTMLElement>(textSelector)).filter(isEditableTextElement);
+  const el = items[index];
+  if (!el) return html;
+  const styleMap = readStyleMap(el.getAttribute('style') ?? '');
+  if (patch.fontSize !== undefined) (patch.fontSize ? (styleMap['font-size'] = patch.fontSize) : delete styleMap['font-size']);
+  if (patch.fontFamily !== undefined) (patch.fontFamily ? (styleMap['font-family'] = patch.fontFamily) : delete styleMap['font-family']);
+  if (patch.color !== undefined) (patch.color ? (styleMap['color'] = patch.color) : delete styleMap['color']);
+  if (patch.fontWeight !== undefined) (patch.fontWeight ? (styleMap['font-weight'] = patch.fontWeight) : delete styleMap['font-weight']);
+  if (patch.lineHeight !== undefined) (patch.lineHeight ? (styleMap['line-height'] = patch.lineHeight) : delete styleMap['line-height']);
+  if (patch.textAlign !== undefined) (patch.textAlign ? (styleMap['text-align'] = patch.textAlign) : delete styleMap['text-align']);
+  if (patch.letterSpacing !== undefined) (patch.letterSpacing ? (styleMap['letter-spacing'] = patch.letterSpacing) : delete styleMap['letter-spacing']);
+  if (patch.textTransform !== undefined) (patch.textTransform ? (styleMap['text-transform'] = patch.textTransform) : delete styleMap['text-transform']);
+  el.setAttribute('style', serializeStyleMap(styleMap));
+  return serialize(doc);
+}
+
+function setTextItemTag(html: string, index: number, tag: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const items = Array.from(doc.body.querySelectorAll<HTMLElement>(textSelector)).filter(isEditableTextElement);
+  const el = items[index];
+  if (!el) return html;
+  const allowed = ['h1','h2','h3','h4','h5','h6','p','span','div'];
+  const newTag = allowed.includes(tag) ? tag : 'p';
+  const newEl = doc.createElement(newTag);
+  // copy attributes
+  Array.from(el.attributes).forEach((a) => newEl.setAttribute(a.name, a.value));
+  // move children
+  while (el.firstChild) newEl.appendChild(el.firstChild);
+  el.replaceWith(newEl);
+  return serialize(doc);
+}
+
+function getContainerStyleState(html: string, index: number) {
+  const el = getContainerElement(html, index);
+  if (!el) return null;
+  const styleMap = readStyleMap(el.getAttribute('style') ?? '');
+  return {
+    backgroundColor: styleMap['background-color'] || '',
+    padding: styleMap['padding'] || '',
+    margin: styleMap['margin'] || '',
+    borderRadius: styleMap['border-radius'] || '',
+    width: styleMap['width'] || '',
+    height: styleMap['height'] || '',
+  };
+}
+
+function getElementByWtoIndex(html: string, index: number) {
+  const doc = parseHtml(html);
+  if (!doc) return null;
+  const elements = Array.from(doc.body.querySelectorAll('*'));
+  return elements[index] ?? null;
+}
+
+function isSelectableContainer(el: Element | null) {
+  if (!el) return false;
+  const tag = el.tagName.toLowerCase();
+  return !['html', 'body', 'script', 'style', 'svg', 'img', 'video', 'audio', 'canvas', 'iframe', 'input', 'textarea', 'select', 'a', 'button'].includes(tag);
+}
+
+function getContainerElement(html: string, index: number) {
+  const el = getElementByWtoIndex(html, index);
+  if (!el) return null;
+  if (isSelectableContainer(el)) return el as HTMLElement;
+  return el.closest('div,section,article,aside,main,header,footer,ul,ol,li,form,figure,figcaption,table,tr,td,th') as HTMLElement | null;
+}
+
+function setContainerStyle(html: string, index: number, patch: Partial<{ backgroundColor: string; padding: string; margin: string; borderRadius: string; width: string; height: string }>) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const el = getContainerElement(html, index);
+  if (!el) return html;
+  const styleMap = readStyleMap(el.getAttribute('style') ?? '');
+  if (patch.backgroundColor !== undefined) (patch.backgroundColor ? (styleMap['background-color'] = patch.backgroundColor) : delete styleMap['background-color']);
+  if (patch.padding !== undefined) (patch.padding ? (styleMap['padding'] = patch.padding) : delete styleMap['padding']);
+  if (patch.margin !== undefined) (patch.margin ? (styleMap['margin'] = patch.margin) : delete styleMap['margin']);
+  if (patch.borderRadius !== undefined) (patch.borderRadius ? (styleMap['border-radius'] = patch.borderRadius) : delete styleMap['border-radius']);
+  if (patch.width !== undefined) (patch.width ? (styleMap['width'] = patch.width) : delete styleMap['width']);
+  if (patch.height !== undefined) (patch.height ? (styleMap['height'] = patch.height) : delete styleMap['height']);
+  el.setAttribute('style', serializeStyleMap(styleMap));
+  return serialize(doc);
+}
+
+function readStyleMap(styleText: string) {
+  const map: Record<string, string> = {};
+  styleText.split(';').forEach((part) => {
+    const [rawKey, ...rawValue] = part.split(':');
+    if (!rawKey) return;
+    const key = rawKey.trim().toLowerCase();
+    const value = rawValue.join(':').trim();
+    if (key && value) map[key] = value;
+  });
+  return map;
+}
+
+function serializeStyleMap(styleMap: Record<string, string>) {
+  return Object.entries(styleMap)
+    .map(([key, value]) => `${key}:${value}`)
+    .join('; ');
+}
+
+function getMenuItems(html: string): { text: string; href: string; hidden: boolean }[] {
   const doc = parseHtml(html);
   if (!doc) return [];
-  return Array.from(doc.body.querySelectorAll<HTMLAnchorElement>(menuSelector)).map((el) => ({
-    text: (el.textContent ?? "").trim(),
-    href: el.getAttribute("href") ?? "#",
-  }));
+  return Array.from(doc.body.querySelectorAll<HTMLAnchorElement>(menuSelector)).map((el) => {
+    const style = el.getAttribute('style') ?? '';
+    const hidden = el.getAttribute('data-wto-hidden') === '1' || /display\s*:\s*none/i.test(style);
+    return {
+      text: (el.textContent ?? "").trim(),
+      href: el.getAttribute("href") ?? "#",
+      hidden,
+    };
+  });
 }
 
 function updateMenuItem(html: string, index: number, patch: Partial<{ text: string; href: string }>) {
@@ -1248,6 +2533,23 @@ function updateMenuItem(html: string, index: number, patch: Partial<{ text: stri
   if (link) {
     if (patch.text !== undefined) link.textContent = patch.text;
     if (patch.href !== undefined) link.setAttribute("href", patch.href || "#");
+  }
+  return serialize(doc);
+}
+
+function toggleMenuItemVisibility(html: string, index: number) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const links = Array.from(doc.body.querySelectorAll<HTMLAnchorElement>(menuSelector));
+  const link = links[index];
+  if (!link) return html;
+  const hidden = link.getAttribute('data-wto-hidden') === '1';
+  if (hidden) {
+    link.removeAttribute('data-wto-hidden');
+    link.style.display = '';
+  } else {
+    link.setAttribute('data-wto-hidden', '1');
+    link.style.display = 'none';
   }
   return serialize(doc);
 }
@@ -1322,6 +2624,80 @@ function updateLinkItem(html: string, index: number, patch: Partial<{ text: stri
     if (el.tagName === "A") el.setAttribute("href", patch.href || "#");
     else el.setAttribute("data-href", patch.href);
   }
+  return serialize(doc);
+}
+
+function getLinkStyleState(html: string, index: number) {
+  const doc = parseHtml(html);
+  if (!doc) return null;
+  const items = Array.from(doc.body.querySelectorAll<HTMLElement>("a, button")).filter(isContentLinkOrButton);
+  const el = items[index];
+  if (!el) return null;
+  const styleMap = readStyleMap(el.getAttribute('style') ?? '');
+  return {
+    fontSize: styleMap['font-size'] || el.style.fontSize || '',
+    fontFamily: styleMap['font-family'] || el.style.fontFamily || '',
+    color: styleMap['color'] || el.style.color || '',
+    fontWeight: styleMap['font-weight'] || el.style.fontWeight || '',
+    lineHeight: styleMap['line-height'] || el.style.lineHeight || '',
+    textAlign: styleMap['text-align'] || el.style.textAlign || '',
+    letterSpacing: styleMap['letter-spacing'] || el.style.letterSpacing || '',
+    textTransform: styleMap['text-transform'] || el.style.textTransform || '',
+  };
+}
+
+function getContainerTypographyState(html: string, index: number) {
+  const doc = parseHtml(html);
+  if (!doc) return null;
+  const el = getContainerElement(html, index);
+  if (!el) return null;
+  const styleMap = readStyleMap(el.getAttribute('style') ?? '');
+  return {
+    fontSize: styleMap['font-size'] || el.style.fontSize || '',
+    fontFamily: styleMap['font-family'] || el.style.fontFamily || '',
+    color: styleMap['color'] || el.style.color || '',
+    fontWeight: styleMap['font-weight'] || el.style.fontWeight || '',
+    lineHeight: styleMap['line-height'] || el.style.lineHeight || '',
+    textAlign: styleMap['text-align'] || el.style.textAlign || '',
+    letterSpacing: styleMap['letter-spacing'] || el.style.letterSpacing || '',
+    textTransform: styleMap['text-transform'] || el.style.textTransform || '',
+  };
+}
+
+function setLinkStyle(html: string, index: number, patch: Partial<{ fontSize: string; fontFamily: string; color: string; fontWeight: string; lineHeight: string; textAlign: string; letterSpacing: string; textTransform: string }>) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const items = Array.from(doc.body.querySelectorAll<HTMLElement>("a, button")).filter(isContentLinkOrButton);
+  const el = items[index];
+  if (!el) return html;
+  const styleMap = readStyleMap(el.getAttribute('style') ?? '');
+  if (patch.fontSize !== undefined) (patch.fontSize ? (styleMap['font-size'] = patch.fontSize) : delete styleMap['font-size']);
+  if (patch.fontFamily !== undefined) (patch.fontFamily ? (styleMap['font-family'] = patch.fontFamily) : delete styleMap['font-family']);
+  if (patch.color !== undefined) (patch.color ? (styleMap['color'] = patch.color) : delete styleMap['color']);
+  if (patch.fontWeight !== undefined) (patch.fontWeight ? (styleMap['font-weight'] = patch.fontWeight) : delete styleMap['font-weight']);
+  if (patch.lineHeight !== undefined) (patch.lineHeight ? (styleMap['line-height'] = patch.lineHeight) : delete styleMap['line-height']);
+  if (patch.textAlign !== undefined) (patch.textAlign ? (styleMap['text-align'] = patch.textAlign) : delete styleMap['text-align']);
+  if (patch.letterSpacing !== undefined) (patch.letterSpacing ? (styleMap['letter-spacing'] = patch.letterSpacing) : delete styleMap['letter-spacing']);
+  if (patch.textTransform !== undefined) (patch.textTransform ? (styleMap['text-transform'] = patch.textTransform) : delete styleMap['text-transform']);
+  el.setAttribute('style', serializeStyleMap(styleMap));
+  return serialize(doc);
+}
+
+function setContainerTypography(html: string, index: number, patch: Partial<{ fontSize: string; fontFamily: string; color: string; fontWeight: string; lineHeight: string; textAlign: string; letterSpacing: string; textTransform: string }>) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const el = getContainerElement(html, index);
+  if (!el) return html;
+  const styleMap = readStyleMap(el.getAttribute('style') ?? '');
+  if (patch.fontSize !== undefined) (patch.fontSize ? (styleMap['font-size'] = patch.fontSize) : delete styleMap['font-size']);
+  if (patch.fontFamily !== undefined) (patch.fontFamily ? (styleMap['font-family'] = patch.fontFamily) : delete styleMap['font-family']);
+  if (patch.color !== undefined) (patch.color ? (styleMap['color'] = patch.color) : delete styleMap['color']);
+  if (patch.fontWeight !== undefined) (patch.fontWeight ? (styleMap['font-weight'] = patch.fontWeight) : delete styleMap['font-weight']);
+  if (patch.lineHeight !== undefined) (patch.lineHeight ? (styleMap['line-height'] = patch.lineHeight) : delete styleMap['line-height']);
+  if (patch.textAlign !== undefined) (patch.textAlign ? (styleMap['text-align'] = patch.textAlign) : delete styleMap['text-align']);
+  if (patch.letterSpacing !== undefined) (patch.letterSpacing ? (styleMap['letter-spacing'] = patch.letterSpacing) : delete styleMap['letter-spacing']);
+  if (patch.textTransform !== undefined) (patch.textTransform ? (styleMap['text-transform'] = patch.textTransform) : delete styleMap['text-transform']);
+  el.setAttribute('style', serializeStyleMap(styleMap));
   return serialize(doc);
 }
 
@@ -1539,6 +2915,49 @@ function addRepeaterItem(html: string) {
   });
 }
 
+function moveRepeaterItem(html: string, index: number, delta: number) {
+  return withRepeater(html, (_doc, container) => {
+    const len = container.children.length;
+    const from = index;
+    const to = index + delta;
+    if (from < 0 || from >= len) return;
+    if (to < 0 || to >= len) return;
+    const item = container.children[from];
+    const target = container.children[to];
+    if (!item || !target) return;
+    if (delta > 0) {
+      // move down: insert after target
+      if (target.nextSibling) container.insertBefore(item, target.nextSibling);
+      else container.appendChild(item);
+    } else {
+      // move up: insert before target
+      container.insertBefore(item, target);
+    }
+  });
+}
+
+function moveRepeaterItemTo(html: string, fromIndex: number, toIndex: number) {
+  return withRepeater(html, (_doc, container) => {
+    const len = container.children.length;
+    const from = fromIndex;
+    const to = Math.max(0, Math.min(len - 1, toIndex));
+    if (from < 0 || from >= len) return;
+    if (to < 0 || to >= len) return;
+    if (from === to) return;
+    const item = container.children[from];
+    const target = container.children[to];
+    if (!item || !target) return;
+    if (from < to) {
+      // moving forward: insert after target
+      if (target.nextSibling) container.insertBefore(item, target.nextSibling);
+      else container.appendChild(item);
+    } else {
+      // moving backward: insert before target
+      container.insertBefore(item, target);
+    }
+  });
+}
+
 // Footer helpers omitted for brevity — keep the ones we used earlier
 
 function findFooterColumnElements(doc: Document): Element[] {
@@ -1557,7 +2976,7 @@ function findFooterColumnElements(doc: Document): Element[] {
   return Array.from(new Set(parents));
 }
 
-function getFooterColumns(html: string): { heading: string; items: { text: string; href: string }[] }[] {
+function getFooterColumns(html: string): { heading: string; items: { text: string; href: string; fontSize?: string; color?: string; fontWeight?: string; textAlign?: string }[] }[] {
   const doc = parseHtml(html);
   if (!doc) return [];
   const cols = findFooterColumnElements(doc);
@@ -1571,25 +2990,398 @@ function getFooterColumns(html: string): { heading: string; items: { text: strin
       if (prev && (prev.textContent || '').trim()) heading = (prev.textContent || '').trim();
     }
     // collect anchors
-    const items: { text: string; href: string }[] = [];
+    const items: { text: string; href: string; fontSize?: string; color?: string; fontWeight?: string; textAlign?: string }[] = [];
     const listItems = Array.from(col.querySelectorAll('li'));
-    if (listItems.length > 0) {
+      if (listItems.length > 0) {
       for (const li of listItems) {
         const a = li.querySelector('a');
+        const targetEl = a ?? li;
         const text = (a?.textContent || li.textContent || '').trim();
         const href = a?.getAttribute('href') ?? '#';
-        if (text.trim()) items.push({ text, href });
+        const styleMap = readStyleMap((targetEl as HTMLElement).getAttribute('style') ?? '');
+        if (text.trim()) items.push({ text, href, fontSize: styleMap['font-size'] || '', color: styleMap['color'] || '', fontWeight: styleMap['font-weight'] || '', textAlign: styleMap['text-align'] || '' });
       }
     } else {
       const anchors = Array.from(col.querySelectorAll('a'));
       for (const a of anchors) {
         const text = (a.textContent || '').trim();
         const href = a.getAttribute('href') ?? '#';
-        if (text) items.push({ text, href });
+        const styleMap = readStyleMap((a as HTMLElement).getAttribute('style') ?? '');
+        if (text) items.push({ text, href, fontSize: styleMap['font-size'] || '', color: styleMap['color'] || '', fontWeight: styleMap['font-weight'] || '', textAlign: styleMap['text-align'] || '' });
       }
     }
     return { heading, items };
   });
+}
+
+function getTeamGridColumnCount(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return null;
+  const grid = Array.from(doc.body.querySelectorAll('div[class*="grid"]')).find((el) => {
+    const classes = (el.getAttribute('class') || '').split(/\s+/);
+    return classes.some((c) => /^md:grid-cols-\d+$/.test(c));
+  });
+  if (!grid) return null;
+  const classes = (grid.getAttribute('class') || '').split(/\s+/);
+  const match = classes.find((c) => /^md:grid-cols-\d+$/.test(c));
+  if (match) return Number(match.replace('md:grid-cols-', '')) || null;
+  const children = Array.from(grid.children).filter((child) => child.nodeType === Node.ELEMENT_NODE);
+  return children.length > 0 ? children.length : null;
+}
+
+function setTeamGridColumnCount(html: string, count: number) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const grid = Array.from(doc.body.querySelectorAll('div[class*="grid"]')).find((el) => {
+    const classes = (el.getAttribute('class') || '').split(/\s+/);
+    return classes.some((c) => /^md:grid-cols-\d+$/.test(c));
+  });
+  if (!grid) return html;
+  const children = Array.from(grid.children).filter((child) => child.nodeType === Node.ELEMENT_NODE) as Element[];
+  const targetCount = Math.min(6, Math.max(1, count));
+  while (children.length > targetCount) {
+    const child = children.pop();
+    if (child) child.remove();
+  }
+  const prototype = children[children.length - 1];
+  while (children.length < targetCount) {
+    if (!prototype) break;
+    const clone = prototype.cloneNode(true) as Element;
+    grid.appendChild(clone);
+    children.push(clone);
+  }
+  updateTeamGridColsForWrapper(grid);
+  return serialize(doc);
+}
+
+function getTeamGridItemInfo(html: string, selectedContainerIndex: number) {
+  const doc = parseHtml(html);
+  if (!doc) return null;
+  const selected = getElementByWtoIndex(html, selectedContainerIndex);
+  if (!selected) return null;
+
+  const candidate = selected.closest && (selected.closest('div[class*="grid"]') || selected.closest('section,main,article,aside'));
+  const grid = candidate && candidate.matches('div[class*="grid"]') ? candidate : null;
+  if (!grid) return null;
+  const gridClasses = (grid.getAttribute('class') || '').split(/\s+/);
+  if (!gridClasses.some((c) => /^md:grid-cols-\d+$/.test(c))) return null;
+
+  let item: Element | null = selected instanceof Element ? selected : null;
+  while (item && item.parentElement && item.parentElement !== grid) {
+    item = item.parentElement;
+  }
+  if (!item || item.parentElement !== grid) return null;
+  const children = Array.from(grid.children);
+  const itemIndex = children.indexOf(item);
+  if (itemIndex === -1) return null;
+  return { item, itemIndex, grid, children };
+}
+
+function withTeamGridItem(html: string, selectedContainerIndex: number, fn: (doc: Document, grid: Element, item: Element, itemIndex: number) => void) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const selected = getContainerElement(html, selectedContainerIndex);
+  if (!selected) return html;
+  const grid = selected.closest('div[class*="grid"]');
+  if (!grid || grid === selected) return html;
+  let item: Element | null = selected;
+  while (item && item.parentElement && item.parentElement !== grid) {
+    item = item.parentElement;
+  }
+  if (!item || item.parentElement !== grid) return html;
+  const children = Array.from(grid.children);
+  const itemIndex = children.indexOf(item);
+  if (itemIndex === -1) return html;
+  fn(doc, grid, item, itemIndex);
+  return serialize(doc);
+}
+
+function getFirstTeamGridItemInfo(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return null;
+  const grid = Array.from(doc.body.querySelectorAll('div[class*="grid"]')).find((el) => {
+    const classes = (el.getAttribute('class') || '').split(/\s+/);
+    return classes.some((c) => /^md:grid-cols-\d+$/.test(c));
+  });
+  if (!grid) return null;
+  const children = Array.from(grid.children).filter((child) => child.nodeType === Node.ELEMENT_NODE) as Element[];
+  if (children.length === 0) return null;
+  return { item: children[0], itemIndex: 0, grid, children };
+}
+
+function normalizeGapValue(value: string) {
+  const normalized = value.trim();
+  return normalized;
+}
+
+function updateTeamGridColsForWrapper(grid: Element) {
+  const children = Array.from(grid.children).filter((child) => child.nodeType === Node.ELEMENT_NODE);
+  const cols = Math.max(children.length, 1);
+  const classes = (grid.getAttribute('class') || '').split(/\s+/).filter((c) => !/^md:grid-cols-\d+$/.test(c));
+  classes.push(`md:grid-cols-${cols}`);
+  grid.setAttribute('class', classes.join(' ').trim());
+}
+
+function removeTeamGridColumn(html: string, selectedContainerIndex: number) {
+  return withTeamGridItem(html, selectedContainerIndex, (_doc, grid, item) => {
+    if (grid.children.length <= 1) return;
+    item.remove();
+    updateTeamGridColsForWrapper(grid);
+  });
+}
+
+function removeTeamGridColumnByIndex(html: string, columnIndex: number) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const grid = Array.from(doc.body.querySelectorAll('div[class*="grid"]')).find((el) => {
+    const classes = (el.getAttribute('class') || '').split(/\s+/);
+    return classes.some((c) => /^md:grid-cols-\d+$/.test(c));
+  });
+  if (!grid) return html;
+  const children = Array.from(grid.children).filter((child) => child.nodeType === Node.ELEMENT_NODE);
+  if (children.length <= 1) return html;
+  const target = children[columnIndex] as Element | undefined;
+  if (!target) return html;
+  target.remove();
+  updateTeamGridColsForWrapper(grid);
+  return serialize(doc);
+}
+
+function duplicateTeamGridColumn(html: string, selectedContainerIndex: number) {
+  return withTeamGridItem(html, selectedContainerIndex, (_doc, grid, item) => {
+    const clone = item.cloneNode(true) as Element;
+    if (item.nextSibling) grid.insertBefore(clone, item.nextSibling);
+    else grid.appendChild(clone);
+    updateTeamGridColsForWrapper(grid);
+  });
+}
+
+function addTeamGridColumn(html: string, selectedContainerIndex?: number) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const grid = Array.from(doc.body.querySelectorAll('div[class*="grid"]')).find((el) => {
+    const classes = (el.getAttribute('class') || '').split(/\s+/);
+    return classes.some((c) => /^md:grid-cols-\d+$/.test(c));
+  });
+  if (!grid) return html;
+
+  const children = Array.from(grid.children).filter((child) => child.nodeType === Node.ELEMENT_NODE) as Element[];
+  let item: Element | null = null;
+
+  if (selectedContainerIndex != null) {
+    const selected = getContainerElement(html, selectedContainerIndex);
+    if (selected) {
+      let candidate: Element | null = selected;
+      while (candidate && candidate.parentElement && candidate.parentElement !== grid) {
+        candidate = candidate.parentElement;
+      }
+      if (candidate && candidate.parentElement === grid) item = candidate;
+    }
+  }
+
+  if (!item) {
+    item = children[children.length - 1] ?? null;
+  }
+
+  if (!item) return serialize(doc);
+  const clone = item.cloneNode(true) as Element;
+  if (item.nextSibling) grid.insertBefore(clone, item.nextSibling);
+  else grid.appendChild(clone);
+  updateTeamGridColsForWrapper(grid);
+  return serialize(doc);
+}
+
+function getTeamGridGap(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return "";
+  const grid = Array.from(doc.body.querySelectorAll('div[class*="grid"]')).find((el) => {
+    const classes = (el.getAttribute('class') || '').split(/\s+/);
+    return classes.some((c) => /^md:grid-cols-\d+$/.test(c));
+  });
+  if (!grid) return "";
+  const style = grid.getAttribute('style') || "";
+  const styleMap = readStyleMap(style);
+  if (styleMap['gap']) return styleMap['gap'];
+  const classes = (grid.getAttribute('class') || '').split(/\s+/);
+  const gapClass = classes.find((c) => /^gap-\d+$/.test(c));
+  const gapMap: Record<string, string> = {
+    'gap-0': '0px',
+    'gap-1': '0.25rem',
+    'gap-2': '0.5rem',
+    'gap-3': '0.75rem',
+    'gap-4': '1rem',
+    'gap-5': '1.25rem',
+    'gap-6': '1.5rem',
+    'gap-7': '1.75rem',
+    'gap-8': '2rem',
+    'gap-9': '2.25rem',
+    'gap-10': '2.5rem',
+  };
+  return gapClass ? gapMap[gapClass] || '' : '';
+}
+
+function setTeamGridGap(html: string, gap: string) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const grid = Array.from(doc.body.querySelectorAll('div[class*="grid"]')).find((el) => {
+    const classes = (el.getAttribute('class') || '').split(/\s+/);
+    return classes.some((c) => /^md:grid-cols-\d+$/.test(c));
+  });
+  if (!grid) return html;
+  const styleMap = readStyleMap(grid.getAttribute('style') || '');
+  const normalized = normalizeGapValue(gap);
+  if (normalized) styleMap['gap'] = normalized;
+  else delete styleMap['gap'];
+  grid.setAttribute('style', serializeStyleMap(styleMap));
+  return serialize(doc);
+}
+
+function getCommonFooterStyleValue(elements: Element[], key: string) {
+  if (elements.length === 0) return '';
+  const firstMap = readStyleMap((elements[0] as HTMLElement).getAttribute('style') ?? '');
+  const firstValue = firstMap[key] || '';
+  for (const el of elements) {
+    const styleMap = readStyleMap((el as HTMLElement).getAttribute('style') ?? '');
+    if ((styleMap[key] || '') !== firstValue) return '';
+  }
+  return firstValue;
+}
+
+function setFooterElementsStyle(html: string, selector: string, patch: Partial<{ color?: string; fontSize?: string; fontWeight?: string; textAlign?: string }>) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const els = Array.from(doc.body.querySelectorAll<HTMLElement>(selector));
+  if (els.length === 0) return html;
+  els.forEach((el) => {
+    const styleMap = readStyleMap(el.getAttribute('style') ?? '');
+    if (patch.color !== undefined) {
+      if (patch.color) styleMap['color'] = patch.color;
+      else delete styleMap['color'];
+    }
+    if (patch.fontSize !== undefined) {
+      if (patch.fontSize) styleMap['font-size'] = patch.fontSize;
+      else delete styleMap['font-size'];
+    }
+    if (patch.fontWeight !== undefined) {
+      if (patch.fontWeight) styleMap['font-weight'] = patch.fontWeight;
+      else delete styleMap['font-weight'];
+    }
+    if (patch.textAlign !== undefined) {
+      if (patch.textAlign) styleMap['text-align'] = patch.textAlign;
+      else delete styleMap['text-align'];
+    }
+    if (Object.keys(styleMap).length > 0) {
+      el.setAttribute('style', serializeStyleMap(styleMap));
+    } else {
+      el.removeAttribute('style');
+    }
+  });
+  return serialize(doc);
+}
+
+function getFooterHeadingColor(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const headings = Array.from(doc.body.querySelectorAll<HTMLElement>('footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong'));
+  return getCommonFooterStyleValue(headings, 'color');
+}
+
+function getFooterHeadingFontSize(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const headings = Array.from(doc.body.querySelectorAll<HTMLElement>('footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong'));
+  return getCommonFooterStyleValue(headings, 'font-size');
+}
+
+function setFooterHeadingStyle(html: string, patch: Partial<{ color?: string; fontSize?: string; fontWeight?: string; textAlign?: string }>) {
+  return setFooterElementsStyle(html, 'footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong', patch);
+}
+
+function getFooterLinkColor(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const links = Array.from(doc.body.querySelectorAll<HTMLElement>('footer a'));
+  return getCommonFooterStyleValue(links, 'color');
+}
+
+function getFooterLinkFontSize(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const links = Array.from(doc.body.querySelectorAll<HTMLElement>('footer a'));
+  return getCommonFooterStyleValue(links, 'font-size');
+}
+
+function setFooterLinkStyle(html: string, patch: Partial<{ color?: string; fontSize?: string; fontWeight?: string; textAlign?: string }>) {
+  return setFooterElementsStyle(html, 'footer a', patch);
+}
+
+function getFooterTextColor(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const allText = Array.from(doc.body.querySelectorAll<HTMLElement>('footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong, footer a, footer div'));
+  return getCommonFooterStyleValue(allText, 'color');
+}
+
+function getFooterTextSize(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const allText = Array.from(doc.body.querySelectorAll<HTMLElement>('footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong, footer a, footer div'));
+  return getCommonFooterStyleValue(allText, 'font-size');
+}
+
+function setFooterTextStyle(html: string, patch: Partial<{ color?: string; fontSize?: string; fontFamily?: string; fontWeight?: string; lineHeight?: string; letterSpacing?: string; textAlign?: string }>) {
+  const doc = parseHtml(html);
+  if (!doc) return html;
+  const allText = Array.from(doc.body.querySelectorAll<HTMLElement>('footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong, footer a, footer div, footer li'));
+  allText.forEach((el) => {
+    const styleMap = readStyleMap(el.getAttribute('style') ?? '');
+    if (patch.color !== undefined) patch.color ? (styleMap['color'] = patch.color) : delete styleMap['color'];
+    if (patch.fontSize !== undefined) patch.fontSize ? (styleMap['font-size'] = patch.fontSize) : delete styleMap['font-size'];
+    if (patch.fontFamily !== undefined) patch.fontFamily ? (styleMap['font-family'] = patch.fontFamily) : delete styleMap['font-family'];
+    if (patch.fontWeight !== undefined) patch.fontWeight ? (styleMap['font-weight'] = patch.fontWeight) : delete styleMap['font-weight'];
+    if (patch.lineHeight !== undefined) patch.lineHeight ? (styleMap['line-height'] = patch.lineHeight) : delete styleMap['line-height'];
+    if (patch.letterSpacing !== undefined) patch.letterSpacing ? (styleMap['letter-spacing'] = patch.letterSpacing) : delete styleMap['letter-spacing'];
+    if (patch.textAlign !== undefined) patch.textAlign ? (styleMap['text-align'] = patch.textAlign) : delete styleMap['text-align'];
+    const styleStr = serializeStyleMap(styleMap);
+    if (styleStr) el.setAttribute('style', styleStr);
+    else el.removeAttribute('style');
+  });
+  return serialize(doc);
+}
+
+function getFooterFontFamily(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const allText = Array.from(doc.body.querySelectorAll<HTMLElement>('footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong, footer a, footer div, footer li'));
+  return getCommonFooterStyleValue(allText, 'font-family');
+}
+
+function getFooterFontWeight(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const allText = Array.from(doc.body.querySelectorAll<HTMLElement>('footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong, footer a, footer div, footer li'));
+  return getCommonFooterStyleValue(allText, 'font-weight');
+}
+
+function getFooterLineHeight(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const allText = Array.from(doc.body.querySelectorAll<HTMLElement>('footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong, footer a, footer div, footer li'));
+  return getCommonFooterStyleValue(allText, 'line-height');
+}
+
+function getFooterLetterSpacing(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const allText = Array.from(doc.body.querySelectorAll<HTMLElement>('footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong, footer a, footer div, footer li'));
+  return getCommonFooterStyleValue(allText, 'letter-spacing');
+}
+
+function getFooterTextAlign(html: string) {
+  const doc = parseHtml(html);
+  if (!doc) return '';
+  const allText = Array.from(doc.body.querySelectorAll<HTMLElement>('footer h1, footer h2, footer h3, footer h4, footer h5, footer h6, footer strong, footer a, footer div, footer li'));
+  return getCommonFooterStyleValue(allText, 'text-align');
 }
 
 function setFooterColumnHeading(html: string, colIndex: number, heading: string) {
@@ -1629,14 +3421,33 @@ function removeFooterColumn(html: string, colIndex: number) {
   const cols = findFooterColumnElements(doc);
   const col = cols[colIndex];
   if (!col) return html;
+  
   // If the column is a UL and previous sibling is heading, remove heading too
   const prev = col.previousElementSibling;
   if (prev && /^H[1-6]$/.test(prev.tagName)) prev.remove();
   col.remove();
+  
+  // Update grid classes based on remaining columns
+  const footer = doc.body.querySelector('footer');
+  if (footer) {
+    let gridWrapper = footer.querySelector('div[class*="grid"]');
+    if (!gridWrapper) {
+      gridWrapper = footer.children[0] as HTMLElement;
+    }
+    if (gridWrapper) {
+      const remainingCols = Math.max(gridWrapper.children.length, 1);
+      const gridClass = gridWrapper.getAttribute('class') || '';
+      const updatedClass = gridClass
+        .replace(/md:grid-cols-\d+/g, `md:grid-cols-${remainingCols}`)
+        .replace(/grid-cols-\d+/g, `grid-cols-1`);
+      gridWrapper.setAttribute('class', updatedClass);
+    }
+  }
+  
   return serialize(doc);
 }
 
-function updateFooterColumnItem(html: string, colIndex: number, itemIndex: number, patch: Partial<{ text: string; href: string }>) {
+function updateFooterColumnItem(html: string, colIndex: number, itemIndex: number, patch: Partial<{ text: string; href: string; fontSize?: string; color?: string; fontWeight?: string; textAlign?: string }>) {
   const doc = parseHtml(html);
   if (!doc) return html;
   const cols = findFooterColumnElements(doc);
@@ -1661,6 +3472,26 @@ function updateFooterColumnItem(html: string, colIndex: number, itemIndex: numbe
         li.appendChild(na);
       }
     }
+    // apply style patches
+    const target = (a ?? li) as HTMLElement;
+    const styleMap = readStyleMap(target.getAttribute('style') ?? '');
+    if (patch.fontSize !== undefined) {
+      if (patch.fontSize) styleMap['font-size'] = patch.fontSize;
+      else delete styleMap['font-size'];
+    }
+    if (patch.color !== undefined) {
+      if (patch.color) styleMap['color'] = patch.color;
+      else delete styleMap['color'];
+    }
+    if (patch.fontWeight !== undefined) {
+      if (patch.fontWeight) styleMap['font-weight'] = patch.fontWeight;
+      else delete styleMap['font-weight'];
+    }
+    if (patch.textAlign !== undefined) {
+      if (patch.textAlign) styleMap['text-align'] = patch.textAlign;
+      else delete styleMap['text-align'];
+    }
+    target.setAttribute('style', serializeStyleMap(styleMap));
     return serialize(doc);
   }
   const anchors = Array.from(col.querySelectorAll('a'));
@@ -1668,6 +3499,24 @@ function updateFooterColumnItem(html: string, colIndex: number, itemIndex: numbe
   if (!a) return serialize(doc);
   if (patch.text !== undefined) a.textContent = patch.text;
   if (patch.href !== undefined) a.setAttribute('href', patch.href || '#');
+  const styleMap = readStyleMap((a as HTMLElement).getAttribute('style') ?? '');
+  if (patch.fontSize !== undefined) {
+    if (patch.fontSize) styleMap['font-size'] = patch.fontSize;
+    else delete styleMap['font-size'];
+  }
+  if (patch.color !== undefined) {
+    if (patch.color) styleMap['color'] = patch.color;
+    else delete styleMap['color'];
+  }
+  if (patch.fontWeight !== undefined) {
+    if (patch.fontWeight) styleMap['font-weight'] = patch.fontWeight;
+    else delete styleMap['font-weight'];
+  }
+  if (patch.textAlign !== undefined) {
+    if (patch.textAlign) styleMap['text-align'] = patch.textAlign;
+    else delete styleMap['text-align'];
+  }
+  (a as HTMLElement).setAttribute('style', serializeStyleMap(styleMap));
   return serialize(doc);
 }
 
@@ -1719,6 +3568,14 @@ function addFooterColumn(html: string) {
   if (!doc) return html;
   const footer = doc.body.querySelector('footer');
   if (!footer) return html;
+  
+  // Find the main grid wrapper
+  let gridWrapper = footer.querySelector('div[class*="grid"]');
+  if (!gridWrapper) {
+    gridWrapper = footer.children[0] as HTMLElement;
+  }
+  
+  // Create new column
   const wrapper = doc.createElement('div');
   const h = doc.createElement('h3');
   h.textContent = 'New Column';
@@ -1731,7 +3588,16 @@ function addFooterColumn(html: string) {
   ul.appendChild(li);
   wrapper.appendChild(h);
   wrapper.appendChild(ul);
-  footer.appendChild(wrapper);
+  gridWrapper.appendChild(wrapper);
+  
+  // Update grid classes based on number of columns
+  const cols = gridWrapper.children.length;
+  const gridClass = gridWrapper.getAttribute('class') || '';
+  const updatedClass = gridClass
+    .replace(/md:grid-cols-\d+/g, `md:grid-cols-${cols}`)
+    .replace(/grid-cols-\d+/g, `grid-cols-1`);
+  gridWrapper.setAttribute('class', updatedClass);
+  
   return serialize(doc);
 }
 

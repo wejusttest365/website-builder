@@ -2,10 +2,10 @@ import { useEffect, useRef } from "react";
 import { useMounted } from "@/hooks/use-mounted";
 import { toast } from "sonner";
 import { useBuilder } from "@/lib/builder/store";
-import { Toolbar } from "./Toolbar";
 import { LibraryPanel } from "./LibraryPanel";
 import { Canvas } from "./Canvas";
 import { PropertiesPanel } from "./PropertiesPanel";
+import { TemplateGalleryOverlay } from "./TemplateGalleryOverlay";
 
 export function BuilderShell() {
   const hydrate = useBuilder((s) => s.hydrate);
@@ -16,6 +16,7 @@ export function BuilderShell() {
   const persist = useBuilder((s) => s.persist);
   const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
   const leftPanelOpen = useBuilder((s) => s.leftPanelOpen);
+  const leftPanelView = useBuilder((s) => s.leftPanelView);
   const autosaveTimerRef = useRef<number | null>(null);
   const hasInitialProjectRef = useRef(false);
   const mounted = useMounted();
@@ -47,15 +48,14 @@ export function BuilderShell() {
       if (ok) {
         toast.success("Saved", {
           id: "autosave",
-          duration: 1000,
-          position: "top-center",
-          className: "text-sm",
+          duration: 700,
+          position: "bottom-right",
         });
       } else {
         toast.error("Save failed", {
           id: "autosave",
-          duration: 2200,
-          position: "top-center",
+          duration: 1400,
+          position: "bottom-right",
         });
       }
     }, 400);
@@ -105,22 +105,26 @@ export function BuilderShell() {
   }
 
   return (
-    <div className="h-full w-full flex flex-col bg-background text-foreground overflow-hidden">
-      <Toolbar />
-      <div
-        className="flex-1 min-h-0 min-w-0 grid"
-        style={{ gridTemplateColumns: `${leftPanelOpen ? 260 : 44}px 1fr 320px`, gridAutoRows: "1fr", transition: "grid-template-columns 220ms ease" }}
-      >
-        <div className={`border-r border-border min-h-0 min-w-0 overflow-hidden ${leftPanelOpen ? '' : 'flex items-center justify-center'}`}>
-          <LibraryPanel />
-        </div>
-        <div className="min-h-0 min-w-0 overflow-hidden">
-          <Canvas />
-        </div>
-        <div className="border-l border-border min-h-0 min-w-0 overflow-hidden">
-          <PropertiesPanel />
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.09),_transparent_32%),linear-gradient(135deg,_rgba(248,250,252,0.98),_rgba(241,245,249,0.95))] text-foreground">
+      <div className="p-2 h-full min-h-0 flex flex-col">
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/70 shadow-[0_25px_80px_-35px_rgba(15,23,42,0.35)] backdrop-blur">
+          <div
+            className="flex-1 h-full min-h-0 min-w-0 grid overflow-hidden"
+            style={{ gridTemplateColumns: `${leftPanelOpen ? 220 : 64}px 1fr 240px`, gridTemplateRows: "minmax(0, 1fr)", gridAutoRows: "1fr", transition: "grid-template-columns 220ms ease" }}
+          >
+            <div className={`border-r border-border/70 flex min-h-0 min-w-0 flex-col overflow-hidden bg-card/35 ${leftPanelOpen ? "" : "items-center justify-center"}`}>
+              <LibraryPanel />
+            </div>
+            <div className="min-h-0 min-w-0 overflow-hidden bg-[linear-gradient(180deg,_rgba(248,250,252,0.65),_rgba(255,255,255,0.98))]">
+              <Canvas />
+            </div>
+            <div className="border-l border-border/70 flex min-h-0 min-w-0 flex-col overflow-hidden bg-card/35">
+              <PropertiesPanel />
+            </div>
+          </div>
         </div>
       </div>
+      {leftPanelOpen && leftPanelView === "templates" ? <TemplateGalleryOverlay /> : null}
     </div>
   );
 }
