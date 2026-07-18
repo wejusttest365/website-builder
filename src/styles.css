@@ -131,7 +131,9 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
 }
-
+ main.mainWrapper > div {
+    height: 100%;
+  }
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;
@@ -159,4 +161,6 @@
     background-color: color-mix(in srgb, var(--color-primary) 24%, transparent);
     color: var(--color-foreground);
   }
+
+ 
 }

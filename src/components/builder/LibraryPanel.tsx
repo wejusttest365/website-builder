@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
-import { SeoSettingsPanel } from "./SeoSettingsPanel";
+import { SeoSettingsPanel } from "./SeoSettingsPanel"; 
 
 function GoogleLogo(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -48,7 +48,7 @@ export function LibraryPanel() {
   const leftPanelView = useBuilder((s) => s.leftPanelView);
   const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
   const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
-  const [seoModalTab, setSeoModalTab] = useState<"page" | "project">("page");
+  const [seoModalTab, setSeoModalTab] = useState<"page" | "analytics">("page");
   useEffect(() => {
     if (seoModalPageId) {
       setSeoModalTab("page");
@@ -58,10 +58,31 @@ export function LibraryPanel() {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-in");
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
-  const { user, signingIn, login, register, logout } = useAuth();
+  const {
+  user,
+  signingIn,
+  login,
+  register,
+  logout,
+  loginWithGoogle,
+} = useAuth();
   const [credentials, setCredentials] = useState({ firstName: "", lastName: "", email: "", password: "", remember: false });
   const [showPassword, setShowPassword] = useState(false);
+useEffect(() => {
+  if (user) {
+    setAuthDialogOpen(false);
 
+    setCredentials({
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      remember: false,
+    });
+
+    setAuthMode("sign-in");
+  }
+}, [user]);
   const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!credentials.email.trim() || !credentials.password.trim()) return;
@@ -76,10 +97,10 @@ export function LibraryPanel() {
     setCredentials({ firstName: "", lastName: "", email: "", password: "", remember: false });
   };
 
-  const handleLogout = () => {
-    logout();
-    setAccountOpen(false);
-  };
+const handleLogout = async () => {
+  await logout();
+  setAccountOpen(false);
+};
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
@@ -389,7 +410,7 @@ export function LibraryPanel() {
                 </DialogContent>
               </Dialog>
 
-              <div ref={accountMenuRef} className="mt-auto border-t border-border/70 bg-background/90 px-4 pt-3 pb-6">
+              <div ref={accountMenuRef} className="mt-auto border-t border-border/70 bg-background/90 p-2">
                 <div className="relative">
                   <button
                     type="button"
@@ -403,9 +424,19 @@ export function LibraryPanel() {
                     }}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-semibold">
-                        {user ? user.initials : "L"}
-                      </div>
+                 <div style={{minWidth:"30px", minHeight:"30px"}} className="h-8 w-8 overflow-hidden rounded-full bg-primary flex items-center justify-center">
+  {user?.photoURL ? (
+    <img
+      src={user.photoURL}
+      alt={user.name}
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    <span className="text-[10px] font-semibold text-primary-foreground">
+      {user ? user.initials : "L"}
+    </span>
+  )}
+</div>
                       <div className="min-w-0">
                         <div className="truncate text-xs font-semibold text-foreground">
                           {user ? user.name : "LOGIN"}
@@ -426,7 +457,7 @@ export function LibraryPanel() {
                     <div className="absolute bottom-full left-0 right-0 mb-2 z-50 overflow-hidden rounded-3xl border border-border/70 bg-white shadow-[0_25px_60px_-30px_rgba(15,23,42,0.25)]">
                       <div className="p-4 pb-2">
                         <div className="flex items-center gap-3">
-                          <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-semibold">
+                          <div className="inline-flex aspect-square h-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-semibold leading-none">
                             {user.initials}
                           </div>
                           <div className="min-w-0">
@@ -481,13 +512,31 @@ export function LibraryPanel() {
 
             <div className="px-5 py-4">
               <div className="space-y-2">
-                <button
+                {/* <button
                   type="button"
                   className="group flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
                   <GoogleLogo className="h-5 w-5" />
                   Continue with Google
-                </button>
+                </button> */}
+
+<button
+  type="button"
+  onClick={async () => {
+    try {
+      await loginWithGoogle();
+    } catch (err) {
+      console.error(err);
+      toast.error("Google sign in failed");
+    }
+  }}
+  className="group flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+>
+  <GoogleLogo className="h-5 w-5" />
+  Continue with Google
+</button>
+
+
               </div>
 
               <div className="relative my-4">

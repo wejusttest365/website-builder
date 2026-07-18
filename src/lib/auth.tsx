@@ -1,9 +1,17 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createUserIfNotExists } from "@/services/firestore";
+
+import {
+  signInWithGoogle,
+  subscribeToAuth,
+  logout as firebaseLogout,
+} from "@/services/auth";
 
 type AuthUser = {
   id: string;
   name: string;
   email: string;
+  photoURL?: string;
   plan: "Free plan" | "Pro plan";
   initials: string;
 };
@@ -13,11 +21,12 @@ type AuthContextValue = {
   signingIn: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (firstName: string, lastName: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
+loginWithGoogle: () => Promise<void>;
+logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const AUTH_STORAGE_KEY = "lovable_auth_user";
+
 
 function createUser(email: string, fullName?: string): AuthUser {
   const normalizedEmail = email.trim().toLowerCase();
@@ -47,31 +56,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as AuthUser;
-      if (saved?.email) {
-        setUser(saved);
-      }
-    } catch (_error) {
-      setUser(null);
-    }
-  }, []);
+  const unsubscribe = subscribeToAuth(async (firebaseUser) => {
+  if (!firebaseUser) {
+    setUser(null);
+    return;
+  }
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      if (user) {
-        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
-      } else {
-        window.localStorage.removeItem(AUTH_STORAGE_KEY);
-      }
-    } catch (_error) {
-      // ignore storage errors
-    }
-  }, [user]);
+  console.log("Firebase User:", firebaseUser);
+  console.log("Photo URL:", firebaseUser.photoURL);
+
+  setUser({
+    id: firebaseUser.uid,
+    name: firebaseUser.displayName || "User",
+    email: firebaseUser.email || "",
+    photoURL: firebaseUser.photoURL || "",
+    plan: "Free plan",
+    initials:
+      (firebaseUser.displayName || "U")
+        .split(" ")
+        .map((word) => word[0])
+        .join("")
+        .substring(0, 2),
+  });
+});
+
+  return unsubscribe;
+}, []);
+
+ 
 
   const login = async (email: string, _password: string) => {
     setSigningIn(true);
@@ -96,14 +108,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const logout = () => {
-    setUser(null);
-  };
+  const logout = async () => {
+  await firebaseLogout();
+  setUser(null);
+};
 
-  const value = useMemo(
-    () => ({ user, signingIn, login, register, logout }),
-    [user, signingIn],
-  );
+ const loginWithGoogle = async () => {
+  setSigningIn(true);
+
+  try {
+    const result = await signInWithGoogle();
+
+    const firebaseUser = result.user;
+
+    await createUserIfNotExists(firebaseUser);
+
+    setUser({
+      id: firebaseUser.uid,
+      name: firebaseUser.displayName || "User",
+      email: firebaseUser.email || "",
+      photoURL: firebaseUser.photoURL || "",
+      plan: "Free plan",
+      initials:
+        (firebaseUser.displayName || "U")
+          .split(" ")
+          .map((word) => word.charAt(0).toUpperCase())
+          .join("")
+          .substring(0, 2),
+    });
+  } finally {
+    setSigningIn(false);
+  }
+};
+const value = useMemo(
+  () => ({
+    user,
+    signingIn,
+    login,
+    register,
+    loginWithGoogle,
+    logout,
+  }),
+  [user, signingIn],
+);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

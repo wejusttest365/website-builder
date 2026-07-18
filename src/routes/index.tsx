@@ -12,7 +12,7 @@ function Index() {
     <MainLayout>
       <ClientOnly
         fallback={
-          <div className="h-screen w-screen flex items-center justify-center text-sm text-muted-foreground">
+          <div style={{ height: "100%" }} className="h-screen w-screen flex items-center justify-center text-sm text-muted-foreground">
             Loading builder…
           </div>
         }

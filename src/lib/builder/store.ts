@@ -1,3 +1,4 @@
+import { createProject } from "@/services/project";
 import { create } from "zustand";
 import { nanoid } from "nanoid";
 import type { SectionTemplate } from "./sections";
@@ -425,6 +426,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       historyIndex: 0,
     }));
     get().persist();
+    createProject(p).catch(console.error);
     return p.id;
   },
 

@@ -18,7 +18,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-slate-50 text-slate-950">
       <Header />
-      <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
+      <main className="flex-1 min-h-0 overflow-hidden mainWrapper">{children}</main>
     </div>
   );
 }
