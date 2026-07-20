@@ -2,7 +2,7 @@ import { type FormEvent, type SVGProps, useMemo, useRef, useState, useEffect } f
 import { SECTION_LIBRARY, CATEGORIES, type SectionTemplate } from "@/lib/builder/sections";
 import { useMounted } from "@/hooks/use-mounted";
 import { useBuilder, type Page } from "@/lib/builder/store";
-import { Search, Plus, Copy, ChevronDown, ChevronRight, ChevronLeft, FileText, Layers, FolderOpen, LayoutGrid, Grid2x2, ImageIcon, SlidersHorizontal, Settings, LogOut, BookOpen, Menu, ChevronUp, UserCircle, Bell, Sparkles, X, Eye, EyeOff, Mail, Lock, User } from "lucide-react";
+import { Search, Plus, Copy, ChevronDown, ChevronRight, ChevronLeft, FileText, Layers, FolderOpen, LayoutGrid, Grid2x2, ImageIcon, SlidersHorizontal, Settings, LogOut, BookOpen, Menu, ChevronUp, UserCircle, Bell, Sparkles, X, Eye, EyeOff, Mail, Lock, User, Heart, Trash2, Server, Globe, Users } from "lucide-react";
 import { toast } from "sonner";
 import { TEMPLATE_CATEGORIES, TEMPLATE_LIBRARY, type TemplateDefinition } from "@/lib/builder/templates";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -10,7 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
-import { SeoSettingsPanel } from "./SeoSettingsPanel"; 
+import { SeoSettingsPanel } from "./SeoSettingsPanel";
+import { SeoDialog } from "./SeoDialog";
+import { PageActionsMenu } from "./PageActionsMenu";
 
 function GoogleLogo(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -27,7 +29,23 @@ const MENU_ITEMS = [
   { key: "pages" as const, label: "Pages", Icon: FileText },
   { key: "templates" as const, label: "Templates", Icon: Layers },
   { key: "widgets" as const, label: "Widgets", Icon: Grid2x2 },
-];
+] as const;
+
+const DASHBOARD_MENU_ITEMS = [
+  { key: "projects" as const, label: "My Projects", Icon: FolderOpen },
+  { key: "pages" as const, label: "Templates", Icon: Layers },
+  { key: "templates" as const, label: "Favorites", Icon: Heart },
+  { key: "sections" as const, label: "Shared with me", Icon: Users },
+  { key: "widgets" as const, label: "Trash", Icon: Trash2 },
+  { key: "animations" as const, label: "Domains", Icon: Globe },
+  { key: "assets" as const, label: "Hosting", Icon: Server },
+  { key: "seo" as const, label: "AI Website", Icon: Sparkles },
+  { key: "settings" as const, label: "Team", Icon: UserCircle },
+  { key: "integrations" as const, label: "Integrations", Icon: BookOpen },
+] as const;
+
+const CANVAS_MENU_KEYS = MENU_ITEMS.map((item) => item.key);
+const EMPTY_PAGES: Page[] = [];
 
 export function LibraryPanel() {
   const [q, setQ] = useState("");
@@ -37,18 +55,68 @@ export function LibraryPanel() {
   const mounted = useMounted();
   const addSection = useBuilder((s) => s.addSection);
   const applyTemplate = useBuilder((s) => s.applyTemplate);
-  const pages = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId]?.pages ?? [] : []));
-  const currentProject = useBuilder((s) => s.currentProject());
+  const currentProject = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
   const setPageSeo = useBuilder((s) => s.setPageSeo);
-  const seoModalPage = pages.find((pg) => pg.id === seoModalPageId) ?? null;
-  const currentPageId = useBuilder((s) => s.currentProject()?.currentPageId ?? null);
+  const currentPageId = useBuilder((s) => currentProject?.currentPageId ?? null);
   const selectPage = useBuilder((s) => s.selectPage);
   const addPage = useBuilder((s) => s.addPage);
+  const renamePage = useBuilder((s) => s.renamePage);
+  const setPageSlug = useBuilder((s) => s.setPageSlug);
+  const duplicatePage = useBuilder((s) => s.duplicatePage);
+  const deletePage = useBuilder((s) => s.deletePage);
   const leftPanelOpen = useBuilder((s) => s.leftPanelOpen);
   const leftPanelView = useBuilder((s) => s.leftPanelView);
   const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
-  const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
+  const setLeftPanelViewRaw = useBuilder((s) => s.setLeftPanelView);
+  const showProjectDashboard = useBuilder((s) => s.showProjectDashboard);
+  type CanvasMenuKey = (typeof CANVAS_MENU_KEYS)[number];
+  type DashboardMenuKey = (typeof DASHBOARD_MENU_ITEMS)[number]["key"];
+  type PanelViewKey = CanvasMenuKey | DashboardMenuKey;
+  const setLeftPanelView: (view: PanelViewKey) => void = (view) => {
+    setLeftPanelViewRaw(view as DashboardMenuKey | CanvasMenuKey);
+  };
+  const pages = currentProject?.pages ?? EMPTY_PAGES;
+  const seoModalPage = pages.find((pg: Page) => pg.id === seoModalPageId) ?? null;
   const [seoModalTab, setSeoModalTab] = useState<"page" | "analytics">("page");
+  const isCanvasMenuKey = (value: string): value is CanvasMenuKey => CANVAS_MENU_KEYS.includes(value as CanvasMenuKey);
+  const activePanelKey = showProjectDashboard
+    ? leftPanelView
+    : isCanvasMenuKey(leftPanelView)
+    ? leftPanelView
+    : "pages";
+  const menuItems = showProjectDashboard ? DASHBOARD_MENU_ITEMS : MENU_ITEMS;
+  const primaryMenuItems = showProjectDashboard ? menuItems.slice(0, 5) : menuItems;
+  const toolMenuItems = showProjectDashboard ? menuItems.slice(5) : [];
+  const currentViewLabel = menuItems.find((item) => item.key === activePanelKey)?.label ?? activePanelKey;
+  const [overlayView, setOverlayView] = useState<PanelViewKey | null>(null);
+  const overlayLabel = overlayView ? menuItems.find((item) => item.key === overlayView)?.label ?? overlayView : "";
+  const isOverlayOpen = Boolean(overlayView);
+  const prevLeftPanelOpenRef = useRef(false);
+  const prevLeftPanelViewRef = useRef(leftPanelView);
+
+  useEffect(() => {
+    if (!leftPanelOpen) {
+      setOverlayView(null);
+    }
+    prevLeftPanelOpenRef.current = leftPanelOpen;
+    prevLeftPanelViewRef.current = leftPanelView;
+  }, [leftPanelOpen, leftPanelView]);
+
+  useEffect(() => {
+    const becameOpen = !prevLeftPanelOpenRef.current && leftPanelOpen;
+    const viewChanged = prevLeftPanelViewRef.current !== leftPanelView;
+
+    if (
+      leftPanelOpen &&
+      !showProjectDashboard &&
+      isCanvasMenuKey(leftPanelView) &&
+      leftPanelView !== "templates" &&
+      (becameOpen || viewChanged)
+    ) {
+      setOverlayView(leftPanelView);
+    }
+  }, [leftPanelOpen, leftPanelView, showProjectDashboard, isCanvasMenuKey]);
+
   useEffect(() => {
     if (seoModalPageId) {
       setSeoModalTab("page");
@@ -161,335 +229,291 @@ const handleLogout = async () => {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="relative h-full min-h-0 flex flex-row">
-        {/* Left Panel: Icons on top, menu content below */}
-        <div className="w-56 border-r border-border/70 bg-background/50 flex flex-col flex-shrink-0">
-          <div className="px-3 py-3">
-            <div className="flex flex-col items-stretch gap-2">
-              <div className="flex items-center justify-start gap-4">
-                {MENU_ITEMS.map(({ key, label, Icon }) => (
-                  <Tooltip key={key}>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() => {
-                            // Always open the left panel and switch view — do not collapse when clicking the active icon
-                            setLeftPanelView(key);
-                            setLeftPanelOpen(true);
-                          }}
-                          className={`flex flex-col items-center gap-1 px-1 py-0.5 rounded-md transition ${leftPanelOpen && leftPanelView === key ? 'text-primary-foreground' : 'text-muted-foreground'}`}
-                          aria-label={label}
-                        >
-                        <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl transition ${leftPanelOpen && leftPanelView === key ? 'bg-primary text-primary-foreground shadow-md' : 'bg-background border border-border/70'}`}>
-                          <Icon className="w-5 h-5" />
-                        </div>
-                        <span className={`mt-1 text-[10px] ${leftPanelOpen && leftPanelView === key ? 'text-foreground font-semibold' : 'text-foreground'}`}>{label}</span>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" align="center" className="rounded-md bg-slate-900 text-white px-2 py-1 text-xs shadow-md">
-                      {`Show ${label}`}
-                    </TooltipContent>
-                  </Tooltip>
-                ))}
-              </div>
-
-              {/* Removed centered pill — labels are shown under each icon consistently */}
+      <div className="relative h-full min-h-0 flex flex-col bg-background/50">
+        <div className="border-b border-border/70 px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Workspace</p>
+              <div className="text-sm font-semibold text-foreground">Sidebar Controls</div>
             </div>
+            <button
+              type="button"
+              className="inline-flex h-9 items-center rounded-full border border-border/70 bg-background/90 px-3 text-xs font-medium text-foreground transition hover:bg-muted"
+              onClick={() => setLeftPanelOpen(!leftPanelOpen)}
+            >
+              {leftPanelOpen ? "Collapse" : "Expand"}
+            </button>
+          </div>
+        </div>
+
+        <div className="px-4 py-4">
+          <div className="space-y-2">
+            {primaryMenuItems.map(({ key, label, Icon }) => {
+              const active = leftPanelOpen && activePanelKey === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setLeftPanelView(key);
+                    if (key === "templates") {
+                      setOverlayView(null);
+                    } else {
+                      setOverlayView(key);
+                    }
+                    setLeftPanelOpen(true);
+                  }}
+                  className={`group flex w-full items-center gap-2 rounded-2xl px-2.5 py-2 text-left text-sm font-semibold transition ${
+                    active ? "bg-violet-50 text-violet-900 border border-violet-100" : "bg-white text-slate-700 border border-border/70 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className={`inline-flex h-9 w-9 min-w-[2.25rem] items-center justify-center rounded-xl ${
+                    active ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-600"
+                  }`}>
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {leftPanelOpen && (
-            <div className="flex-1 min-h-0 flex flex-col bg-card/95 shadow-inner">
-              <div className="flex items-center justify-between border-b border-border/70 bg-card/40 px-3 py-2">
-                <div className="text-xs font-semibold text-foreground">{leftPanelView.charAt(0).toUpperCase() + leftPanelView.slice(1)}</div>
+          {toolMenuItems.length > 0 ? (
+            <>
+              <div className="mt-5 mb-2 px-3 text-[10px] uppercase tracking-[0.24em] text-slate-400">Tools</div>
+              <div className="space-y-2">
+                {toolMenuItems.map(({ key, label, Icon }) => {
+                  const active = leftPanelOpen && activePanelKey === key;
+                  const badge = key === "animations" || key === "assets" ? "New" : key === "seo" ? "Beta" : undefined;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setLeftPanelView(key);
+                        if (key === "templates") {
+                          setOverlayView(null);
+                        } else {
+                          setOverlayView(key);
+                        }
+                        setLeftPanelOpen(true);
+                      }}
+                      className={`group flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-left text-sm font-semibold transition ${
+                        active ? "bg-violet-50 text-violet-900 border border-violet-100" : "bg-white text-slate-700 border border-border/70 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={`inline-flex h-9 w-9 min-w-[2.25rem] items-center justify-center rounded-xl ${
+                          active ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-600"
+                        }`}>
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <span className="truncate">{label}</span>
+                      </span>
+                      {badge ? (
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          badge === "Beta" ? "bg-slate-100 text-slate-700" : "bg-violet-100 text-violet-700"
+                        }`}>
+                          {badge}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
+            </>
+          ) : null}
+        </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 py-1.5 pb-6 space-y-1.5" style={{ scrollbarGutter: "stable" }}>
-                {leftPanelView === "pages" ? (
-                  <section className="w-full space-y-1.5">
-                    <div className="w-full rounded-lg border border-border/70 bg-background/90 p-1.5 space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Pages</div>
-                          <div className="text-xs font-semibold text-foreground">{pages.length} page{pages.length === 1 ? '' : 's'}</div>
-                        </div>
-                        <button
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background/80 text-muted-foreground hover:bg-accent hover:text-white transition-colors"
-                          onClick={() => addPage()}
-                          title="New page"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="space-y-0.5">
-                        {pages.map((pg) => (
-                          <div
-                            key={pg.id}
-                            onClick={() => selectPage(pg.id)}
-                            className={`w-full rounded-lg px-2 py-1.5 text-xs transition ${pg.id === currentPageId ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/80' : 'bg-background/90 text-foreground hover:bg-muted'} flex items-center justify-between gap-2 cursor-pointer`}
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate font-medium text-xs">{pg.name}</div>
-                              <div className="text-[9px] text-muted-foreground truncate">/{pg.slug}</div>
+        {leftPanelOpen ? (
+          <div className="flex-1 min-h-0 overflow-hidden px-3 pb-3">
+            <div className={`absolute inset-0 z-20 flex flex-col bg-white shadow-2xl transition-transform duration-300 ${isOverlayOpen ? "translate-x-0" : "-translate-x-full"}`}>
+              <div className="flex items-center gap-3 border-b border-border/70 bg-slate-50 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOverlayView(null);
+                    if (!showProjectDashboard) {
+                      setLeftPanelView("pages");
+                    }
+                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border/70 bg-white text-slate-700 transition hover:border-primary hover:bg-primary/10 hover:text-primary"
+                  aria-label="Back to menu"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className="text-sm font-semibold text-foreground">{overlayLabel}</div>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4" style={{ scrollbarGutter: "stable" }}>
+                {overlayView ? (
+                  showProjectDashboard ? (
+                    <DashboardPanel view={overlayView as DashboardPanelView} setLeftPanelOpen={setLeftPanelOpen} setLeftPanelView={setLeftPanelView} />
+                  ) : (
+                    <>
+                      {overlayView === "pages" ? (
+                        <section className="space-y-3">
+                          <div className="rounded-3xl border border-border/70 bg-slate-50 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <div className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">Pages</div>
+                                <div className="mt-1 text-sm font-semibold text-foreground">{pages.length} page{pages.length === 1 ? "" : "s"}</div>
+                              </div>
+                              <button
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border/70 bg-white text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-primary"
+                                onClick={() => addPage()}
+                                title="New page"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
                             </div>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
+                          </div>
+
+                          <div className="space-y-2">
+                            {pages.map((pg) => (
+                              <div
+                                key={pg.id}
+                                className={`group flex items-center justify-between gap-2 rounded-3xl border px-3 py-3 text-xs transition ${pg.id === currentPageId ? "border-primary bg-primary/10 text-primary-foreground" : "border-border/70 bg-slate-50 text-foreground hover:border-slate-300 hover:bg-slate-100"}`}
+                              >
                                 <button
                                   type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setSeoModalPageId(pg.id);
-                                  }}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-background/80 text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                                  title="Edit page SEO"
+                                  onClick={() => selectPage(pg.id)}
+                                  className="min-w-0 text-left"
                                 >
-                                  <Settings className="w-4 h-4" />
+                                  <div className="truncate font-medium">{pg.name}</div>
+                                  <div className="text-[10px] text-muted-foreground">/{pg.slug}</div>
                                 </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom" align="center" className="rounded-md bg-slate-900 text-white px-2 py-1 text-xs shadow-md">
-                                Edit SEO
-                              </TooltipContent>
-                            </Tooltip>
+
+                                <PageActionsMenu
+                                  page={pg}
+                                  pageCount={pages.length}
+                                  onRename={renamePage}
+                                  onSetSlug={setPageSlug}
+                                  onDuplicate={duplicatePage}
+                                  onDelete={deletePage}
+                                  onSeo={setSeoModalPageId}
+                                />
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  </section>
-                ) : null}
+                        </section>
+                      ) : null}
 
-                {leftPanelView === "templates" ? (
-                  <section className="w-full space-y-1.5">
-                    <div className="w-full rounded-lg border border-border/70 bg-background/90 p-3 space-y-3">
-                      <div>
-                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Templates</div>
-                        <div className="mt-2 text-sm text-foreground">Browse templates in a full-screen gallery experience. Select a design to replace the current page content.</div>
-                      </div>
-                      <button
-                        className="w-full rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90"
-                        onClick={() => setLeftPanelView("templates")}
-                      >
-                        Open full gallery
-                      </button>
-                      <div className="rounded-lg border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
-                        Your full-screen marketplace is available above the canvas whenever the Templates view is active.
-                      </div>
-                    </div>
-                  </section>
-                ) : null}
-
-
-                {leftPanelView === "sections" ? (
-                  <section className="w-full space-y-1.5">
-                    <div className="w-full rounded-lg border border-border/70 bg-background/90 p-1.5">
-                      <div className="w-full relative">
-                        <Search className="w-3.5 h-3.5 absolute left-2 top-1.5 text-muted-foreground" />
-                        <input
-                          value={q}
-                          onChange={(e) => setQ(e.target.value)}
-                          placeholder="Search sections…"
-                          className="w-full pl-7 pr-2 py-1 text-xs rounded-md border border-input/80 bg-background/90 shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                        />
-                      </div>
-                    </div>
-                    <div className="w-full space-y-2">
-                      {groupedSections.length === 0 ? (
-                        <div className="w-full rounded-lg border border-dashed border-border p-3 text-center text-xs text-muted-foreground">No sections match.</div>
-                      ) : (
-                        groupedSections.map(([cat, items]) => {
-                          const open = q.trim() ? true : openCats[cat] ?? false;
-                          return (
-                            <div key={cat} className="rounded-lg border border-border/70 bg-background/90 overflow-hidden">
-                              <button
-                                onClick={() => setOpenCats((s) => ({ ...s, [cat]: !open }))}
-                                className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted/50 transition"
-                              >
-                                {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                <span className="text-[10px]">{cat}</span>
-                                <span className="ml-auto text-[8px] font-normal opacity-60">{items.length}</span>
-                              </button>
-                              {open ? (
-                                <div className="space-y-1 p-2 border-t border-border/50">
-                                  {items.map((tpl) => (
-                                    <SectionCard key={tpl.id} tpl={tpl} onAdd={() => addSection(tpl)} />
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </section>
-                ) : null}
-
-                {leftPanelView === "widgets" ? (
-                  <section className="w-full space-y-1.5">
-                    <div className="w-full rounded-lg border border-border/70 bg-background/90 p-1.5">
-                      <div className="w-full relative">
-                        <Search className="w-3.5 h-3.5 absolute left-2 top-1.5 text-muted-foreground" />
-                        <input
-                          value={q}
-                          onChange={(e) => setQ(e.target.value)}
-                          placeholder="Search widgets…"
-                          className="w-full pl-7 pr-2 py-1 text-xs rounded-md border border-input/80 bg-background/90 shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                        />
-                      </div>
-                    </div>
-                    <div className="w-full space-y-1">
-                      {groupedSections.length === 0 ? (
-                        <div className="w-full rounded-lg border border-dashed border-border p-3 text-center text-xs text-muted-foreground">No widgets match.</div>
-                      ) : (
-                        groupedSections.map(([cat, items]) => {
-                          const open = q.trim() ? true : openCats[cat] ?? false;
-                          return (
-                            <div key={cat} className="rounded-lg border border-border/70 bg-background/90 overflow-hidden">
-                              <button
-                                onClick={() => setOpenCats((s) => ({ ...s, [cat]: !open }))}
-                                className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted/50 transition"
-                              >
-                                {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                                <span className="text-[10px]">{cat}</span>
-                                <span className="ml-auto text-[8px] font-normal opacity-60">{items.length}</span>
-                              </button>
-                              {open ? (
-                                <div className="space-y-1 p-2 border-t border-border/50">
-                                  {items.map((tpl) => (
-                                    <SectionCard key={tpl.id} tpl={tpl} onAdd={() => addSection(tpl)} />
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </section>
-                ) : null}
-              </div>
-
-              <Dialog open={Boolean(seoModalPage)} onOpenChange={(open) => { if (!open) setSeoModalPageId(null); }}>
-                <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-2xl p-0">
-                  <div className="max-h-[calc(100vh-4rem)] overflow-y-auto rounded-3xl bg-background shadow-lg">
-                    <DialogHeader className="border-b border-border/70 px-6 py-5">
-                      <DialogTitle>SEO settings for {seoModalPage?.name ?? "page"}</DialogTitle>
-                      <DialogDescription>Update page-specific SEO metadata and social preview values.</DialogDescription>
-                    </DialogHeader>
-                    <div className="p-6">
-                      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center rounded-full bg-muted/50 p-1">
-                          {(["page", "analytics"] as const).map((tab) => (
+                      {overlayView === "templates" ? (
+                        <section className="space-y-3">
+                          <div className="rounded-3xl border border-border/70 bg-slate-50 p-4">
+                            <div className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">Templates</div>
+                            <p className="mt-2 text-sm text-foreground">Browse templates in a full-screen gallery experience. Select a design to replace the current page content.</p>
                             <button
-                              key={tab}
-                              type="button"
-                              onClick={() => setSeoModalTab(tab)}
-                              className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${seoModalTab === tab ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                              className="mt-4 w-full rounded-2xl bg-primary px-4 py-3 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90"
+                              onClick={() => {
+                                setLeftPanelOpen(true);
+                                setLeftPanelView("templates");
+                              }}
                             >
-                              {tab === "page" ? "Page SEO" : "Analytics"}
+                              Open full gallery
                             </button>
-                          ))}
-                        </div>
-                        {seoModalTab === "analytics" ? (
-                          <div className="text-xs text-muted-foreground">Project-level tracking settings are injected into exported/preview HTML.</div>
-                        ) : null}
-                      </div>
-                      <SeoSettingsPanel page={seoModalPage ?? undefined} project={currentProject ?? undefined} pageOnly={seoModalTab === "page"} projectOnly={seoModalTab === "analytics"} />
-                    </div>
-                    <DialogFooter className="gap-2 border-t border-border/70 px-6 py-4">
-                      <DialogClose asChild>
-                        <button type="button" className="inline-flex h-10 items-center justify-center rounded-lg border border-border/70 bg-background px-4 text-sm font-semibold transition hover:bg-muted">
-                          Close
-                        </button>
-                      </DialogClose>
-                      <button
-                        type="button"
-                        className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-                        onClick={() => setSeoModalPageId(null)}
-                      >
-                        Save
-                      </button>
-                    </DialogFooter>
-                  </div>
-                </DialogContent>
-              </Dialog>
-
-              <div ref={accountMenuRef} className="mt-auto border-t border-border/70 bg-background/90 p-2">
-                <div className="relative">
-                  <button
-                    type="button"
-                    className="w-full rounded-2xl border border-border/70 bg-card/80 px-3 py-3 text-left shadow-sm transition hover:bg-muted/80 hover:text-foreground flex items-center gap-3"
-                    onClick={() => {
-                      if (user) {
-                        setAccountOpen((open) => !open);
-                      } else {
-                        setAuthDialogOpen(true);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                 <div style={{minWidth:"30px", minHeight:"30px"}} className="h-8 w-8 overflow-hidden rounded-full bg-primary flex items-center justify-center">
-  {user?.photoURL ? (
-    <img
-      src={user.photoURL}
-      alt={user.name}
-      className="h-full w-full object-cover"
-    />
-  ) : (
-    <span className="text-[10px] font-semibold text-primary-foreground">
-      {user ? user.initials : "L"}
-    </span>
-  )}
-</div>
-                      <div className="min-w-0">
-                        <div className="truncate text-xs font-semibold text-foreground">
-                          {user ? user.name : "LOGIN"}
-                        </div>
-                        <div className="truncate text-[10px] text-muted-foreground">
-                          {user ? user.plan : ""}
-                        </div>
-                      </div>
-                    </div>
-                    {user ? (
-                      <span className="inline-flex h-7 items-center rounded-full border border-border/70 bg-background px-3 text-[10px] font-semibold text-foreground">
-                        Profile
-                      </span>
-                    ) : null}
-                  </button>
-
-                  {user && accountOpen ? (
-                    <div className="absolute bottom-full left-0 right-0 mb-2 z-50 overflow-hidden rounded-3xl border border-border/70 bg-white shadow-[0_25px_60px_-30px_rgba(15,23,42,0.25)]">
-                      <div className="p-4 pb-2">
-                        <div className="flex items-center gap-3">
-                          <div className="inline-flex aspect-square h-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-semibold leading-none">
-                            {user.initials}
                           </div>
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-foreground">{user.name}</div>
-                            <div className="truncate text-xs text-muted-foreground">{user.email}</div>
+                        </section>
+                      ) : null}
+
+                      {overlayView === "sections" ? (
+                        <section className="space-y-3">
+                          <div className="rounded-3xl border border-border/70 bg-slate-50 p-3">
+                            <div className="relative">
+                              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+                              <input
+                                value={q}
+                                onChange={(e) => setQ(e.target.value)}
+                                placeholder="Search sections…"
+                                className="w-full rounded-2xl border border-input/80 bg-white py-3 pl-11 pr-4 text-sm shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+                              />
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                      <div className="space-y-1 border-t border-border/70 px-3 py-3">
-                        {[
-                          { label: "Dashboard", icon: FileText, onClick: () => setAccountOpen(false) },
-                          { label: "Help & Docs", icon: BookOpen, onClick: () => setAccountOpen(false) },
-                          { label: "Changelog", icon: Layers, onClick: () => setAccountOpen(false) },
-                          { label: "Log out", icon: LogOut, onClick: handleLogout },
-                        ].map(({ label, icon: Icon, onClick }) => (
-                          <button
-                            key={label}
-                            className="w-full flex items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100"
-                            onClick={onClick}
-                          >
-                            <Icon className="w-4 h-4 text-slate-500" />
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
+
+                          <div className="space-y-3">
+                            {groupedSections.length === 0 ? (
+                              <div className="rounded-3xl border border-dashed border-border/70 bg-slate-50 p-4 text-center text-xs text-muted-foreground">No sections match.</div>
+                            ) : (
+                              groupedSections.map(([cat, items]) => {
+                                const open = q.trim() ? true : openCats[cat] ?? false;
+                                return (
+                                  <div key={cat} className="overflow-hidden rounded-3xl border border-border/70 bg-slate-50">
+                                    <button
+                                      onClick={() => setOpenCats((s) => ({ ...s, [cat]: !open }))}
+                                      className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground transition hover:bg-muted/50"
+                                    >
+                                      {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                      <span>{cat}</span>
+                                      <span className="ml-auto text-[9px] font-normal text-slate-500">{items.length}</span>
+                                    </button>
+                                    {open ? (
+                                      <div className="space-y-2 border-t border-border/70 px-3 py-3">
+                                        {items.map((tpl) => (
+                                          <SectionCard key={tpl.id} tpl={tpl} onAdd={() => addSection(tpl)} />
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </section>
+                      ) : null}
+
+                      {overlayView === "widgets" ? (
+                        <section className="space-y-3">
+                          <div className="rounded-3xl border border-border/70 bg-slate-50 p-3">
+                            <div className="relative">
+                              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+                              <input
+                                value={q}
+                                onChange={(e) => setQ(e.target.value)}
+                                placeholder="Search widgets…"
+                                className="w-full rounded-2xl border border-input/80 bg-white py-3 pl-11 pr-4 text-sm shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            {groupedSections.length === 0 ? (
+                              <div className="rounded-3xl border border-dashed border-border/70 bg-slate-50 p-4 text-center text-xs text-muted-foreground">No widgets match.</div>
+                            ) : (
+                              groupedSections.map(([cat, items]) => {
+                                const open = q.trim() ? true : openCats[cat] ?? false;
+                                return (
+                                  <div key={cat} className="overflow-hidden rounded-3xl border border-border/70 bg-slate-50">
+                                    <button
+                                      onClick={() => setOpenCats((s) => ({ ...s, [cat]: !open }))}
+                                      className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground transition hover:bg-muted/50"
+                                    >
+                                      {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                      <span>{cat}</span>
+                                      <span className="ml-auto text-[9px] font-normal text-slate-500">{items.length}</span>
+                                    </button>
+                                    {open ? (
+                                      <div className="space-y-2 border-t border-border/70 px-3 py-3">
+                                        {items.map((tpl) => (
+                                          <SectionCard key={tpl.id} tpl={tpl} onAdd={() => addSection(tpl)} />
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </section>
+                      ) : null}
+                    </>
+                  )
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Select a menu item to open a panel.</div>
+                )}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        ) : null}
       </div>
 
       <Dialog open={authDialogOpen} onOpenChange={setAuthDialogOpen}>
@@ -681,6 +705,13 @@ const handleLogout = async () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SeoDialog
+        page={seoModalPage}
+        project={currentProject}
+        open={Boolean(seoModalPage)}
+        onClose={() => setSeoModalPageId(null)}
+      />
     </TooltipProvider>
   );
 }
@@ -753,5 +784,211 @@ function SectionCard({ tpl, onAdd }: { tpl: SectionTemplate; onAdd: () => void }
         </button>
       </div>
     </div>
+  );
+}
+
+type DashboardPanelView = (typeof DASHBOARD_MENU_ITEMS[number])["key"];
+
+function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: DashboardPanelView; setLeftPanelOpen: (open: boolean) => void; setLeftPanelView: (view: DashboardPanelView) => void; }) {
+  const projects = useBuilder((s) => s.projects);
+  const projectEntries = useMemo(() => Object.values(projects), [projects]);
+  const totalProjects = projectEntries.length;
+
+  const sectionCard = (title: string, subtitle: string, description: string, action?: { label: string; onClick: () => void }) => (
+    <div className="rounded-2xl border border-border/70 bg-background/90 p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[9px] uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
+          <h3 className="mt-2 text-sm font-semibold text-foreground">{subtitle}</h3>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">{description}</p>
+        </div>
+        {action ? (
+          <button
+            type="button"
+            className="rounded-full bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
+            onClick={action.onClick}
+          >
+            {action.label}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {view === "projects" ? (
+        <section className="w-full space-y-4">
+          <div className="rounded-3xl border border-border/70 bg-background/90 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-[9px] uppercase tracking-[0.24em] text-muted-foreground">Projects</div>
+                <div className="mt-2 text-sm font-semibold text-foreground">{totalProjects} project{totalProjects === 1 ? "" : "s"}</div>
+                <p className="mt-1 text-xs text-muted-foreground">Quickly manage your active websites and open your latest project.</p>
+              </div>
+              <button
+                type="button"
+                className="h-10 rounded-full bg-primary px-4 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90"
+                onClick={() => {
+                  setLeftPanelView("pages");
+                  setLeftPanelOpen(true);
+                }}
+              >
+                New
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {projectEntries.length > 0 ? (
+              projectEntries.slice(0, 3).map((project) => (
+                <div key={project.id} className="rounded-2xl border border-border/70 bg-white p-3 text-sm text-foreground shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{project.name}</div>
+                      <div className="text-[10px] text-muted-foreground">Updated {new Date(project.updatedAt).toLocaleDateString()}</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-full border border-border/70 bg-background px-2 py-1 text-[10px] font-semibold text-foreground transition hover:bg-muted"
+                      onClick={() => {
+                        setLeftPanelView("templates");
+                        setLeftPanelOpen(true);
+                      }}
+                    >
+                      Open
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-border/70 bg-background/80 p-4 text-xs text-muted-foreground">
+                No projects found. Create a new project to start building.
+              </div>
+            )}
+          </div>
+        </section>
+      ) : view === "pages" ? (
+        <section className="w-full space-y-4">
+          {sectionCard(
+            "Templates",
+            "Browse high-impact layouts",
+            "Select a prebuilt template and launch your website with one click.",
+            {
+              label: "Explore",
+              onClick: () => {
+                setLeftPanelView("templates");
+                setLeftPanelOpen(true);
+              },
+            }
+          )}
+        </section>
+      ) : view === "templates" ? (
+        <section className="w-full space-y-4">
+          {sectionCard(
+            "Favorites",
+            "Saved assets & templates",
+            "Keep your most-used resources ready for rapid page building.",
+            {
+              label: "View",
+              onClick: () => {
+                setLeftPanelView("sections");
+                setLeftPanelOpen(true);
+              },
+            }
+          )}
+        </section>
+      ) : view === "sections" ? (
+        <section className="w-full space-y-4">
+          {sectionCard(
+            "Shared",
+            "Collaborate on reusable content",
+            "Sync sections across pages and keep your design system consistent.",
+            {
+              label: "Sync",
+              onClick: () => {
+                setLeftPanelView("sections");
+                setLeftPanelOpen(true);
+              },
+            }
+          )}
+        </section>
+      ) : view === "widgets" ? (
+        <section className="w-full space-y-4">
+          {sectionCard(
+            "Trash",
+            "Recover deleted components",
+            "Restore recently removed items or clean up old assets from your dashboard.",
+            {
+              label: "Review",
+              onClick: () => {
+                setLeftPanelView("widgets");
+                setLeftPanelOpen(true);
+              },
+            }
+          )}
+        </section>
+      ) : view === "assets" ? (
+        <section className="w-full space-y-4">
+          {sectionCard(
+            "Hosting",
+            "Deploy and manage your site",
+            "Track hosting performance, domains, and launch status from one place.",
+            {
+              label: "Deploy",
+              onClick: () => {
+                setLeftPanelView("assets");
+                setLeftPanelOpen(true);
+              },
+            }
+          )}
+        </section>
+      ) : view === "animations" ? (
+        <section className="w-full space-y-4">
+          {sectionCard(
+            "Domains",
+            "Connect your custom address",
+            "Set up and manage domain names for your website with fast DNS configuration.",
+            {
+              label: "Connect",
+              onClick: () => {
+                setLeftPanelView("animations");
+                setLeftPanelOpen(true);
+              },
+            }
+          )}
+        </section>
+      ) : view === "seo" ? (
+        <section className="w-full space-y-4">
+          {sectionCard(
+            "AI Website",
+            "Optimize for search & conversion",
+            "Use built-in SEO guidance and site analytics to improve visibility.",
+            {
+              label: "Analyze",
+              onClick: () => {
+                setLeftPanelView("seo");
+                setLeftPanelOpen(true);
+              },
+            }
+          )}
+        </section>
+      ) : view === "settings" ? (
+        <section className="w-full space-y-4">
+          {sectionCard(
+            "Team",
+            "Manage collaborators",
+            "Invite others, assign roles, and keep your project team aligned.",
+            {
+              label: "Manage",
+              onClick: () => {
+                setLeftPanelView("settings");
+                setLeftPanelOpen(true);
+              },
+            }
+          )}
+        </section>
+      ) : null}
+    </>
   );
 }

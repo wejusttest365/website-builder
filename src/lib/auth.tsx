@@ -1,8 +1,10 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createUserIfNotExists } from "@/services/firestore";
 
 import {
   signInWithGoogle,
+  signInWithEmail,
+  registerWithEmail,
   subscribeToAuth,
   logout as firebaseLogout,
 } from "@/services/auth";
@@ -19,93 +21,82 @@ type AuthUser = {
 type AuthContextValue = {
   user: AuthUser | null;
   signingIn: boolean;
+  authReady: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (firstName: string, lastName: string, email: string, password: string) => Promise<void>;
-loginWithGoogle: () => Promise<void>;
-logout: () => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 
-function createUser(email: string, fullName?: string): AuthUser {
-  const normalizedEmail = email.trim().toLowerCase();
-  const guessedName = fullName?.trim() || normalizedEmail.split("@")[0] || "User";
-  const displayName = guessedName
-    .split(/[^a-z0-9]+/i)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(" ") || "Lovable User";
-  const initials = displayName
-    .split(" ")
-    .map((part) => part.slice(0, 1).toUpperCase())
-    .slice(0, 2)
-    .join("");
-
-  return {
-    id: `mock-${normalizedEmail}`,
-    name: displayName,
-    email: normalizedEmail,
-    plan: "Free plan",
-    initials: initials || "L",
-  };
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [signingIn, setSigningIn] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const latestUserId = useRef<string | null>(null);
 
   useEffect(() => {
-  const unsubscribe = subscribeToAuth(async (firebaseUser) => {
-  if (!firebaseUser) {
-    setUser(null);
-    return;
-  }
+    let isMounted = true;
 
-  console.log("Firebase User:", firebaseUser);
-  console.log("Photo URL:", firebaseUser.photoURL);
+    const unsubscribe = subscribeToAuth(async (firebaseUser) => {
+      if (!isMounted) return;
 
-  setUser({
-    id: firebaseUser.uid,
-    name: firebaseUser.displayName || "User",
-    email: firebaseUser.email || "",
-    photoURL: firebaseUser.photoURL || "",
-    plan: "Free plan",
-    initials:
-      (firebaseUser.displayName || "U")
-        .split(" ")
-        .map((word) => word[0])
-        .join("")
-        .substring(0, 2),
-  });
-});
+      if (!firebaseUser) {
+        latestUserId.current = null;
+        setUser(null);
+        setAuthReady(true);
+        return;
+      }
 
-  return unsubscribe;
-}, []);
+      if (latestUserId.current === firebaseUser.uid && authReady) {
+        return;
+      }
+
+      latestUserId.current = firebaseUser.uid;
+      await createUserIfNotExists(firebaseUser);
+
+      setUser({
+        id: firebaseUser.uid,
+        name: firebaseUser.displayName || "User",
+        email: firebaseUser.email || "",
+        photoURL: firebaseUser.photoURL || "",
+        plan: "Free plan",
+        initials:
+          (firebaseUser.displayName || "U")
+            .split(" ")
+            .map((word) => word[0])
+            .join("")
+            .substring(0, 2),
+      });
+      setAuthReady(true);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
 
  
 
-  const login = async (email: string, _password: string) => {
+  const login = async (email: string, password: string) => {
     setSigningIn(true);
-    return new Promise<void>((resolve) => {
-      window.setTimeout(() => {
-        setUser(createUser(email));
-        setSigningIn(false);
-        resolve();
-      }, 300);
-    });
+    try {
+      await signInWithEmail(email, password);
+    } finally {
+      setSigningIn(false);
+    }
   };
 
-  const register = async (firstName: string, lastName: string, email: string, _password: string) => {
+  const register = async (firstName: string, lastName: string, email: string, password: string) => {
     setSigningIn(true);
-    return new Promise<void>((resolve) => {
-      window.setTimeout(() => {
-        const name = `${firstName.trim()} ${lastName.trim()}`.trim();
-        setUser(createUser(email, name || undefined));
-        setSigningIn(false);
-        resolve();
-      }, 300);
-    });
+    try {
+      await registerWithEmail(email, password);
+    } finally {
+      setSigningIn(false);
+    }
   };
 
   const logout = async () => {
@@ -118,24 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   try {
     const result = await signInWithGoogle();
-
-    const firebaseUser = result.user;
-
-    await createUserIfNotExists(firebaseUser);
-
-    setUser({
-      id: firebaseUser.uid,
-      name: firebaseUser.displayName || "User",
-      email: firebaseUser.email || "",
-      photoURL: firebaseUser.photoURL || "",
-      plan: "Free plan",
-      initials:
-        (firebaseUser.displayName || "U")
-          .split(" ")
-          .map((word) => word.charAt(0).toUpperCase())
-          .join("")
-          .substring(0, 2),
-    });
+    await createUserIfNotExists(result.user);
   } finally {
     setSigningIn(false);
   }
@@ -144,12 +118,13 @@ const value = useMemo(
   () => ({
     user,
     signingIn,
+    authReady,
     login,
     register,
     loginWithGoogle,
     logout,
   }),
-  [user, signingIn],
+  [user, signingIn, authReady],
 );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

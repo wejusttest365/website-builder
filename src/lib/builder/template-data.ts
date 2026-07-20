@@ -44,6 +44,11 @@ export interface TemplateDataDefinition {
     tier?: string;
     license?: string;
   };
+  globalCss?: string;
+  globalJs?: string;
+  customHead?: string;
+  seo?: Record<string, any>;
+  projectSeo?: Record<string, any>;
 }
 
 export const TEMPLATE_CATEGORIES: TemplateCategory[] = [

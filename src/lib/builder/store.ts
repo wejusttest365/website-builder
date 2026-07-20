@@ -1,10 +1,11 @@
 import { createProject } from "@/services/project";
 import { create } from "zustand";
 import { nanoid } from "nanoid";
+import { getProject } from "@/services/project";
 import type { SectionTemplate } from "./sections";
 import type { TemplateDefinition } from "./templates";
 import { createImageAssetReference, normalizeAssetMap, saveImageBlob, type BuilderAssetEntry } from "./image-storage";
-
+loadCloudProject: (id: string) => Promise<void>;
 export interface PageSection {
   id: string;
   templateId: string;
@@ -91,6 +92,8 @@ export interface Project {
   seo?: ProjectSeo;
   createdAt: number;
   updatedAt: number;
+  publishedAt?: number;
+  thumbnail?: string;
   assets?: Record<string, BuilderAssetEntry>;
   selectedTemplateId?: string | null;
   description?: string;
@@ -122,21 +125,49 @@ interface BuilderState {
   historyIndex: number;
   hydrated: boolean;
   leftPanelOpen: boolean;
-  leftPanelView: "pages" | "templates" | "sections" | "widgets" | "media" | "styles" | "settings";
+  leftPanelView:
+  | "projects"
+  | "pages"
+  | "templates"
+  | "sections"
+  | "widgets"
+  | "assets"
+  | "animations"
+  | "seo"
+  | "settings"
+  | "integrations";
+  showProjectDashboard: boolean;
 
   setLeftPanelOpen: (v: boolean) => void;
   toggleLeftPanel: () => void;
-  setLeftPanelView: (view: "pages" | "templates" | "sections" | "widgets" | "media" | "styles" | "settings") => void;
+  setLeftPanelView: (
+    view:
+      | "projects"
+      | "pages"
+      | "templates"
+      | "sections"
+      | "widgets"
+      | "assets"
+      | "animations"
+      | "seo"
+      | "settings"
+      | "integrations"
+  ) => void;
+  setShowProjectDashboard: (show: boolean) => void;
   setSelectedElementStyle: (style: Record<string, string> | null) => void;
 
   hydrate: () => void;
   persist: () => boolean;
 
+  createProject: (name?: string) => string;
   newProject: (name?: string) => string;
+  selectProject: (id: string) => void;
   loadProject: (id: string) => void;
+  loadCloudProject: (id: string) => Promise<void>;
   renameProject: (id: string, name: string) => void;
   duplicateProject: (id: string) => string;
   deleteProject: (id: string) => void;
+  publishProject: (id: string) => void;
 
   addPage: (name?: string, slug?: string) => string;
   renamePage: (id: string, name: string) => void;
@@ -242,7 +273,27 @@ function migrateProject(raw: unknown): Project {
   };
 }
 
-function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null; leftPanelOpen?: boolean; leftPanelView?: "pages" | "templates" | "sections" | "widgets" | "media" | "styles" | "settings" } {
+type StoredLeftPanelView =
+  | "projects"
+  | "pages"
+  | "templates"
+  | "sections"
+  | "widgets"
+  | "assets"
+  | "animations"
+  | "seo"
+  | "settings"
+  | "media"
+  | "styles";
+
+function normalizeStoredLeftPanelView(view: StoredLeftPanelView | undefined): BuilderState["leftPanelView"] | undefined {
+  if (!view) return undefined;
+  if (view === "media") return "assets";
+  if (view === "styles") return "settings";
+  return view;
+}
+
+function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null; leftPanelOpen?: boolean; leftPanelView?: StoredLeftPanelView } {
   if (typeof window === "undefined") return { projects: {}, currentProjectId: null };
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY) ?? sessionStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem(LEGACY_KEY);
@@ -321,6 +372,7 @@ function emptyProject(name = "Untitled Project"): Project {
     customHead: "",
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    thumbnail: undefined,
   };
 }
 
@@ -347,6 +399,9 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   history: [],
   historyIndex: -1,
   hydrated: false,
+  showProjectDashboard: false,
+
+  setShowProjectDashboard: (show) => set({ showProjectDashboard: show }),
 
   hydrate: () => {
     if (get().hydrated) return;
@@ -358,7 +413,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       projs = { ...projs, [proj.id]: proj };
       pid = proj.id;
     }
-    set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: leftPanelOpen ?? true, leftPanelView: leftPanelView ?? "pages" });
+    set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: leftPanelOpen ?? true, leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages" });
     const p = projs[pid];
     const page = getCurrentPage(p)!;
     set({
@@ -415,6 +470,10 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
   currentPage: () => getCurrentPage(get().currentProject()),
 
+  createProject: (name = "Untitled Project") => {
+    return get().newProject(name);
+  },
+
   newProject: (name = "Untitled Project") => {
     const p = emptyProject(name);
     const page = p.pages[0];
@@ -426,8 +485,11 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       historyIndex: 0,
     }));
     get().persist();
-    createProject(p).catch(console.error);
     return p.id;
+  },
+
+  selectProject: (id) => {
+    get().loadProject(id);
   },
 
   loadProject: (id) => {
@@ -442,7 +504,36 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     });
     get().persist();
   },
+  
+loadCloudProject: async (id: string) => {
+  const data = await getProject(id);
 
+  const project = data.project as Project;
+
+  if (!project) return;
+
+  const page = getCurrentPage(project)!;
+
+  set((s) => ({
+    projects: {
+      ...s.projects,
+      [project.id]: project,
+    },
+    currentProjectId: project.id,
+    selectedSectionId: null,
+    history: [
+      {
+        pageId: page.id,
+        sections: page.sections,
+        globalCss: project.globalCss,
+        globalJs: project.globalJs,
+      },
+    ],
+    historyIndex: 0,
+  }));
+
+  get().persist();
+},
   renameProject: (id, name) => {
     set((s) => {
       const p = s.projects[id];
@@ -462,6 +553,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       name: src.name + " (copy)",
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      publishedAt: undefined,
     };
     set((s) => ({ projects: { ...s.projects, [nid]: copy } }));
     get().persist();
@@ -477,6 +569,16 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     });
     get().persist();
     if (!get().currentProjectId) get().newProject();
+  },
+
+  publishProject: (id) => {
+    set((s) => {
+      const project = s.projects[id];
+      if (!project) return s;
+      const next: Project = { ...project, publishedAt: Date.now(), updatedAt: Date.now() };
+      return { projects: { ...s.projects, [id]: next } };
+    });
+    get().persist();
   },
 
   // -------- Pages --------
@@ -591,8 +693,8 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
 
   applyTemplate: (tpl) => {
-    const p = get().currentProject();
-    if (!p) return;
+    const current = get().currentProject();
+    if (!current) return;
 
     const createSection = (section: any, key?: string, delayOffset = 0): PageSection => {
       const shared: "header" | "footer" | undefined = section.type === "header" ? "header" : section.type === "footer" ? "footer" : undefined;
@@ -601,21 +703,26 @@ export const useBuilder = create<BuilderState>((set, get) => ({
         templateId: `${tpl.id}-${section.name}-${key ?? nanoid(8)}`,
         name: section.name,
         html: section.html,
+        style: section.style,
+        className: section.className,
+        collapsed: section.collapsed,
+        hidden: section.hidden,
         animation: { type: "fade-up", duration: 700, delay: delayOffset },
         ...(shared ? { shared, sharedKey: key } : {}),
       };
     };
 
+    const templateProjectSeo = (tpl as any).projectSeo ?? (tpl as any).seo;
     const resetProjectBase: Partial<Project> = {
-      name: tpl.name,
+      name: current.name || tpl.name,
       selectedTemplateId: tpl.id,
-      globalCss: "/* Global CSS */\n",
-      globalJs: "// Global JS\n",
-      customHead: "",
-      seo: undefined,
-      assets: {},
-      description: undefined,
-      keywords: undefined,
+      globalCss: tpl.globalCss ?? current.globalCss ?? "/* Global CSS */\n",
+      globalJs: tpl.globalJs ?? current.globalJs ?? "// Global JS\n",
+      customHead: tpl.customHead ?? current.customHead ?? "",
+      seo: templateProjectSeo ? { ...templateProjectSeo } : current.seo,
+      assets: current.assets ?? {},
+      description: current.description,
+      keywords: current.keywords,
       updatedAt: Date.now(),
     };
 
@@ -640,6 +747,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
         slug: slugify(pageDef.slug ?? pageDef.name ?? "index"),
         description: pageDef.description,
         keywords: pageDef.keywords,
+        seo: pageDef.seo ? { ...pageDef.seo } : undefined,
         sections: pageSections,
       };
     };
@@ -662,6 +770,10 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       templateId: `${tpl.id}-${index}`,
       name: section.name,
       html: section.html,
+      style: section.style,
+      className: section.className,
+      collapsed: section.collapsed,
+      hidden: section.hidden,
       animation: { type: "fade-up", duration: 700, delay: index * 80 },
     }));
     const page = {

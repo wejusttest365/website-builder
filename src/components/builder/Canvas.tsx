@@ -31,6 +31,7 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
   const addAsset = useBuilder((s) => s.addAsset);
   const addSection = useBuilder((s) => s.addSection);
   const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
+  const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
   const [screenshotPending, setScreenshotPending] = useState(false);
   const [draggingLibrarySection, setDraggingLibrarySection] = useState(false);
   const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
@@ -522,14 +523,17 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
                   <UploadCloud className="w-7 h-7" />
                 </div>
                 <div className="space-y-2">
-                  <div className="text-sm font-semibold text-foreground">Drag sections from the left to start building</div>
-                  <div className="text-xs text-muted-foreground">Or choose a template to get started</div>
+                  <div className="text-sm font-semibold text-foreground">Start building your website.</div>
+                  <div className="text-xs text-muted-foreground">Drag widgets from the left panel.</div>
                 </div>
                 <button
                   className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
-                  onClick={() => setLeftPanelView("templates")}
+                  onClick={() => {
+                    setLeftPanelView("widgets");
+                    setLeftPanelOpen(true);
+                  }}
                 >
-                  <span>Browse Templates</span>
+                  <span>Open Widgets</span>
                 </button>
               </div>
             ) : null}

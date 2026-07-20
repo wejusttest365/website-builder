@@ -14,6 +14,8 @@ export interface TemplateSectionDefinition {
   };
   style?: Record<string, string>;
   className?: string;
+  collapsed?: boolean;
+  hidden?: boolean;
 }
 
 export interface TemplatePageDefinition {
@@ -50,6 +52,11 @@ export interface TemplateDefinition {
     tier?: string;
     license?: string;
   };
+  globalCss?: string;
+  globalJs?: string;
+  customHead?: string;
+  seo?: Record<string, any>;
+  projectSeo?: Record<string, any>;
 }
 
 export { TEMPLATE_CATEGORIES };

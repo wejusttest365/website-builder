@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { buildExportBundle, fetchAppCss } from "@/lib/builder/preview";
+import { buildExportBundle } from "@/lib/builder/preview";
 import type { Project } from "@/lib/builder/store";
 
 export function DemoView({ projectId }: { projectId: string }) {
@@ -7,7 +7,6 @@ export function DemoView({ projectId }: { projectId: string }) {
   const [proj, setProj] = useState<Project | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [tailwindCss, setTailwindCss] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -15,7 +14,6 @@ export function DemoView({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (!mounted) return;
-    void fetchAppCss().then(setTailwindCss).catch(() => "");
     let timeout: number | null = null;
     const handleResponse = (event: MessageEvent) => {
       if (event.origin !== window.location.origin && event.origin !== 'null') return;
@@ -119,7 +117,6 @@ export function DemoView({ projectId }: { projectId: string }) {
     customHead: proj?.customHead,
     assets: proj?.assets,
     inlineAssets: true,
-    tailwindCss,
   });
 
   return (
