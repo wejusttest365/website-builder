@@ -5,24 +5,22 @@ import { ArrowRight, ChevronRight, Crown, Heart, Layers, Plus, ShieldCheck, Spar
 import JSZip from "jszip";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { useBuilder, type Project } from "@/lib/builder/store";
+import { useBuilder, type Project as BuilderProject } from "@/lib/builder/store";
 import { buildSiteExport } from "@/lib/builder/preview";
-import { createProject as createCloudProject, deleteProject as deleteCloudProject, updateProject as updateCloudProject } from "@/services/project";
+import {
+  createProject as createCloudProject,
+  deleteProject as deleteCloudProject,
+  updateProject as updateCloudProject,
+  type ProjectMetadata,
+} from "@/services/project";
+import { deleteBuilderProject, saveBuilderProject } from "@/services/builderProject";
 import { useCloudProjects } from "@/lib/builder/useCloudProjects";
 import { ProjectCard } from "./ProjectCard";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { EmptyProjectsState } from "./EmptyProjectsState";
-
-interface CloudProjectRecord {
-  id: string;
-  ownerId: string;
-  project: Project;
-  createdAt?: any;
-  updatedAt?: any;
-}
-
+import { useNavigate } from "@tanstack/react-router";
 interface ProjectDashboardProps {
-  onOpenEditor: () => void;
+  onOpenEditor?: (projectId: string) => void;
 }
 
 function formatDate(value?: any) {
@@ -47,13 +45,14 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
   const publishProject = useBuilder((s) => s.publishProject);
   const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
   const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
+  const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
   const [createOpen, setCreateOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
   const [projectName, setProjectName] = useState("My Project");
-
+const navigate = useNavigate();
   const openProject = async (projectId: string) => {
     await loadCloudProject(projectId);
-    onOpenEditor();
+    onOpenEditor?.(projectId);
   };
 
   const createNewProject = () => {
@@ -63,9 +62,19 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
   };
 
   const openTemplates = () => {
+    const createdProjectId = newProject("My Project");
+    navigate({
+  to: "/editor/$projectId",
+  params: {
+    projectId: createdProjectId,
+  },
+});
+
+ 
+    setShowProjectDashboard(false);
     setLeftPanelOpen(true);
     setLeftPanelView("templates");
-    onOpenEditor();
+    onOpenEditor?.(createdProjectId);
   };
 
   const closeCreateWizard = () => {
@@ -77,7 +86,16 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
 
   const handleCreateProject = (useTemplate: boolean) => {
     const name = projectName.trim() || "My Project";
-    newProject(name);
+    const createdProjectId = newProject(name);
+    navigate({
+  to: "/editor/$projectId",
+  params: {
+    projectId: createdProjectId,
+  },
+});
+
+ 
+    setShowProjectDashboard(false);
     setLeftPanelOpen(true);
     if (useTemplate) {
       setLeftPanelView("templates");
@@ -86,7 +104,23 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
     }
     setCreateOpen(false);
     setWizardStep(1);
-    onOpenEditor();
+    onOpenEditor?.(createdProjectId);
+  };
+
+  const mapBuilderProjectToDashboardProject = (project: BuilderProject): ProjectMetadata => {
+    return {
+      id: project.id,
+      name: project.name,
+      templateId: project.selectedTemplateId ?? null,
+      thumbnail: project.thumbnail ?? "",
+      description: project.description,
+      favorite: false,
+      status: "draft",
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+      pages: project.pages.map((page: { slug: string }) => page.slug),
+      isPublic: false,
+    } as ProjectMetadata;
   };
 
   const onRename = async (projectId: string, name: string) => {
@@ -94,7 +128,8 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
     renameProject(projectId, name);
     const updated = useBuilder.getState().projects[projectId];
     if (updated) {
-      await updateCloudProject(projectId, updated);
+      await saveBuilderProject(updated);
+      await updateCloudProject(projectId, { name });
       refresh();
       toast.success("Project renamed");
     }
@@ -105,7 +140,8 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
     const newId = duplicateProject(projectId);
     const duplicated = useBuilder.getState().projects[newId];
     if (duplicated) {
-      await createCloudProject(duplicated);
+      await saveBuilderProject(duplicated);
+      await createCloudProject(mapBuilderProjectToDashboardProject(duplicated));
       refresh();
       toast.success("Project duplicated");
     }
@@ -115,6 +151,7 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
     deleteProject(projectId);
     try {
       await deleteCloudProject(projectId);
+      await deleteBuilderProject(projectId);
       refresh();
       toast.success("Project deleted");
     } catch (error) {
@@ -128,13 +165,14 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
     publishProject(projectId);
     const published = useBuilder.getState().projects[projectId];
     if (published) {
-      await updateCloudProject(projectId, published);
+      await saveBuilderProject(published);
+      await updateCloudProject(projectId, { status: "published" });
       refresh();
       toast.success("Project published");
     }
   };
 
-  const onExport = async (project: Project) => {
+  const onExport = async (project: BuilderProject) => {
     try {
       const exportData = await buildSiteExport(project);
       const zip = new JSZip();
@@ -181,10 +219,10 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
   ];
 
   const activityFeed = [
-    { label: `You published "${cardItems[0]?.project.name ?? "Architecture Firm"}"`, description: "2 hours ago", icon: ShieldCheck, color: "text-emerald-600" },
-    { label: `You edited "${cardItems[1]?.project.name ?? "Digital Agency"}"`, description: "Yesterday", icon: Sparkles, color: "text-sky-600" },
-    { label: `You duplicated "${cardItems[2]?.project.name ?? "Portfolio Website"}"`, description: "2 days ago", icon: Star, color: "text-violet-600" },
-    { label: `You deleted "${cardItems[3]?.project.name ?? "Old Project"}"`, description: "3 days ago", icon: Trash2, color: "text-rose-600" },
+    { label: `You published "${cardItems[0]?.name ?? "Architecture Firm"}"`, description: "2 hours ago", icon: ShieldCheck, color: "text-emerald-600" },
+    { label: `You edited "${cardItems[1]?.name ?? "Digital Agency"}"`, description: "Yesterday", icon: Sparkles, color: "text-sky-600" },
+    { label: `You duplicated "${cardItems[2]?.name ?? "Portfolio Website"}"`, description: "2 days ago", icon: Star, color: "text-violet-600" },
+    { label: `You deleted "${cardItems[3]?.name ?? "Old Project"}"`, description: "3 days ago", icon: Trash2, color: "text-rose-600" },
   ];
 
   const storageItems = [
@@ -266,10 +304,10 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
                 </div>
               </button>
 
-              {visibleProjects.map(({ id, project }) => {
-                const published = Boolean(project.publishedAt);
+              {visibleProjects.map((project) => {
+                const published = project.status === "published";
                 return (
-                  <div key={id} className="group flex min-h-[220px] flex-col justify-between overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                  <div key={project.id} className="group flex min-h-[220px] flex-col justify-between overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                     <div className="relative h-36 overflow-hidden bg-slate-200">
                       <div className="absolute inset-0 bg-gradient-to-br from-slate-900/10 via-transparent to-slate-900/0" />
                     </div>

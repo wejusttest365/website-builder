@@ -1,30 +1,361 @@
+import { PropertyText } from "./properties/PropertyText";
+import {
+  PropertyCard as Section,
+  PropertyField as Field,
+} from "@/components/builder/property-ui";
+
 import { useBuilder, pageOf } from "@/lib/builder/store";
 import { nanoid } from "nanoid";
 import { Plus, Trash2, Copy, Eye, EyeOff, UploadCloud, Facebook, Twitter, Instagram, Linkedin, ChevronUp, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const inputCls =
-  "w-full px-2 py-1 rounded border border-input bg-background/90 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
+  "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm transition-all outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100";
 const selectCls = inputCls + " max-w-[10rem]";
+ 
+type PropertyFieldConfig = {
+  label: string;
+  render: ReactNode;
+};
 
-function Group({ title, children }: { title: string; children: ReactNode }) {
+function renderPropertyFieldConfigs(fields: PropertyFieldConfig[]) {
+  return fields.map((field, index) => (
+    <Field key={`${field.label}-${index}`} label={field.label}>
+      {field.render}
+    </Field>
+  ));
+}
+
+function renderPropertySection(title: string, fields: PropertyFieldConfig[]) {
   return (
-    <div>
-      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-        {title}
-      </div>
-      <div className="space-y-1">{children}</div>
-    </div>
+    <Section title={title}>
+      {renderPropertyFieldConfigs(fields)}
+    </Section>
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+ 
+
+function PropertyNumber({
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  min,
+  max,
+  step,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+}) {
   return (
-    <div className="w-full">
-      <div className="text-xs text-muted-foreground mb-1">{label}</div>
-      <div onMouseDown={(e) => e.stopPropagation()}>{children}</div>
-    </div>
+    <input
+      type="number"
+      className={inputCls}
+      value={value}
+      placeholder={placeholder ?? ""}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+      min={min}
+      max={max}
+      step={step}
+    />
   );
+}
+
+function PropertySlider({
+  value,
+  onChange,
+  min = 0,
+  max = 100,
+  step = 1,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+}) {
+  return (
+    <input
+      type="range"
+      className="w-full"
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      onChange={(e) => onChange(Number(e.target.value))}
+    />
+  );
+}
+
+function PropertySelect({
+  value,
+  onChange,
+  onBlur,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  options: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <select className={selectCls} value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur}>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function PropertyColor({ value, onChange, onBlur }: { value: string; onChange: (value: string) => void; onBlur: () => void }) {
+  return <ColorInput value={value} onChange={onChange} onBlur={onBlur} />;
+}
+
+function textField(
+  label: string,
+  value: string,
+  onChange: (value: string) => void,
+  onBlur: () => void,
+  placeholder?: string
+): PropertyFieldConfig {
+  return {
+    label,
+    render: <PropertyText value={value} onChange={onChange} onBlur={onBlur} placeholder={placeholder} />,
+  };
+}
+
+function selectField(
+  label: string,
+  value: string,
+  options: Array<{ label: string; value: string }>,
+  onChange: (value: string) => void,
+  onBlur: () => void
+): PropertyFieldConfig {
+  return {
+    label,
+    render: <PropertySelect value={value} onChange={onChange} onBlur={onBlur} options={options} />,
+  };
+}
+
+function colorField(label: string, value: string, onChange: (value: string) => void, onBlur: () => void): PropertyFieldConfig {
+  return {
+    label,
+    render: <PropertyColor value={value} onChange={onChange} onBlur={onBlur} />,
+  };
+}
+
+function PropertyCheckbox({
+  label,
+  checked,
+  onChange,
+  onBlur,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  onBlur?: () => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        onBlur={onBlur}
+        className="h-4 w-4 rounded border-input text-primary"
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function PropertyTypography({
+  state,
+  onChange,
+  onBlur,
+}: {
+  state: {
+    fontFamily: string;
+    fontSize: string;
+    fontWeight: string;
+    lineHeight: string;
+    color: string;
+    textAlign: string;
+    textTransform: string;
+    letterSpacing: string;
+  };
+  onChange: (key: string, value: string) => void;
+  onBlur: () => void;
+}) {
+  const fontFamilies = [
+    "ui-sans-serif, system-ui, sans-serif",
+    "Georgia, serif",
+    "ui-monospace, monospace",
+    '"Inter", sans-serif',
+    '"Poppins", sans-serif',
+    '"Montserrat", sans-serif',
+  ];
+  const fontSizes = ["12px", "13px", "14px", "15px", "16px", "18px", "20px", "24px", "28px", "32px", "36px", "40px", "48px"];
+
+  return (
+    <>
+      <Field label="Font family">
+        <PropertySelect
+          value={state.fontFamily || ""}
+          options={(state.fontFamily && state.fontFamily.trim() ? [state.fontFamily, ...fontFamilies] : fontFamilies).map((value) => ({ label: value, value }))}
+          onChange={(value) => onChange("fontFamily", value)}
+          onBlur={onBlur}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Font size">
+          <PropertySelect
+            value={state.fontSize || ""}
+            options={(state.fontSize && state.fontSize.trim() ? [state.fontSize, ...fontSizes] : fontSizes).map((value) => ({ label: value, value }))}
+            onChange={(value) => onChange("fontSize", value)}
+            onBlur={onBlur}
+          />
+        </Field>
+        <Field label="Weight">
+          <PropertySelect
+            value={state.fontWeight || ""}
+            options={[
+              { label: state.fontWeight || "Default", value: "" },
+              { label: "Regular", value: "400" },
+              { label: "Medium", value: "500" },
+              { label: "Semibold", value: "600" },
+              { label: "Bold", value: "700" },
+            ]}
+            onChange={(value) => onChange("fontWeight", value)}
+            onBlur={onBlur}
+          />
+        </Field>
+      </div>
+      <Field label="Line height">
+        <PropertySelect
+          value={state.lineHeight || ""}
+          options={[
+            { label: state.lineHeight || "Line height", value: "" },
+            { label: "1", value: "1" },
+            { label: "1.15", value: "1.15" },
+            { label: "1.25", value: "1.25" },
+            { label: "1.5", value: "1.5" },
+            { label: "1.75", value: "1.75" },
+            { label: "2", value: "2" },
+          ]}
+          onChange={(value) => onChange("lineHeight", value)}
+          onBlur={onBlur}
+        />
+      </Field>
+      <Field label="Text color">
+        <PropertyColor value={state.color || ""} onChange={(value) => onChange("color", value)} onBlur={onBlur} />
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Align">
+          <PropertySelect
+            value={state.textAlign || ""}
+            options={[
+              { label: state.textAlign || "Default", value: "" },
+              { label: "Left", value: "left" },
+              { label: "Center", value: "center" },
+              { label: "Right", value: "right" },
+              { label: "Justify", value: "justify" },
+            ]}
+            onChange={(value) => onChange("textAlign", value)}
+            onBlur={onBlur}
+          />
+        </Field>
+        <Field label="Case">
+          <PropertySelect
+            value={state.textTransform || ""}
+            options={[
+              { label: state.textTransform || "Default", value: "" },
+              { label: "None", value: "none" },
+              { label: "Uppercase", value: "uppercase" },
+              { label: "Lowercase", value: "lowercase" },
+              { label: "Capitalize", value: "capitalize" },
+            ]}
+            onChange={(value) => onChange("textTransform", value)}
+            onBlur={onBlur}
+          />
+        </Field>
+      </div>
+      <Field label="Spacing">
+        <PropertyText
+          value={state.letterSpacing || ""}
+          onChange={(value) => onChange("letterSpacing", value)}
+          onBlur={onBlur}
+          placeholder="0.5px"
+        />
+      </Field>
+    </>
+  );
+}
+
+function PropertyBorder({
+  borderRadius,
+  boxShadow,
+  onBorderRadiusChange,
+  onBoxShadowChange,
+  onBlur,
+}: {
+  borderRadius: string;
+  boxShadow: string;
+  onBorderRadiusChange: (value: string) => void;
+  onBoxShadowChange: (value: string) => void;
+  onBlur: () => void;
+}) {
+  return (
+    <>
+      <Field label="Border Radius">
+        <PropertyText value={borderRadius} onChange={onBorderRadiusChange} onBlur={onBlur} placeholder="e.g. 16px" />
+      </Field>
+      <Field label="Shadow">
+        <PropertySelect
+          value={boxShadow}
+          options={[
+            { label: "None", value: "" },
+            { label: "Subtle", value: "0 1px 2px rgba(0,0,0,.06)" },
+            { label: "Soft", value: "0 4px 10px rgba(0,0,0,.08)" },
+            { label: "Medium", value: "0 10px 30px rgba(0,0,0,.15)" },
+            { label: "Large", value: "0 25px 50px -12px rgba(0,0,0,.25)" },
+          ]}
+          onChange={onBoxShadowChange}
+          onBlur={onBlur}
+        />
+      </Field>
+    </>
+  );
+}
+
+function PropertySpacing({
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  placeholder?: string;
+}) {
+  return <PropertyText value={value} placeholder={placeholder} onChange={onChange} onBlur={onBlur} />;
+}
+
+function customField(label: string, render: ReactNode): PropertyFieldConfig {
+  return {
+    label,
+    render,
+  };
 }
 
 function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: string) => void; onBlur: () => void }) {
@@ -339,67 +670,97 @@ export function PropertiesPanel() {
         {/* Removed helper box per UX request: element controls now appear inline */}
 
         {sectionLinkItems.length > 0 ? (
-          <Group title="Section CTAs">
-            <div className="space-y-2 rounded-3xl border border-input/80 bg-background p-3">
-              {sectionLinkItems.map((link, index) => (
-                <div key={`${link.text || 'action'}-${index}`} className="space-y-2 rounded-3xl border border-slate-700/80 bg-background p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-semibold text-foreground">{link.text || `Action ${index + 1}`}</div>
-                      <div className="text-[11px] text-slate-500">{link.href || "#"}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition hover:bg-accent"
-                        title={link.hidden ? "Show CTA" : "Hide CTA"}
-                        onClick={() => {
-                          updateHtml(toggleLinkVisibility(section.html, index));
-                          pushHistory();
-                        }}
-                      >
-                        {link.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground transition hover:bg-accent"
-                        title="Delete CTA"
-                        onClick={() => {
-                          updateHtml(removeLinkItem(section.html, index));
-                          pushHistory();
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <Field label="Href">
-                    <input
-                      className={inputCls}
-                      value={link.href}
-                      placeholder="# or https://..."
-                      onChange={(e) => updateHtml(updateLinkItem(section.html, index, { href: e.target.value }))}
-                      onBlur={pushHistory}
-                    />
-                  </Field>
-                  <Field label="Label">
-                    <input
-                      className={inputCls}
-                      value={link.text}
-                      placeholder="Button label"
-                      onChange={(e) => updateHtml(updateLinkItem(section.html, index, { text: e.target.value }))}
-                      onBlur={pushHistory}
-                    />
-                  </Field>
-                </div>
-              ))}
-            </div>
-          </Group>
+          <Section title="Section CTAs">
+  <div className="space-y-3">
+    {sectionLinkItems.map((link, index) => (
+      <div
+        key={`${link.text || "action"}-${index}`}
+        className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition-all duration-200 hover:border-violet-300 hover:bg-white hover:shadow-sm"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <div className="min-w-0">
+            <h4 className="truncate text-sm font-semibold text-slate-800">
+              {link.text || `CTA ${index + 1}`}
+            </h4>
+
+            <p className="truncate text-xs text-slate-500">
+              {link.href || "#"}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-600"
+              title={link.hidden ? "Show CTA" : "Hide CTA"}
+              onClick={() => {
+                updateHtml(toggleLinkVisibility(section.html, index));
+                pushHistory();
+              }}
+            >
+              {link.hidden ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+              title="Delete CTA"
+              onClick={() => {
+                updateHtml(removeLinkItem(section.html, index));
+                pushHistory();
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Field label="Href">
+            <input
+              className={inputCls}
+              value={link.href}
+              placeholder="# or https://..."
+              onChange={(e) =>
+                updateHtml(
+                  updateLinkItem(section.html, index, {
+                    href: e.target.value,
+                  })
+                )
+              }
+              onBlur={pushHistory}
+            />
+          </Field>
+
+          <Field label="Label">
+            <input
+              className={inputCls}
+              value={link.text}
+              placeholder="Button label"
+              onChange={(e) =>
+                updateHtml(
+                  updateLinkItem(section.html, index, {
+                    text: e.target.value,
+                  })
+                )
+              }
+              onBlur={pushHistory}
+            />
+          </Field>
+        </div>
+      </div>
+    ))}
+  </div>
+</Section>
         ) : null}
 
         {/* Typography - unified controls (font family, size, weight, line-height, color, alignment) */}
         {!isFooter && (
-          <Group title={`Typography · ${typographyTargetLabel}`}>
+          <Section title={`Typography · ${typographyTargetLabel}`}>
             <Field label="Font family">
               {(() => {
                 const families = [
@@ -527,7 +888,7 @@ export function PropertiesPanel() {
                 onBlur={pushHistory}
               />
             </Field>
-          </Group>
+          </Section>
         )}
 
         {/* Brand / Logo controls moved into scrollable area so it scrolls with the panel */}
@@ -684,7 +1045,7 @@ export function PropertiesPanel() {
         })()}
 
         {isFooter && (
-          <Group title="Typography">
+        <Section title="Typography">
             <div className="space-y-3">
               {/* Font Family - Full Width */}
               <div>
@@ -729,11 +1090,11 @@ export function PropertiesPanel() {
                 <option value="2">2</option>
               </select>
             </div>
-          </Group>
+          </Section>
         )}
 
         {isFooter && (
-          <Group title="Alignment">
+          <Section title="Alignment">
             <div className="flex gap-1">
               {[
                 { value: 'left', icon: '☰', title: 'Left' },
@@ -754,20 +1115,20 @@ export function PropertiesPanel() {
                 </button>
               ))}
             </div>
-          </Group>
+          </Section>
         )}
 
         {isFooter && (
-          <Group title="Color">
+          <Section title="Color">
             <ColorInput
               value={getFooterTextColor(section.html) || ""}
               onChange={(v) => updateHtml(setFooterTextStyle(section.html, { color: v }))}
               onBlur={pushHistory}
             />
-          </Group>
+          </Section>
         )}
         {isFooter && (
-          <Group title="Contact Info">
+          <Section title="Contact Info">
             <Field label="Phone">
               <input
                 className={inputCls}
@@ -834,11 +1195,11 @@ export function PropertiesPanel() {
                 ))}
               </div>
             </div>
-          </Group>
+          </Section>
         )}
 
         {isTopBar && (
-          <Group title="Information Bar">
+          <Section title="Information Bar">
             <Field label="Phone">
               <input
                 className={inputCls}
@@ -941,11 +1302,11 @@ export function PropertiesPanel() {
                 ))}
               </div>
             </div>
-          </Group>
+          </Section>
         )}
 
         {showHeaderMenuControls && (
-          <Group title="Menu Items">
+          <Section title="Menu Items">
             <div className="space-y-2">
               {menuItems.length > 0 ? (
                 menuItems.map((item, index) => (
@@ -993,11 +1354,11 @@ export function PropertiesPanel() {
                 <Plus className="h-3.5 w-3.5" /> Add menu item
               </button>
             </div>
-          </Group>
+          </Section>
         )}
 
         {teamGridColumns != null && (
-          <Group title="Columns">
+          <Section title="Columns">
             <div className="rounded-md border border-input bg-background p-3 space-y-3">
               <div className="flex items-center gap-2">
                 <button
@@ -1040,11 +1401,11 @@ export function PropertiesPanel() {
                 </select>
               </Field>
             </div>
-          </Group>
+          </Section>
         )}
 
         {repeater && repeater.items.length > 0 && (
-          <Group title={`Items (${repeater.items.length})`}>
+          <Section title={`Items (${repeater.items.length})`}>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-semibold text-muted-foreground">Items ({repeater.items.length})</div>
@@ -1196,11 +1557,11 @@ export function PropertiesPanel() {
                 <Plus className="h-3.5 w-3.5" /> Add item
               </button>
             </div>
-          </Group>
+          </Section>
         )}
 
         {showSectionControls && linkItems.length > 0 && (
-          <Group title="Links & Buttons">
+          <Section title="Links & Buttons">
             <div className="space-y-2">
               {linkItems.map((item, index) => (
                 <div key={index} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-1.5">
@@ -1244,11 +1605,11 @@ export function PropertiesPanel() {
                 </div>
               ))}
             </div>
-          </Group>
+          </Section>
         )}
 
         {selectedElement?.kind === "text" && selectedTextItem && (
-          <Group title="Text">
+          <Section title="Text">
             <div className="space-y-2 rounded-md border border-input bg-background p-2">
               <Field label={selectedTextItem.label}>
                 <input
@@ -1279,11 +1640,11 @@ export function PropertiesPanel() {
                 </select>
               </Field>
             </div>
-          </Group>
+          </Section>
         )}
 
         {selectedElement?.kind === "image" && selectedImageItem ? (
-          <Group title="Image">
+          <Section title="Image">
             <div className="space-y-2 rounded-md border border-input bg-background p-2">
               <div className="text-xs font-semibold text-muted-foreground">{selectedImageItem.label}</div>
               <label className="text-xs font-medium text-muted-foreground">ALT</label>
@@ -1370,9 +1731,9 @@ export function PropertiesPanel() {
                 />
               </label>
             </div>
-          </Group>
+          </Section>
         ) : !isElementSelected && imageItems.length > 0 && (
-          <Group title="Images">
+          <Section title="Images">
             {imageItems.map((item, index) => (
               <div key={`${item.label}-${index}`} className="space-y-2 rounded-md border border-input bg-background p-2">
                 <div className="text-xs font-semibold text-muted-foreground">{item.label}</div>
@@ -1410,10 +1771,10 @@ export function PropertiesPanel() {
                 </label>
               </div>
             ))}
-          </Group>
+          </Section>
         )}
 
-        {/* Container group removed per user request */}
+        {/* Container Section removed per user request */}
 
         {isElementSelected && selectedElement && selectedElement.kind !== "text" ? null : null}
 
@@ -1425,7 +1786,7 @@ export function PropertiesPanel() {
             const curHref = idx >= 0 && linkList[idx] ? linkList[idx].href : '';
             if (idx < 0) return null;
             return (
-              <Group title="Link">
+              <Section title="Link">
                 <div className="space-y-2 rounded-md border border-input bg-background p-2">
                   <Field label="Href">
                     <input
@@ -1439,13 +1800,13 @@ export function PropertiesPanel() {
                     />
                   </Field>
                 </div>
-              </Group>
+              </Section>
             );
           })()
         ) : null}
 
         {selectedTeamGridItem ? (
-          <Group title="Columns">
+          <Section title="Columns">
             <div className="rounded-md border border-input bg-background p-3 space-y-3">
               <div className="space-y-2">
                 {selectedTeamGridItem.children.map((_, index) => (
@@ -1486,167 +1847,199 @@ export function PropertiesPanel() {
                 />
               </Field>
             </div>
-          </Group>
+          </Section>
         ) : null}
 
         {showSectionControls ? (
           <>
-            <Group title="Background">
-              <Field label="Color">
-                <ColorInput
-                  value={style["background-color"] ?? ""}
-                  onChange={(v) => set("background-color", v)}
-                  onBlur={pushHistory}
-                />
-              </Field>
-              <Field label="Image URL">
-                <input
-                  className={inputCls}
-                  value={(style["background-image"] ?? "").replace(/^url\(|\)$/g, "").replace(/^['\"]|['\"]$/g, "")}
-                  onChange={(e) => set("background-image", e.target.value ? `url("${e.target.value}")` : "")}
-                  onBlur={pushHistory}
-                  placeholder="https://…"
-                />
-              </Field>
-              <Field label="Upload">
-                <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
-                  <UploadCloud className="h-4 w-4" />
-                  Upload Image
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      const r = new FileReader();
-                      r.onload = () => {
-                        try {
-                          const path = addAsset(String(r.result), f.name);
-                          set("background-image", `url("${path}")`);
-                          pushHistory();
-                        } catch (err) {
-                          console.error("background upload failed", err);
-                        }
-                      };
-                      r.readAsDataURL(f);
-                    }}
-                  />
-                </label>
-              </Field>
-              {backgroundImage && /^images\//.test(backgroundImage) && (
-                <Field label="Download">
-                  <button
-                    type="button"
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
-                    onClick={() => downloadAssetByPath(backgroundImage)}
-                  >
-                    Download
-                  </button>
-                </Field>
-              )}
-            </Group>
+            {(() => {
+              const backgroundFields: PropertyFieldConfig[] = [
+                colorField("Color", style["background-color"] ?? "", (v) => set("background-color", v), pushHistory),
+                textField(
+                  "Image URL",
+                  (style["background-image"] ?? "").replace(/^url\(|\)$/g, "").replace(/^['\"]|['\"]$/g, ""),
+                  (v) => set("background-image", v ? `url("${v}")` : ""),
+                  pushHistory,
+                  "https://…"
+                ),
+                customField(
+                  "Upload",
+                  <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+                    <UploadCloud className="h-4 w-4" />
+                    Upload Image
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        const r = new FileReader();
+                        r.onload = () => {
+                          try {
+                            const path = addAsset(String(r.result), f.name);
+                            set("background-image", `url("${path}")`);
+                            pushHistory();
+                          } catch (err) {
+                            console.error("background upload failed", err);
+                          }
+                        };
+                        r.readAsDataURL(f);
+                      }}
+                    />
+                  </label>
+                ),
+                ...(backgroundImage && /^images\//.test(backgroundImage)
+                  ? [
+                      customField(
+                        "Download",
+                        <button
+                          type="button"
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
+                          onClick={() => downloadAssetByPath(backgroundImage)}
+                        >
+                          Download
+                        </button>
+                      ),
+                    ]
+                  : []),
+              ];
 
-            <Group title="Style">
-              <Field label="Border Radius">
-                <input className={inputCls} value={style["border-radius"] ?? ""} onChange={(e) => set("border-radius", e.target.value)} onBlur={pushHistory} placeholder="e.g. 16px" />
-              </Field>
-              <Field label="Shadow">
-                <select
-                  className={inputCls}
-                  value={style["box-shadow"] ?? ""}
-                  onChange={(e) => set("box-shadow", e.target.value)}
-                  onBlur={pushHistory}
-                >
-                  <option value="">None</option>
-                  <option value="0 1px 2px rgba(0,0,0,.06)">Subtle</option>
-                  <option value="0 4px 10px rgba(0,0,0,.08)">Soft</option>
-                  <option value="0 10px 30px rgba(0,0,0,.15)">Medium</option>
-                  <option value="0 25px 50px -12px rgba(0,0,0,.25)">Large</option>
-                </select>
-              </Field>
-            </Group>
+              const setSectionAnimation = (nextAnimation: any) => updateSection(section.id, { animation: nextAnimation });
 
-        <Group title="Animation">
-          <Field label="Type">
-            <select
-              className={inputCls}
-              value={section.animation?.type ?? ""}
-              onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: e.target.value } })}
-              onBlur={pushHistory}
-            >
-              <option value="">None</option>
-              <option value="fade-in">Fade in</option>
-              <option value="fade-up">Fade up</option>
-              <option value="fade-down">Fade down</option>
-              <option value="slide-left">Slide left</option>
-              <option value="slide-right">Slide right</option>
-              <option value="zoom-in">Zoom in</option>
-              <option value="zoom-out">Zoom out</option>
-              <option value="flip">Flip</option>
-              <option value="bounce">Bounce</option>
-            </select>
-          </Field>
-          <Field label="Duration">
-            <input className={inputCls} value={String(section.animation?.duration ?? "")} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", duration: Number(e.target.value) || undefined } })} onBlur={pushHistory} placeholder="ms" />
-          </Field>
-          <Field label="Delay">
-            <input className={inputCls} value={String(section.animation?.delay ?? "")} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", delay: Number(e.target.value) || undefined } })} onBlur={pushHistory} placeholder="ms" />
-          </Field>
-          <Field label="Repeat">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={!!section.animation?.repeat} onChange={(e) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", repeat: e.target.checked } })} onBlur={pushHistory} />
-              <span className="text-xs">Repeat animation</span>
-            </label>
-          </Field>
-        </Group>
+              const animationFields: PropertyFieldConfig[] = [
+                selectField(
+                  "Type",
+                  section.animation?.type ?? "",
+                  [
+                    { label: "None", value: "" },
+                    { label: "Fade in", value: "fade-in" },
+                    { label: "Fade up", value: "fade-up" },
+                    { label: "Fade down", value: "fade-down" },
+                    { label: "Slide left", value: "slide-left" },
+                    { label: "Slide right", value: "slide-right" },
+                    { label: "Zoom in", value: "zoom-in" },
+                    { label: "Zoom out", value: "zoom-out" },
+                    { label: "Flip", value: "flip" },
+                    { label: "Bounce", value: "bounce" },
+                  ],
+                  (value) => setSectionAnimation({ ...(section.animation ?? {}), type: value }),
+                  pushHistory
+                ),
+                textField(
+                  "Duration",
+                  String(section.animation?.duration ?? ""),
+                  (value) => setSectionAnimation({ ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", duration: Number(value) || undefined }),
+                  pushHistory,
+                  "ms"
+                ),
+                textField(
+                  "Delay",
+                  String(section.animation?.delay ?? ""),
+                  (value) => setSectionAnimation({ ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", delay: Number(value) || undefined }),
+                  pushHistory,
+                  "ms"
+                ),
+                customField(
+                  "Repeat",
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!!section.animation?.repeat}
+                      onChange={(e) => setSectionAnimation({ ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", repeat: e.target.checked })}
+                      onBlur={pushHistory}
+                      className="h-4 w-4 rounded border-input text-primary"
+                    />
+                    <span className="text-xs">Repeat animation</span>
+                  </label>
+                ),
+              ];
 
-        <Group title="Visibility">
-          <Field label="Hide on mobile">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={!!(section as any).hiddenMobile} onChange={(e) => updateSection(section.id, { ...(section as any), hiddenMobile: e.target.checked })} onBlur={pushHistory} />
-              <span className="text-xs">Hide on mobile</span>
-            </label>
-          </Field>
-          <Field label="Hide on tablet">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={!!(section as any).hiddenTablet} onChange={(e) => updateSection(section.id, { ...(section as any), hiddenTablet: e.target.checked })} onBlur={pushHistory} />
-              <span className="text-xs">Hide on tablet</span>
-            </label>
-          </Field>
-          <Field label="Hide on desktop">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={!!(section as any).hiddenDesktop} onChange={(e) => updateSection(section.id, { ...(section as any), hiddenDesktop: e.target.checked })} onBlur={pushHistory} />
-              <span className="text-xs">Hide on desktop</span>
-            </label>
-          </Field>
-          <Field label="Sticky">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={!!section.sticky} onChange={(e) => updateSection(section.id, { sticky: e.target.checked })} onBlur={pushHistory} />
-              <span className="text-xs">Sticky navigation</span>
-            </label>
-          </Field>
-        </Group>
+              const visibilityFields: PropertyFieldConfig[] = [
+                customField(
+                  "Hide on mobile",
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!!(section as any).hiddenMobile}
+                      onChange={(e) => updateSection(section.id, { ...(section as any), hiddenMobile: e.target.checked })}
+                      onBlur={pushHistory}
+                      className="h-4 w-4 rounded border-input text-primary"
+                    />
+                    <span className="text-xs">Hide on mobile</span>
+                  </label>
+                ),
+                customField(
+                  "Hide on tablet",
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!!(section as any).hiddenTablet}
+                      onChange={(e) => updateSection(section.id, { ...(section as any), hiddenTablet: e.target.checked })}
+                      onBlur={pushHistory}
+                      className="h-4 w-4 rounded border-input text-primary"
+                    />
+                    <span className="text-xs">Hide on tablet</span>
+                  </label>
+                ),
+                customField(
+                  "Hide on desktop",
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!!(section as any).hiddenDesktop}
+                      onChange={(e) => updateSection(section.id, { ...(section as any), hiddenDesktop: e.target.checked })}
+                      onBlur={pushHistory}
+                      className="h-4 w-4 rounded border-input text-primary"
+                    />
+                    <span className="text-xs">Hide on desktop</span>
+                  </label>
+                ),
+                customField(
+                  "Sticky",
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!!section.sticky}
+                      onChange={(e) => updateSection(section.id, { sticky: e.target.checked })}
+                      onBlur={pushHistory}
+                      className="h-4 w-4 rounded border-input text-primary"
+                    />
+                    <span className="text-xs">Sticky navigation</span>
+                  </label>
+                ),
+              ];
 
-        {isFooter && (
-          <Group title="Footer Copyright">
-            <Field label="Text">
-              <input className={inputCls} value={getFooterCopyright(section.html)} onChange={(e) => updateHtml(setFooterCopyright(section.html, e.target.value))} onBlur={pushHistory} />
-            </Field>
-            <Field label="Color">
-              <ColorInput value={getFooterCopyrightColor(section.html)} onChange={(v) => updateHtml(setFooterCopyrightColor(section.html, v))} onBlur={pushHistory} />
-            </Field>
-          </Group>
-        )}
+              const advancedFields: PropertyFieldConfig[] = [
+                textField("Section ID", section.domId ?? "", (value) => updateSection(section.id, { domId: value }), pushHistory, "my-section"),
+                textField("Custom class", section.className ?? "", (value) => updateSection(section.id, { className: value }), pushHistory, "my-class"),
+              ];
 
-            <Group title="Advanced">
-              <Field label="Section ID">
-                <input className={inputCls} value={section.domId ?? ""} onChange={(e) => updateSection(section.id, { domId: e.target.value })} onBlur={pushHistory} placeholder="my-section" />
-              </Field>
-              <Field label="Custom class">
-                <input className={inputCls} value={section.className ?? ""} onChange={(e) => updateSection(section.id, { className: e.target.value })} onBlur={pushHistory} placeholder="my-class" />
-              </Field>
-            </Group>
+              return (
+                <>
+                  {renderPropertySection("Background", backgroundFields)}
+                  {renderPropertySection("Style", [
+                    textField("Border Radius", style["border-radius"] ?? "", (v) => set("border-radius", v), pushHistory, "e.g. 16px"),
+                    selectField(
+                      "Shadow",
+                      style["box-shadow"] ?? "",
+                      [
+                        { label: "None", value: "" },
+                        { label: "Subtle", value: "0 1px 2px rgba(0,0,0,.06)" },
+                        { label: "Soft", value: "0 4px 10px rgba(0,0,0,.08)" },
+                        { label: "Medium", value: "0 10px 30px rgba(0,0,0,.15)" },
+                        { label: "Large", value: "0 25px 50px -12px rgba(0,0,0,.25)" },
+                      ],
+                      (value) => set("box-shadow", value),
+                      pushHistory
+                    ),
+                  ])}
+                  {renderPropertySection("Animation", animationFields)}
+                  {renderPropertySection("Visibility", visibilityFields)}
+                  {renderPropertySection("Advanced", advancedFields)}
+                </>
+              );
+            })()}
           </>
         ) : null}
       </div>
@@ -2969,7 +3362,7 @@ function findFooterColumnElements(doc: Document): Element[] {
   // Otherwise, direct child elements that contain links/lists
   cols = Array.from(footer.children).filter((c) => !!c.querySelector && !!c.querySelector('a,li')) as Element[];
   if (cols.length > 0) return cols;
-  // Fallback: any element under footer with anchors grouped by a common parent
+  // Fallback: any element under footer with anchors Sectioned by a common parent
   const anchors = Array.from(footer.querySelectorAll('a'));
   const parents = anchors.map((a) => a.closest('div,section') || a.parentElement).filter(Boolean) as Element[];
   // pick unique parents

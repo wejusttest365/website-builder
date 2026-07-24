@@ -21,7 +21,7 @@ export function CreateProjectDialog({
     <Dialog open={open} onOpenChange={onCancel}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{step === 1 ? "Create a new project" : "Choose how to start"}</DialogTitle>
+          <DialogTitle>{step === 1 ? "Create a new project" : "Create Custom Website"}</DialogTitle>
           <DialogDescription>
             {step === 1
               ? "Give your new project a name."
@@ -49,8 +49,8 @@ export function CreateProjectDialog({
               <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-white">
                 <Layers className="h-5 w-5" />
               </div>
-              <h2 className="text-lg font-semibold">Choose Template</h2>
-              <p className="mt-2 text-sm text-slate-600">Start from a pre-built page layout and customize it to your brand.</p>
+              <h2 className="text-lg font-semibold">Start from Template</h2>
+              <p className="mt-2 text-sm text-slate-600">Use a professionally designed template.</p>
             </button>
 
             <button
@@ -61,8 +61,8 @@ export function CreateProjectDialog({
               <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
                 <Plus className="h-5 w-5" />
               </div>
-              <h2 className="text-lg font-semibold">Create Custom Website</h2>
-              <p className="mt-2 text-sm text-slate-600">Start with a blank canvas and design your site from scratch.</p>
+              <h2 className="text-lg font-semibold">Start Blank</h2>
+              <p className="mt-2 text-sm text-slate-600">Build your website from scratch.</p>
             </button>
           </div>
         )}

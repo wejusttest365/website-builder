@@ -2,16 +2,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { FileText, Layers, Grid2x2, FolderOpen } from "lucide-react";
 
 type LeftPanelView =
+  | "dashboard"
   | "projects"
   | "pages"
   | "templates"
-  | "sections"
   | "widgets"
-  | "assets"
-  | "animations"
-  | "seo"
-  | "settings"
-  | "integrations";
+  | "favorites"
+  | "shared"
+  | "trash";
 
 const MENU_ITEMS: {
   key: LeftPanelView;
@@ -22,6 +20,7 @@ const MENU_ITEMS: {
   { key: "pages", label: "Pages", Icon: FileText },
   { key: "templates", label: "Templates", Icon: Layers },
   { key: "widgets", label: "Widgets", Icon: Grid2x2 },
+  { key: "dashboard", label: "Dashboard", Icon: FileText },
 ];
 
 interface SidebarMenuProps {

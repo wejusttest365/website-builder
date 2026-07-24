@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useMounted } from "@/hooks/use-mounted";
-import { useBuilder } from "@/lib/builder/store";
+import { useBuilder, type Project as BuilderProject } from "@/lib/builder/store";
 import { useAuth } from "@/lib/auth";
 import { buildSiteExport } from "@/lib/builder/preview";
 import JSZip from "jszip";
@@ -10,17 +11,16 @@ import {
   Download,
   LogOut,
   Monitor,
-  Moon,
   Save,
   Settings,
   Smartphone,
-  Sun,
   Tablet,
   Undo2,
   User,
   Redo2,
 } from "lucide-react";
-import { createProject } from "@/services/project";
+import { createProject, type ProjectMetadata } from "@/services/project";
+import { saveBuilderProject } from "@/services/builderProject";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -34,6 +34,7 @@ import { LoginDialog } from "@/components/builder/LoginDialog";
 
 export function Header() {
   const mounted = useMounted();
+  const navigate = useNavigate();
 
   const { user, logout, authReady } = useAuth();
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
@@ -45,14 +46,12 @@ export function Header() {
     }
   }, [user, authDialogOpen]);
 
-  const project = useBuilder((s) =>
-    s.currentProjectId ? s.projects[s.currentProjectId] : null
-  );
+  const project = useBuilder(
+    (s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null)
+  ) as BuilderProject | null;
   const showProjectDashboard = useBuilder((s) => s.showProjectDashboard);
 
-  const dark = useBuilder((s) => s.dark);
   const device = useBuilder((s) => s.device);
-  const toggleDark = useBuilder((s) => s.toggleDark);
   const undo = useBuilder((s) => s.undo);
   const redo = useBuilder((s) => s.redo);
   const persist = useBuilder((s) => s.persist);
@@ -71,6 +70,22 @@ export function Header() {
     setAuthDialogOpen(true);
   };
 
+  const mapBuilderProjectToDashboardMetadata = (project: BuilderProject): ProjectMetadata => {
+    return {
+      id: project.id,
+      name: project.name,
+      templateId: project.selectedTemplateId ?? null,
+      thumbnail: project.thumbnail ?? "",
+      description: project.description,
+      favorite: false,
+      status: "draft",
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+      pages: project.pages.map((page: { slug: string }) => page.slug),
+      isPublic: false,
+    } as ProjectMetadata;
+  };
+
   async function handleCloudSave() {
     if (!project) {
       toast.error("No project found");
@@ -78,11 +93,9 @@ export function Header() {
     }
 
     try {
-      // Save locally
       persist();
-
-      // Save to Firestore
-      await createProject(project);
+      await saveBuilderProject(project);
+      await createProject(mapBuilderProjectToDashboardMetadata(project));
 
       toast.success("Project saved to cloud!");
     } catch (error) {
@@ -155,7 +168,10 @@ export function Header() {
 
         <button
           type="button"
-          onClick={() => setShowProjectDashboard(true)}
+          onClick={() => {
+            setShowProjectDashboard(true);
+            navigate({ to: '/' });
+          }}
           className="flex items-center gap-3 text-slate-900 hover:text-slate-900"
         >
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold uppercase tracking-tight text-white shadow-sm">
@@ -285,7 +301,12 @@ export function Header() {
                     <User className="mr-2 h-4 w-4 text-slate-500" />
                     Switch Account
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setShowProjectDashboard(true)}>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      setShowProjectDashboard(true);
+                      navigate({ to: '/' });
+                    }}
+                  >
                     <User className="mr-2 h-4 w-4 text-slate-500" />
                     Dashboard
                   </DropdownMenuItem>
@@ -329,18 +350,6 @@ export function Header() {
               </div>
             )
           ) : null}
-
-          <button
-            type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
-            onClick={toggleDark}
-          >
-            {dark ? (
-              <Sun className="w-4 h-4" />
-            ) : (
-              <Moon className="w-4 h-4" />
-            )}
-          </button>
 
         </div>
 

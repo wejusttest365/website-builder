@@ -1,8 +1,11 @@
 import { Plus, Settings } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { useBuilder } from "@/lib/builder/store";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Page } from "@/lib/builder/store";
 import { PageActionsMenu } from "./PageActionsMenu";
-
+const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
+const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
 interface PagesPanelProps {
   pages: Page[];
   currentPageId: string | null;
@@ -26,6 +29,8 @@ export function PagesPanel({
   deletePage,
   setSeoModalPageId,
 }: PagesPanelProps) {
+  const navigate = useNavigate();
+  const currentProjectId = useBuilder((s) => s.currentProjectId);
   return (
     <TooltipProvider delayDuration={300}>
       <section className="w-full space-y-2">
@@ -53,7 +58,19 @@ export function PagesPanel({
             {pages.map((page) => (
               <div
                 key={page.id}
-                onClick={() => selectPage(page.id)}
+                onClick={() => {
+  if (currentProjectId) {
+    setShowProjectDashboard(false);
+    setLeftPanelView("pages");
+
+    navigate({
+      to: `/editor/${currentProjectId}?pageId=${page.id}` as never,
+    } as any);
+  } else {
+    selectPage(page.id);
+    setLeftPanelView("pages");
+  }
+}}
                 className={`flex cursor-pointer items-center justify-between rounded-lg px-2 py-2 transition
                   ${
                     page.id === currentPageId

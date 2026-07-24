@@ -1,8 +1,9 @@
 import { type FormEvent, type SVGProps, useMemo, useRef, useState, useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { SECTION_LIBRARY, CATEGORIES, type SectionTemplate } from "@/lib/builder/sections";
 import { useMounted } from "@/hooks/use-mounted";
 import { useBuilder, type Page } from "@/lib/builder/store";
-import { Search, Plus, Copy, ChevronDown, ChevronRight, ChevronLeft, FileText, Layers, FolderOpen, LayoutGrid, Grid2x2, ImageIcon, SlidersHorizontal, Settings, LogOut, BookOpen, Menu, ChevronUp, UserCircle, Bell, Sparkles, X, Eye, EyeOff, Mail, Lock, User, Heart, Trash2, Server, Globe, Users } from "lucide-react";
+import { LayoutDashboard, Search, Plus, Copy, ChevronDown, ChevronRight, ChevronLeft, FileText, Layers, FolderOpen, LayoutGrid, Grid2x2, ImageIcon, SlidersHorizontal, Settings, LogOut, BookOpen, Menu, ChevronUp, UserCircle, Bell, Sparkles, X, Eye, EyeOff, Mail, Lock, User, Heart, Trash2, Server, Globe, Users } from "lucide-react";
 import { toast } from "sonner";
 import { TEMPLATE_CATEGORIES, TEMPLATE_LIBRARY, type TemplateDefinition } from "@/lib/builder/templates";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -32,22 +33,25 @@ const MENU_ITEMS = [
 ] as const;
 
 const DASHBOARD_MENU_ITEMS = [
-  { key: "projects" as const, label: "My Projects", Icon: FolderOpen },
-  { key: "pages" as const, label: "Templates", Icon: Layers },
-  { key: "templates" as const, label: "Favorites", Icon: Heart },
-  { key: "sections" as const, label: "Shared with me", Icon: Users },
-  { key: "widgets" as const, label: "Trash", Icon: Trash2 },
-  { key: "animations" as const, label: "Domains", Icon: Globe },
-  { key: "assets" as const, label: "Hosting", Icon: Server },
-  { key: "seo" as const, label: "AI Website", Icon: Sparkles },
-  { key: "settings" as const, label: "Team", Icon: UserCircle },
-  { key: "integrations" as const, label: "Integrations", Icon: BookOpen },
+  { key: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
+  { key: "projects", label: "My Projects", Icon: FolderOpen },
+  { key: "templates", label: "Templates", Icon: Layers },
+  { key: "favorites", label: "Favorites", Icon: Heart },
+  { key: "shared", label: "Shared with me", Icon: Users },
+  { key: "trash", label: "Trash", Icon: Trash2 },
 ] as const;
 
 const CANVAS_MENU_KEYS = MENU_ITEMS.map((item) => item.key);
+const EXTRA_PANEL_KEYS: readonly string[] = [];
 const EMPTY_PAGES: Page[] = [];
 
+type CanvasMenuKey = (typeof CANVAS_MENU_KEYS)[number];
+type DashboardMenuKey = (typeof DASHBOARD_MENU_ITEMS)[number]["key"];
+type ExtraPanelKey = (typeof EXTRA_PANEL_KEYS)[number];
+type PanelViewKey = CanvasMenuKey | DashboardMenuKey | ExtraPanelKey;
+
 export function LibraryPanel() {
+  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [templateCategory, setTemplateCategory] = useState<string>("All");
   const [openCats, setOpenCats] = useState<Record<string, boolean>>(() => ({ Hero: true, Navigation: true, Features: true, Carousel: true }));
@@ -69,24 +73,97 @@ export function LibraryPanel() {
   const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
   const setLeftPanelViewRaw = useBuilder((s) => s.setLeftPanelView);
   const showProjectDashboard = useBuilder((s) => s.showProjectDashboard);
-  type CanvasMenuKey = (typeof CANVAS_MENU_KEYS)[number];
-  type DashboardMenuKey = (typeof DASHBOARD_MENU_ITEMS)[number]["key"];
-  type PanelViewKey = CanvasMenuKey | DashboardMenuKey;
   const setLeftPanelView: (view: PanelViewKey) => void = (view) => {
-    setLeftPanelViewRaw(view as DashboardMenuKey | CanvasMenuKey);
+    setLeftPanelViewRaw(view as any);
   };
   const pages = currentProject?.pages ?? EMPTY_PAGES;
+  const currentProjectId = useBuilder((s) => s.currentProjectId);
   const seoModalPage = pages.find((pg: Page) => pg.id === seoModalPageId) ?? null;
   const [seoModalTab, setSeoModalTab] = useState<"page" | "analytics">("page");
   const isCanvasMenuKey = (value: string): value is CanvasMenuKey => CANVAS_MENU_KEYS.includes(value as CanvasMenuKey);
-  const activePanelKey = showProjectDashboard
-    ? leftPanelView
-    : isCanvasMenuKey(leftPanelView)
+  const dashboardPathMap: Record<DashboardMenuKey, string> = {
+  dashboard: "/dashboard",
+  projects: "/dashboard/projects",
+  templates: "/dashboard/templates",
+  favorites: "/dashboard/favorites",
+  shared: "/dashboard/shared",
+  trash: "/dashboard/trash", 
+ 
+};
+
+// derive active menu key from the current URL
+const [currentPath, setCurrentPath] = useState(() =>
+  typeof window !== "undefined" ? window.location.pathname : "/"
+);
+
+useEffect(() => {
+  const onLocationChange = () =>
+    setCurrentPath(window.location.pathname || "/");
+
+  window.addEventListener("popstate", onLocationChange);
+
+  const origPush = history.pushState;
+  const origReplace = history.replaceState;
+
+  // @ts-ignore
+  history.pushState = function () {
+    // @ts-ignore
+    const result = origPush.apply(this, arguments);
+    window.dispatchEvent(new Event("locationchange"));
+    return result;
+  };
+
+  // @ts-ignore
+  history.replaceState = function () {
+    // @ts-ignore
+    const result = origReplace.apply(this, arguments);
+    window.dispatchEvent(new Event("locationchange"));
+    return result;
+  };
+
+  window.addEventListener("locationchange", onLocationChange);
+
+  return () => {
+    window.removeEventListener("popstate", onLocationChange);
+    window.removeEventListener("locationchange", onLocationChange);
+
+    // @ts-ignore
+    history.pushState = origPush;
+    // @ts-ignore
+    history.replaceState = origReplace;
+  };
+}, []);
+const routeActiveKey = (() => {
+  const path = currentPath || "/";
+
+  if (path === "/dashboard" || path === "/dashboard/") return "dashboard";
+
+  for (const key of Object.keys(dashboardPathMap) as DashboardMenuKey[]) {
+    const route = dashboardPathMap[key];
+    if (path === route || path.startsWith(route + "/")) {
+      return key;
+    }
+  }
+
+  return null;
+})();
+
+const activePanelKey = showProjectDashboard
+  ? routeActiveKey ?? "projects"
+  : isCanvasMenuKey(leftPanelView)
     ? leftPanelView
     : "pages";
   const menuItems = showProjectDashboard ? DASHBOARD_MENU_ITEMS : MENU_ITEMS;
   const primaryMenuItems = showProjectDashboard ? menuItems.slice(0, 5) : menuItems;
-  const toolMenuItems = showProjectDashboard ? menuItems.slice(5) : [];
+    const toolMenuItems: Array<{
+    key: PanelViewKey;
+    label: string;
+    Icon: React.ComponentType<{ className?: string }>;
+  }> = showProjectDashboard ? (menuItems.slice(5) as Array<{
+    key: PanelViewKey;
+    label: string;
+    Icon: React.ComponentType<{ className?: string }>;
+  }>) : [];
   const currentViewLabel = menuItems.find((item) => item.key === activePanelKey)?.label ?? activePanelKey;
   const [overlayView, setOverlayView] = useState<PanelViewKey | null>(null);
   const overlayLabel = overlayView ? menuItems.find((item) => item.key === overlayView)?.label ?? overlayView : "";
@@ -118,10 +195,23 @@ export function LibraryPanel() {
   }, [leftPanelOpen, leftPanelView, showProjectDashboard, isCanvasMenuKey]);
 
   useEffect(() => {
+    if (leftPanelOpen && !showProjectDashboard && leftPanelView === "widgets") {
+      setOverlayView("widgets");
+    }
+  }, [leftPanelOpen, leftPanelView, showProjectDashboard]);
+
+  useEffect(() => {
     if (seoModalPageId) {
       setSeoModalTab("page");
     }
   }, [seoModalPageId]);
+
+  useEffect(() => {
+    if (showProjectDashboard) {
+      setOverlayView(null);
+    }
+  }, [showProjectDashboard]);
+
   const [accountOpen, setAccountOpen] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-in");
@@ -230,7 +320,7 @@ const handleLogout = async () => {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="relative h-full min-h-0 flex flex-col bg-background/50">
-        <div className="border-b border-border/70 px-4 py-4">
+        <div className="border-b border-border/70 px-2 py-2">
           <div className="flex items-center justify-between gap-3">
             <div className="space-y-1">
               <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Workspace</p>
@@ -238,7 +328,7 @@ const handleLogout = async () => {
             </div>
             <button
               type="button"
-              className="inline-flex h-9 items-center rounded-full border border-border/70 bg-background/90 px-3 text-xs font-medium text-foreground transition hover:bg-muted"
+              className="inline-flex h-9 items-center rounded-full border border-border/70 bg-background/90 px-3 text-xs font-medium text-foreground transition hover:bg-muted "
               onClick={() => setLeftPanelOpen(!leftPanelOpen)}
             >
               {leftPanelOpen ? "Collapse" : "Expand"}
@@ -246,7 +336,9 @@ const handleLogout = async () => {
           </div>
         </div>
 
-        <div className="px-4 py-4">
+        <div className="px-2 py-2">
+           
+
           <div className="space-y-2">
             {primaryMenuItems.map(({ key, label, Icon }) => {
               const active = leftPanelOpen && activePanelKey === key;
@@ -255,16 +347,22 @@ const handleLogout = async () => {
                   key={key}
                   type="button"
                   onClick={() => {
-                    setLeftPanelView(key);
-                    if (key === "templates") {
-                      setOverlayView(null);
-                    } else {
-                      setOverlayView(key);
-                    }
-                    setLeftPanelOpen(true);
-                  }}
-                  className={`group flex w-full items-center gap-2 rounded-2xl px-2.5 py-2 text-left text-sm font-semibold transition ${
-                    active ? "bg-violet-50 text-violet-900 border border-violet-100" : "bg-white text-slate-700 border border-border/70 hover:bg-slate-50"
+  if (showProjectDashboard) {
+    const destination = dashboardPathMap[key as DashboardMenuKey];
+
+    if (destination) {
+      navigate({ to: destination as never });
+    }
+
+    return;
+  }
+
+  setLeftPanelView(key);
+  setOverlayView(key);
+  setLeftPanelOpen(true);
+}}
+                  className={`group flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-sm font-semibold transition ${
+                    active ? "bg-violet-50 text-violet-900 " : "bg-white text-slate-700  hover:bg-slate-50"
                   }`}
                 >
                   <span className={`inline-flex h-9 w-9 min-w-[2.25rem] items-center justify-center rounded-xl ${
@@ -284,22 +382,26 @@ const handleLogout = async () => {
               <div className="space-y-2">
                 {toolMenuItems.map(({ key, label, Icon }) => {
                   const active = leftPanelOpen && activePanelKey === key;
-                  const badge = key === "animations" || key === "assets" ? "New" : key === "seo" ? "Beta" : undefined;
+                  const keyString = key as string;
+                const badge = undefined;
                   return (
                     <button
                       key={key}
                       type="button"
                       onClick={() => {
                         setLeftPanelView(key);
-                        if (key === "templates") {
-                          setOverlayView(null);
+                        if (showProjectDashboard) {
+                          const destination = dashboardPathMap[key as DashboardMenuKey];
+                          if (destination) {
+                            navigate({ to: destination as never });
+                          }
                         } else {
                           setOverlayView(key);
                         }
                         setLeftPanelOpen(true);
                       }}
-                      className={`group flex w-full items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-left text-sm font-semibold transition ${
-                        active ? "bg-violet-50 text-violet-900 border border-violet-100" : "bg-white text-slate-700 border border-border/70 hover:bg-slate-50"
+                      className={`group flex w-full items-center justify-between gap-2 rounded px-2.5 py-2 text-left text-sm font-semibold transition ${
+                        active ? "bg-violet-50 text-violet-900 " : "bg-white text-slate-700   hover:bg-slate-50"
                       }`}
                     >
                       <span className="flex items-center gap-2">
@@ -344,7 +446,7 @@ const handleLogout = async () => {
                 </button>
                 <div className="text-sm font-semibold text-foreground">{overlayLabel}</div>
               </div>
-              <div className="flex-1 overflow-y-auto px-4 py-4" style={{ scrollbarGutter: "stable" }}>
+              <div className="flex-1 overflow-y-auto p-2" style={{ scrollbarGutter: "stable" }}>
                 {overlayView ? (
                   showProjectDashboard ? (
                     <DashboardPanel view={overlayView as DashboardPanelView} setLeftPanelOpen={setLeftPanelOpen} setLeftPanelView={setLeftPanelView} />
@@ -352,10 +454,10 @@ const handleLogout = async () => {
                     <>
                       {overlayView === "pages" ? (
                         <section className="space-y-3">
-                          <div className="rounded-3xl border border-border/70 bg-slate-50 p-3">
+                          <div className="rounded border border-border/70 bg-slate-50 p-2">
                             <div className="flex items-center justify-between gap-2">
                               <div>
-                                <div className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">Pages</div>
+                                <div className="text-[9px] uppercase tracking-[0.3em] text-black">Pages</div>
                                 <div className="mt-1 text-sm font-semibold text-foreground">{pages.length} page{pages.length === 1 ? "" : "s"}</div>
                               </div>
                               <button
@@ -372,15 +474,21 @@ const handleLogout = async () => {
                             {pages.map((pg) => (
                               <div
                                 key={pg.id}
-                                className={`group flex items-center justify-between gap-2 rounded-3xl border px-3 py-3 text-xs transition ${pg.id === currentPageId ? "border-primary bg-primary/10 text-primary-foreground" : "border-border/70 bg-slate-50 text-foreground hover:border-slate-300 hover:bg-slate-100"}`}
+                                className={`group flex w-full items-center gap-2 rounded justify-between px-2.5 py-2 text-left text-sm font-semibold  transition ${pg.id === currentPageId ? "bg-violet-50 text-violet-900" : "text-foreground "}`}
                               >
                                 <button
                                   type="button"
-                                  onClick={() => selectPage(pg.id)}
+                                  onClick={() => {
+                                    if (currentProjectId) {
+                                      navigate({ to: `/editor/${currentProjectId}?pageId=${pg.id}` as never } as any);
+                                    } else {
+                                      selectPage(pg.id);
+                                    }
+                                  }}
                                   className="min-w-0 text-left"
                                 >
-                                  <div className="truncate font-medium">{pg.name}</div>
-                                  <div className="text-[10px] text-muted-foreground">/{pg.slug}</div>
+                                  <div className="truncate font-medium text-black">{pg.name}</div>
+                                  <div className="text-[10px] text-muted-foreground text-black">/{pg.slug}</div>
                                 </button>
 
                                 <PageActionsMenu
@@ -416,7 +524,7 @@ const handleLogout = async () => {
                         </section>
                       ) : null}
 
-                      {overlayView === "sections" ? (
+                      {overlayView === "shared" ? (
                         <section className="space-y-3">
                           <div className="rounded-3xl border border-border/70 bg-slate-50 p-3">
                             <div className="relative">
@@ -463,14 +571,14 @@ const handleLogout = async () => {
 
                       {overlayView === "widgets" ? (
                         <section className="space-y-3">
-                          <div className="rounded-3xl border border-border/70 bg-slate-50 p-3">
+                          <div className="rounded bg-slate-50 p-1">
                             <div className="relative">
                               <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                               <input
                                 value={q}
                                 onChange={(e) => setQ(e.target.value)}
                                 placeholder="Search widgets…"
-                                className="w-full rounded-2xl border border-input/80 bg-white py-3 pl-11 pr-4 text-sm shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+                                className="w-full  border-input/80 bg-white py-3 pl-11 pr-4 text-sm shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
                               />
                             </div>
                           </div>
@@ -787,9 +895,12 @@ function SectionCard({ tpl, onAdd }: { tpl: SectionTemplate; onAdd: () => void }
   );
 }
 
-type DashboardPanelView = (typeof DASHBOARD_MENU_ITEMS[number])["key"];
+type DashboardPanelView = Extract<
+  PanelViewKey,
+  "dashboard" | "projects" | "templates" | "favorites" | "shared" | "trash"
+>;
 
-function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: DashboardPanelView; setLeftPanelOpen: (open: boolean) => void; setLeftPanelView: (view: DashboardPanelView) => void; }) {
+function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: DashboardPanelView; setLeftPanelOpen: (open: boolean) => void; setLeftPanelView: (view: PanelViewKey) => void; }) {
   const projects = useBuilder((s) => s.projects);
   const projectEntries = useMemo(() => Object.values(projects), [projects]);
   const totalProjects = projectEntries.length;
@@ -928,67 +1039,7 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
             }
           )}
         </section>
-      ) : view === "assets" ? (
-        <section className="w-full space-y-4">
-          {sectionCard(
-            "Hosting",
-            "Deploy and manage your site",
-            "Track hosting performance, domains, and launch status from one place.",
-            {
-              label: "Deploy",
-              onClick: () => {
-                setLeftPanelView("assets");
-                setLeftPanelOpen(true);
-              },
-            }
-          )}
-        </section>
-      ) : view === "animations" ? (
-        <section className="w-full space-y-4">
-          {sectionCard(
-            "Domains",
-            "Connect your custom address",
-            "Set up and manage domain names for your website with fast DNS configuration.",
-            {
-              label: "Connect",
-              onClick: () => {
-                setLeftPanelView("animations");
-                setLeftPanelOpen(true);
-              },
-            }
-          )}
-        </section>
-      ) : view === "seo" ? (
-        <section className="w-full space-y-4">
-          {sectionCard(
-            "AI Website",
-            "Optimize for search & conversion",
-            "Use built-in SEO guidance and site analytics to improve visibility.",
-            {
-              label: "Analyze",
-              onClick: () => {
-                setLeftPanelView("seo");
-                setLeftPanelOpen(true);
-              },
-            }
-          )}
-        </section>
-      ) : view === "settings" ? (
-        <section className="w-full space-y-4">
-          {sectionCard(
-            "Team",
-            "Manage collaborators",
-            "Invite others, assign roles, and keep your project team aligned.",
-            {
-              label: "Manage",
-              onClick: () => {
-                setLeftPanelView("settings");
-                setLeftPanelOpen(true);
-              },
-            }
-          )}
-        </section>
-      ) : null}
+      ): null}
     </>
   );
 }

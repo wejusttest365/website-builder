@@ -14,6 +14,7 @@ interface Props {
 
 export function Canvas({ editable = true, disablePointerEvents = false, iframeRef }: Props) {
   const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
+
   const selectedId = useBuilder((s) => s.selectedSectionId);
   const device = useBuilder((s) => s.device);
   const select = useBuilder((s) => s.selectSection);
@@ -291,7 +292,10 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         const slug = String(data.payload?.slug ?? "");
         if (!slug || !project) return;
         const page = project.pages.find((p) => p.slug === slug);
-        if (page) selectPage(page.id);
+        if (page) {
+  selectPage(page.id);
+  setLeftPanelView("pages");
+}
       }
       if (data.type === "section-html") {
         skipRebuildRef.current = true;
@@ -503,9 +507,9 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
           handleDrop(e);
         }}
       >
-        <div ref={wrapperRef} className="w-full h-full min-h-0 flex items-stretch justify-center overflow-y-auto overflow-x-auto bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.08),_transparent_42%)] p-3 pb-4">
+        <div ref={wrapperRef} className="w-full h-full min-h-0 flex items-stretch justify-center overflow-y-auto overflow-x-auto bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.08),_transparent_42%)] p-1 pb-4">
           <div
-            className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-[0_20px_80px_-28px_rgba(15,23,42,0.35)] transition-all duration-200"
+            className="relative flex h-full min-h-0 flex-col overflow-hidden  border border-black/5 bg-white shadow-[0_20px_80px_-28px_rgba(15,23,42,0.35)] transition-all duration-200"
             style={{ width: frameWidth, maxWidth: frameMaxWidth, minWidth: 0, margin: "0 auto", overflowX: "hidden" }}
           >
             {mounted ? (
@@ -518,7 +522,7 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
               />
             ) : null}
             {mounted && project && pageOf(project)?.sections.length === 0 ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-[24px] border border-dashed border-border/70 bg-slate-50/90 text-center px-6 py-10 text-sm text-slate-600">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4  border border-dashed border-border/70 bg-slate-50/90 text-center px-6 py-10 text-sm text-slate-600">
                 <div className="inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-primary/10 text-primary">
                   <UploadCloud className="w-7 h-7" />
                 </div>

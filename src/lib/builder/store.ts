@@ -1,7 +1,6 @@
-import { createProject } from "@/services/project";
+ import { saveBuilderProject, getBuilderProject } from "@/services/builderProject";
 import { create } from "zustand";
-import { nanoid } from "nanoid";
-import { getProject } from "@/services/project";
+import { nanoid } from "nanoid"; 
 import type { SectionTemplate } from "./sections";
 import type { TemplateDefinition } from "./templates";
 import { createImageAssetReference, normalizeAssetMap, saveImageBlob, type BuilderAssetEntry } from "./image-storage";
@@ -126,32 +125,30 @@ interface BuilderState {
   hydrated: boolean;
   leftPanelOpen: boolean;
   leftPanelView:
+   | "dashboard"
   | "projects"
   | "pages"
   | "templates"
-  | "sections"
   | "widgets"
-  | "assets"
-  | "animations"
-  | "seo"
-  | "settings"
-  | "integrations";
+  | "favorites"
+  | "shared"
+  | "trash"
+  
   showProjectDashboard: boolean;
 
   setLeftPanelOpen: (v: boolean) => void;
   toggleLeftPanel: () => void;
   setLeftPanelView: (
     view:
-      | "projects"
-      | "pages"
-      | "templates"
-      | "sections"
-      | "widgets"
-      | "assets"
-      | "animations"
-      | "seo"
-      | "settings"
-      | "integrations"
+    | "dashboard"
+    | "projects"
+    | "pages"
+    | "templates"
+    | "widgets"
+    | "favorites"
+    | "shared"
+    | "trash"
+   
   ) => void;
   setShowProjectDashboard: (show: boolean) => void;
   setSelectedElementStyle: (style: Record<string, string> | null) => void;
@@ -159,11 +156,12 @@ interface BuilderState {
   hydrate: () => void;
   persist: () => boolean;
 
-  createProject: (name?: string) => string;
+  saveBuilderProject: (name?: string) => string;
   newProject: (name?: string) => string;
   selectProject: (id: string) => void;
   loadProject: (id: string) => void;
   loadCloudProject: (id: string) => Promise<void>;
+
   renameProject: (id: string, name: string) => void;
   duplicateProject: (id: string) => string;
   deleteProject: (id: string) => void;
@@ -274,22 +272,18 @@ function migrateProject(raw: unknown): Project {
 }
 
 type StoredLeftPanelView =
+  | "dashboard"
   | "projects"
   | "pages"
   | "templates"
-  | "sections"
   | "widgets"
-  | "assets"
-  | "animations"
-  | "seo"
-  | "settings"
-  | "media"
-  | "styles";
+  | "favorites"
+  | "shared"
+  | "trash";
 
-function normalizeStoredLeftPanelView(view: StoredLeftPanelView | undefined): BuilderState["leftPanelView"] | undefined {
-  if (!view) return undefined;
-  if (view === "media") return "assets";
-  if (view === "styles") return "settings";
+function normalizeStoredLeftPanelView(
+  view: StoredLeftPanelView | undefined
+): BuilderState["leftPanelView"] | undefined {
   return view;
 }
 
@@ -408,11 +402,18 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const { projects, currentProjectId, leftPanelOpen, leftPanelView } = loadFromStorage();
     let pid = currentProjectId;
     let projs = projects;
-    if (!pid || !projs[pid]) {
-      const proj = emptyProject();
-      projs = { ...projs, [proj.id]: proj };
-      pid = proj.id;
-    }
+   if (!pid || !projs[pid]) {
+  // Don't create a new project here.
+  // Editor route will load the project (local/cloud).
+  set({
+    projects: projs,
+    currentProjectId: null,
+    hydrated: true,
+    leftPanelOpen: leftPanelOpen ?? true,
+    leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages",
+  });
+  return;
+}
     set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: leftPanelOpen ?? true, leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages" });
     const p = projs[pid];
     const page = getCurrentPage(p)!;
@@ -470,23 +471,34 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
   currentPage: () => getCurrentPage(get().currentProject()),
 
-  createProject: (name = "Untitled Project") => {
+  saveBuilderProject: (name = "Untitled Project") => {
     return get().newProject(name);
   },
 
   newProject: (name = "Untitled Project") => {
-    const p = emptyProject(name);
-    const page = p.pages[0];
-    set((s) => ({
-      projects: { ...s.projects, [p.id]: p },
-      currentProjectId: p.id,
-      selectedSectionId: null,
-      history: [{ pageId: page.id, sections: [], globalCss: p.globalCss, globalJs: p.globalJs }],
-      historyIndex: 0,
-    }));
-    get().persist();
-    return p.id;
-  },
+  const p = emptyProject(name);
+  const page = p.pages[0];
+
+  set((s) => ({
+    projects: { ...s.projects, [p.id]: p },
+    currentProjectId: p.id,
+    selectedSectionId: null,
+    showProjectDashboard: false,      // <-- ADD THIS
+    leftPanelOpen: true,              // <-- ADD THIS
+    leftPanelView: "widgets",         // <-- ADD THIS
+
+    history: [{
+      pageId: page.id,
+      sections: [],
+      globalCss: p.globalCss,
+      globalJs: p.globalJs,
+    }],
+    historyIndex: 0,
+  }));
+
+  get().persist();
+  return p.id;
+},
 
   selectProject: (id) => {
     get().loadProject(id);
@@ -505,10 +517,8 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     get().persist();
   },
   
-loadCloudProject: async (id: string) => {
-  const data = await getProject(id);
-
-  const project = data.project as Project;
+ loadCloudProject: async (id: string) => {
+  const project = await getBuilderProject(id);
 
   if (!project) return;
 

@@ -885,23 +885,37 @@ export const RUNTIME_SCRIPT = `
       const target = getEventTarget(e);
       if (!target) return;
       if (target.closest('#__wto_tb')) return;
-      if (target.closest('[data-wto-nav]')) return;
+      const nav = target.closest('[data-wto-nav]');
+if (nav) {
+  const anchor = target.closest('a');
+
+  if (anchor) {
+    const href = anchor.getAttribute('href') || "";
+    const normalized = href
+      .replace(/^[./]+/, "")
+      .replace(/\.html(?:[?#].*)?$/, "");
+
+    if (!href || href === "#") {
+      e.preventDefault();
+      return;
+    }
+
+    if (scrollToHash(href, e)) {
+      return;
+    }
+
+    if (/^(?!https?:|mailto:).+\.html(?:[?#].*)?$/.test(href)) {
+      e.preventDefault();
+      send("navigate-page", { slug: normalized });
+      return;
+    }
+  }
+}
       if (target.closest('[data-carousel-prev], [data-carousel-next], [data-carousel-dot], [data-carousel-items-prev], [data-carousel-items-next], [data-carousel-indicator]')) return;
       const section = target.closest('[data-wto-section]');
       if (!section) return;
       const anchor = target.closest('a');
-      if (anchor) {
-        const href = anchor.getAttribute('href') || "";
-        const normalized = href.replace(/^[./]+/, "").replace(/\.html(?:[?#].*)?$/, "");
-        if (!href || href === '#') {
-          e.preventDefault();
-        } else if (scrollToHash(href, e)) {
-          return;
-        } else if (/^(?!https?:|mailto:).+\.html(?:[?#].*)?$/.test(href)) {
-          e.preventDefault();
-          send('navigate-page', { slug: normalized });
-        }
-      }
+      
       currentSection = section;
       positionToolbar(section);
       const selection = resolveElementSelection(target);
@@ -1010,6 +1024,7 @@ export const RUNTIME_SCRIPT = `
       toggleMenu();
     });
     menu.querySelectorAll('a').forEach(a => a.addEventListener('click', (e) => {
+  
       e.stopPropagation();
       const href = a.getAttribute('href') || '';
       if (scrollToHash(href, e)) {
@@ -1021,7 +1036,8 @@ export const RUNTIME_SCRIPT = `
         e.preventDefault();
         const slug = href.replace(/\.html$/, '');
         setActiveLink(slug);
-        send('navigate-page', { slug });
+       console.log("SEND NAVIGATE", href, slug);
+send('navigate-page', { slug });
       }
       closeMenu();
     }));

@@ -1,8 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
-import { ClientOnly } from "@/components/builder/ClientOnly";
-import { BuilderShell } from "@/components/builder/BuilderShell";
 import { ProjectDashboard } from "@/components/builder/ProjectDashboard";
+import { CenteredLoader } from "@/components/ui/CenteredLoader";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { LandingPage } from "@/components/landing/LandingPage";
@@ -14,24 +13,24 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  const navigate = useNavigate();
   const { user, authReady } = useAuth();
-  const showProjectDashboard = useBuilder((s) => s.showProjectDashboard);
   const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
-  const initialDashboardSet = useRef(false);
+  const initialRedirected = useRef(false);
 
   useEffect(() => {
-    if (!initialDashboardSet.current && user) {
+    if (!initialRedirected.current && user) {
+      // ensure dashboard mode is enabled then redirect to /dashboard
       setShowProjectDashboard(true);
-      initialDashboardSet.current = true;
+      initialRedirected.current = true;
+      navigate({ to: "/dashboard" as never });
     }
-  }, [user, setShowProjectDashboard]);
+  }, [user, setShowProjectDashboard, navigate]);
 
   if (!authReady) {
     return (
       <MainLayout>
-        <div className="h-[calc(100vh-100px)] flex items-center justify-center text-sm text-muted-foreground">
-          Loading authentication…
-        </div>
+        <CenteredLoader message="Preparing your website builder…" details="This will only take a moment." />
       </MainLayout>
     );
   }
@@ -39,21 +38,8 @@ function Index() {
   return (
     <MainLayout>
       {user ? (
-        <AppSidebar>
-          {showProjectDashboard ? (
-            <ProjectDashboard onOpenEditor={() => setShowProjectDashboard(false)} />
-          ) : (
-            <ClientOnly
-              fallback={
-                <div style={{ height: "100%" }} className="h-screen w-screen flex items-center justify-center text-sm text-muted-foreground">
-                  Loading builder…
-                </div>
-              }
-            >
-              <BuilderShell />
-            </ClientOnly>
-          )}
-        </AppSidebar>
+        // authenticated users are redirected to /dashboard; show a placeholder while navigating
+        <div className="h-[calc(100vh-100px)] flex items-center justify-center text-sm text-muted-foreground">Redirecting to dashboard…</div>
       ) : (
         <LandingPage />
       )}

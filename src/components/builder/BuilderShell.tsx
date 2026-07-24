@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useMounted } from "@/hooks/use-mounted";
 import { toast } from "sonner";
 import { useBuilder } from "@/lib/builder/store";
+import { CenteredLoader } from "@/components/ui/CenteredLoader";
 import { Canvas } from "./Canvas";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { TemplateGalleryOverlay } from "./TemplateGalleryOverlay";
@@ -113,17 +114,13 @@ export function BuilderShell() {
   }, [undo, redo]);
 
   if (!mounted || !hydrated) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center text-sm text-muted-foreground">
-        Loading builder…
-      </div>
-    );
+    return <CenteredLoader details="Initializing editor…" className="bg-background/50" />;
   }
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.09),_transparent_32%),linear-gradient(135deg,_rgba(248,250,252,0.98),_rgba(241,245,249,0.95))] text-foreground">
       <div className="p-2 h-full min-h-0 flex flex-col">
-        <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/70 shadow-[0_25px_80px_-35px_rgba(15,23,42,0.35)] backdrop-blur">
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded border border-border/70 bg-background/70 shadow-[0_25px_80px_-35px_rgba(15,23,42,0.35)] backdrop-blur">
           <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
             <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,_rgba(248,250,252,0.65),_rgba(255,255,255,0.98))]">
               <Canvas />

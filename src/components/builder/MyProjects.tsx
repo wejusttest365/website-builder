@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { useBuilder } from "@/lib/builder/store";
 import { useCloudProjects } from "@/lib/builder/useCloudProjects";
+import { useNavigate } from "@tanstack/react-router";
 
+const newProject = useBuilder((s) => s.newProject);
 function formatUpdatedAt(value?: any) {
   if (!value) return "Unknown";
   if (typeof value?.toDate === "function") {
@@ -22,15 +24,20 @@ export function MyProjects() {
   const { user } = useAuth();
   const { projects, loading, error } = useCloudProjects();
   const loadCloudProject = useBuilder((s) => s.loadCloudProject);
-  const createProject = useBuilder((s) => s.createProject);
+const newProject = useBuilder((s) => s.newProject);
   const currentProjectId = useBuilder((s) => s.currentProjectId);
   const [q, setQ] = useState("");
+const navigate = useNavigate();
 
-  const filteredProjects = useMemo(() => {
-    const search = q.trim().toLowerCase();
-    if (!search) return projects;
-    return projects.filter(({ project }) => project.name.toLowerCase().includes(search));
-  }, [projects, q]);
+const filteredProjects = useMemo(() => {
+  const search = q.trim().toLowerCase();
+
+  if (!search) return projects;
+
+  return projects.filter((project) =>
+    project.name.toLowerCase().includes(search)
+  );
+}, [projects, q]);
 
   if (loading) {
     return (
@@ -70,15 +77,24 @@ export function MyProjects() {
         <p className="mx-auto mt-3 max-w-xs text-sm text-muted-foreground">
           Create your first project to begin building websites with your own pages, widgets, and templates.
         </p>
-        <Button
-          type="button"
-          className="mt-6"
-          variant="default"
-          onClick={() => createProject("My Project")}
-        >
-          <Plus className="h-4 w-4" />
-          Create Project
-        </Button>
+       <Button
+  type="button"
+  className="mt-6"
+  variant="default"
+  onClick={() => {
+    const id = newProject("My Project");
+
+    navigate({
+      to: "/editor/$projectId",
+      params: {
+        projectId: id,
+      },
+    });
+  }}
+>
+  <Plus className="h-4 w-4" />
+  Create Project
+</Button>
       </div>
     );
   }
@@ -91,7 +107,22 @@ export function MyProjects() {
             <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Projects</p>
             <h2 className="mt-2 text-xl font-semibold text-foreground">My Projects</h2>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => createProject("My Project")}>Create New</Button>
+      <Button
+  variant="secondary"
+  size="sm"
+  onClick={() => {
+    const id = newProject("My Project");
+
+    navigate({
+      to: "/editor/$projectId",
+      params: {
+        projectId: id,
+      },
+    });
+  }}
+>
+  Create New
+</Button>
         </div>
 
         <div className="mt-4 relative">
@@ -123,9 +154,9 @@ export function MyProjects() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                     <Folder className="h-4 w-4 text-primary" />
-                    <span className="truncate">{projectRecord.project.name}</span>
+                    <span className="truncate">{projectRecord.name}</span>
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">{projectRecord.project.pages.length} pages</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{projectRecord.pages.length} pages</p>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock3 className="h-4 w-4" />

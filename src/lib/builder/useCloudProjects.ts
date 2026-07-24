@@ -3,15 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { auth } from "@/firebase/firebase";
 import { getProjects } from "@/services/project";
-import type { Project } from "@/lib/builder/store";
+import type { Project } from "@/features/projects/project.types";
 
-export interface CloudProjectRecord {
-  id: string;
-  ownerId: string;
-  project: Project;
-  createdAt?: any;
-  updatedAt?: any;
-}
+export type DashboardProject = Project;
 
 function getProjectLoadErrorMessage(error: unknown) {
   if (error instanceof FirebaseError) {
@@ -30,7 +24,7 @@ function getProjectLoadErrorMessage(error: unknown) {
 
 export function useCloudProjects() {
   const { user, authReady } = useAuth();
-  const [projects, setProjects] = useState<CloudProjectRecord[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -78,7 +72,7 @@ export function useCloudProjects() {
       try {
         const data = await getProjects(firebaseUser.uid);
         if (!isMounted) return;
-        setProjects(data as CloudProjectRecord[]);
+        setProjects(data);
       } catch (loadError) {
         console.error("Failed to load cloud projects", loadError);
         if (!isMounted) return;

@@ -9,12 +9,35 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
+import { Route as EditorProjectIdRouteImport } from './routes/editor.$projectId'
 import { Route as DemoProjectIdRouteImport } from './routes/demo.$projectId'
+import { Route as DashboardTrashRouteImport } from './routes/dashboard.trash'
+import { Route as DashboardTemplatesRouteImport } from './routes/dashboard.templates'
+import { Route as DashboardSharedRouteImport } from './routes/dashboard.shared'
+import { Route as DashboardProjectsRouteImport } from './routes/dashboard.projects'
+import { Route as DashboardFavoritesRouteImport } from './routes/dashboard.favorites'
 
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardIndexRoute = DashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const EditorProjectIdRoute = EditorProjectIdRouteImport.update({
+  id: '/editor/$projectId',
+  path: '/editor/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoProjectIdRoute = DemoProjectIdRouteImport.update({
@@ -22,40 +45,141 @@ const DemoProjectIdRoute = DemoProjectIdRouteImport.update({
   path: '/demo/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardTrashRoute = DashboardTrashRouteImport.update({
+  id: '/trash',
+  path: '/trash',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardTemplatesRoute = DashboardTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSharedRoute = DashboardSharedRouteImport.update({
+  id: '/shared',
+  path: '/shared',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardProjectsRoute = DashboardProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardFavoritesRoute = DashboardFavoritesRouteImport.update({
+  id: '/favorites',
+  path: '/favorites',
+  getParentRoute: () => DashboardRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteWithChildren
+  '/dashboard/favorites': typeof DashboardFavoritesRoute
+  '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/shared': typeof DashboardSharedRoute
+  '/dashboard/templates': typeof DashboardTemplatesRoute
+  '/dashboard/trash': typeof DashboardTrashRoute
   '/demo/$projectId': typeof DemoProjectIdRoute
+  '/editor/$projectId': typeof EditorProjectIdRoute
+  '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard/favorites': typeof DashboardFavoritesRoute
+  '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/shared': typeof DashboardSharedRoute
+  '/dashboard/templates': typeof DashboardTemplatesRoute
+  '/dashboard/trash': typeof DashboardTrashRoute
   '/demo/$projectId': typeof DemoProjectIdRoute
+  '/editor/$projectId': typeof EditorProjectIdRoute
+  '/dashboard': typeof DashboardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteWithChildren
+  '/dashboard/favorites': typeof DashboardFavoritesRoute
+  '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/shared': typeof DashboardSharedRoute
+  '/dashboard/templates': typeof DashboardTemplatesRoute
+  '/dashboard/trash': typeof DashboardTrashRoute
   '/demo/$projectId': typeof DemoProjectIdRoute
+  '/editor/$projectId': typeof EditorProjectIdRoute
+  '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/demo/$projectId'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/dashboard/favorites'
+    | '/dashboard/projects'
+    | '/dashboard/shared'
+    | '/dashboard/templates'
+    | '/dashboard/trash'
+    | '/demo/$projectId'
+    | '/editor/$projectId'
+    | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/demo/$projectId'
-  id: '__root__' | '/' | '/demo/$projectId'
+  to:
+    | '/'
+    | '/dashboard/favorites'
+    | '/dashboard/projects'
+    | '/dashboard/shared'
+    | '/dashboard/templates'
+    | '/dashboard/trash'
+    | '/demo/$projectId'
+    | '/editor/$projectId'
+    | '/dashboard'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/dashboard/favorites'
+    | '/dashboard/projects'
+    | '/dashboard/shared'
+    | '/dashboard/templates'
+    | '/dashboard/trash'
+    | '/demo/$projectId'
+    | '/editor/$projectId'
+    | '/dashboard/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRouteWithChildren
   DemoProjectIdRoute: typeof DemoProjectIdRoute
+  EditorProjectIdRoute: typeof EditorProjectIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/': {
+      id: '/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof DashboardIndexRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/editor/$projectId': {
+      id: '/editor/$projectId'
+      path: '/editor/$projectId'
+      fullPath: '/editor/$projectId'
+      preLoaderRoute: typeof EditorProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/$projectId': {
@@ -65,12 +189,71 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/trash': {
+      id: '/dashboard/trash'
+      path: '/trash'
+      fullPath: '/dashboard/trash'
+      preLoaderRoute: typeof DashboardTrashRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/templates': {
+      id: '/dashboard/templates'
+      path: '/templates'
+      fullPath: '/dashboard/templates'
+      preLoaderRoute: typeof DashboardTemplatesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/shared': {
+      id: '/dashboard/shared'
+      path: '/shared'
+      fullPath: '/dashboard/shared'
+      preLoaderRoute: typeof DashboardSharedRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/projects': {
+      id: '/dashboard/projects'
+      path: '/projects'
+      fullPath: '/dashboard/projects'
+      preLoaderRoute: typeof DashboardProjectsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/favorites': {
+      id: '/dashboard/favorites'
+      path: '/favorites'
+      fullPath: '/dashboard/favorites'
+      preLoaderRoute: typeof DashboardFavoritesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
   }
 }
 
+interface DashboardRouteChildren {
+  DashboardFavoritesRoute: typeof DashboardFavoritesRoute
+  DashboardProjectsRoute: typeof DashboardProjectsRoute
+  DashboardSharedRoute: typeof DashboardSharedRoute
+  DashboardTemplatesRoute: typeof DashboardTemplatesRoute
+  DashboardTrashRoute: typeof DashboardTrashRoute
+  DashboardIndexRoute: typeof DashboardIndexRoute
+}
+
+const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardFavoritesRoute: DashboardFavoritesRoute,
+  DashboardProjectsRoute: DashboardProjectsRoute,
+  DashboardSharedRoute: DashboardSharedRoute,
+  DashboardTemplatesRoute: DashboardTemplatesRoute,
+  DashboardTrashRoute: DashboardTrashRoute,
+  DashboardIndexRoute: DashboardIndexRoute,
+}
+
+const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
+  DashboardRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRouteWithChildren,
   DemoProjectIdRoute: DemoProjectIdRoute,
+  EditorProjectIdRoute: EditorProjectIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

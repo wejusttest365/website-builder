@@ -69,7 +69,7 @@ export function PageActionsMenu({ page, pageCount, onRename, onSetSlug, onDuplic
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border hover:bg-accent"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border/70 bg-white text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-primary"
             aria-label="Page actions"
           >
             <MoreVertical className="h-4 w-4" />
