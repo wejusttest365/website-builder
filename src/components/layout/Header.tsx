@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LoginDialog } from "@/components/builder/LoginDialog";
+import { nanoid } from 'nanoid';
 
 export function Header() {
   const mounted = useMounted();
@@ -130,6 +131,45 @@ export function Header() {
     link.click();
 
     URL.revokeObjectURL(url);
+  }
+
+  async function openPreview() {
+    if (!project || !mounted) return;
+    try {
+      const exportData = await buildSiteExport(project);
+      const currentPage = project.pages.find((p) => p.id === project.currentPageId) || project.pages[0];
+      if (currentPage) {
+        const pageFile = exportData.files.find((f) => f.path === `${currentPage.slug}.html`);
+        if (pageFile) exportData.files.push({ path: 'index.html', content: pageFile.content, base64: pageFile.base64 });
+      }
+      const slugify = (s: string) =>
+        (s || 'project')
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'site';
+      const shortId = nanoid(6).toLowerCase();
+      const slug = `${slugify(project.name)}-${shortId}`;
+      const resp = await fetch('/__wto/preview', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug, files: exportData.files }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) {
+        toast.error('Preview generation failed');
+        console.error('preview error', data);
+        return;
+      }
+      const origin = window.location.origin;
+      const previewPath = data.url || `/preview/${slug}/index.html`;
+      const previewUrl = origin + previewPath;
+      window.open(previewUrl, '_blank', 'noopener,noreferrer');
+      toast.success('Preview opened', { duration: 2000, position: 'top-center' });
+    } catch (err) {
+      console.error(err);
+      toast.error('Preview failed');
+    }
   }
 
   if (!mounted) {
@@ -259,17 +299,26 @@ export function Header() {
 
         <div className="flex items-center gap-2">
 
-          {user && project && (
-            <button
-              type="button"
-              className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-              onClick={downloadZip}
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden md:inline">
-                Export ZIP
-              </span>
-            </button>
+          {showCanvasControls && user && project && (
+            <>
+              <button
+                type="button"
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                onClick={openPreview}
+              >
+                <Monitor className="w-4 h-4" />
+                <span className="hidden md:inline">Preview</span>
+              </button>
+
+              <button
+                type="button"
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                onClick={downloadZip}
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden md:inline">Export ZIP</span>
+              </button>
+            </>
           )}
 
           {authReady ? (

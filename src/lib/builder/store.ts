@@ -210,6 +210,7 @@ interface BuilderState {
 
 const STORAGE_KEY = "wto-builder-v2";
 const LEGACY_KEY = "wto-builder-v1";
+const FALLBACK_KEY = "wto-builder-state";
 const DB_NAME = "wto-builder-db";
 const DB_STORE = "projects";
 
@@ -287,12 +288,18 @@ function normalizeStoredLeftPanelView(
   return view;
 }
 
-function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null; leftPanelOpen?: boolean; leftPanelView?: StoredLeftPanelView } {
+function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null; leftPanelOpen?: boolean; leftPanelView?: StoredLeftPanelView; showProjectDashboard?: boolean } {
   if (typeof window === "undefined") return { projects: {}, currentProjectId: null };
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY) ?? sessionStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem(LEGACY_KEY);
+    const raw =
+      localStorage.getItem(STORAGE_KEY) ??
+      localStorage.getItem(LEGACY_KEY) ??
+      localStorage.getItem(FALLBACK_KEY) ??
+      sessionStorage.getItem(STORAGE_KEY) ??
+      sessionStorage.getItem(LEGACY_KEY) ??
+      sessionStorage.getItem(FALLBACK_KEY);
     if (!raw) return { projects: {}, currentProjectId: null };
-    const parsed = JSON.parse(raw) as { projects: Record<string, unknown>; currentProjectId: string | null };
+    const parsed = JSON.parse(raw) as { projects: Record<string, unknown>; currentProjectId: string | null; leftPanelOpen?: boolean; leftPanelView?: StoredLeftPanelView; showProjectDashboard?: boolean };
     const projects: Record<string, Project> = {};
     for (const [id, p] of Object.entries(parsed.projects || {})) {
       const migrated = migrateProject(p);
@@ -302,12 +309,23 @@ function loadFromStorage(): { projects: Record<string, Project>; currentProjectI
     return {
       projects,
       currentProjectId: parsed.currentProjectId ?? null,
-      leftPanelOpen: (parsed as any).leftPanelOpen,
-      leftPanelView: (parsed as any).leftPanelView,
+      leftPanelOpen: parsed.leftPanelOpen,
+      leftPanelView: parsed.leftPanelView,
+      showProjectDashboard: parsed.showProjectDashboard,
     };
   } catch {
     return { projects: {}, currentProjectId: null };
   }
+}
+
+export function getStoredBuilderState(): {
+  projects: Record<string, Project>;
+  currentProjectId: string | null;
+  leftPanelOpen?: boolean;
+  leftPanelView?: StoredLeftPanelView;
+  showProjectDashboard?: boolean;
+} {
+  return loadFromStorage();
 }
 
 function isStorageAvailable(storage: Storage | null): boolean {
@@ -382,6 +400,12 @@ export function pageOf(project: Project | null): Page | null {
 
 void requestPersistentStorage();
 
+const BUILDER_STORE_INSTANCE_ID = typeof window !== "undefined" ? Math.random().toString(36).slice(2) : "server";
+
+if (typeof window !== "undefined") {
+  (window as any).__WTO_BUILDER_STORE_INSTANCE_ID = BUILDER_STORE_INSTANCE_ID;
+}
+
 export const useBuilder = create<BuilderState>((set, get) => ({
   projects: {},
   currentProjectId: null,
@@ -395,38 +419,66 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   hydrated: false,
   showProjectDashboard: false,
 
-  setShowProjectDashboard: (show) => set({ showProjectDashboard: show }),
+  setShowProjectDashboard: (show) => {
+    set({ showProjectDashboard: show });
+    // Persist immediately so refresh doesn't lose the state
+    void get().persist();
+  },
 
   hydrate: () => {
     if (get().hydrated) return;
-    const { projects, currentProjectId, leftPanelOpen, leftPanelView } = loadFromStorage();
+    const loaded = loadFromStorage();
+    console.log("hydrate() loaded from storage", {
+      loadedProjectIds: Object.keys(loaded.projects),
+      currentProjectId: loaded.currentProjectId,
+      showProjectDashboard: loaded.showProjectDashboard,
+      leftPanelView: loaded.leftPanelView,
+      leftPanelOpen: loaded.leftPanelOpen,
+    });
+    const { projects, currentProjectId, leftPanelOpen, leftPanelView, showProjectDashboard } = loaded;
     let pid = currentProjectId;
     let projs = projects;
-   if (!pid || !projs[pid]) {
-  // Don't create a new project here.
-  // Editor route will load the project (local/cloud).
-  set({
-    projects: projs,
-    currentProjectId: null,
-    hydrated: true,
-    leftPanelOpen: leftPanelOpen ?? true,
-    leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages",
-  });
-  return;
-}
-    set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: leftPanelOpen ?? true, leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages" });
+    if (!pid || !projs[pid]) {
+      // Don't create a new project here.
+      // Editor route will load the project (local/cloud).
+      set({
+        projects: projs,
+        currentProjectId: null,
+        hydrated: true,
+        leftPanelOpen: leftPanelOpen ?? true,
+        leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages",
+        showProjectDashboard: showProjectDashboard ?? false,
+      });
+      console.log("hydrate() after set (no current project)", {
+        hydrated: get().hydrated,
+        projectIds: Object.keys(get().projects),
+        currentProjectId: get().currentProjectId,
+      });
+      return;
+    }
+    set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: leftPanelOpen ?? true, leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages", showProjectDashboard: showProjectDashboard ?? false });
+    console.log("hydrate() after set (with current project)", {
+      hydrated: get().hydrated,
+      projectIds: Object.keys(get().projects),
+      currentProjectId: get().currentProjectId,
+    });
     const p = projs[pid];
     const page = getCurrentPage(p)!;
     set({
       history: [{ pageId: page.id, sections: page.sections, globalCss: p.globalCss, globalJs: p.globalJs }],
       historyIndex: 0,
     });
+    console.log("hydrate() after history set", {
+      hydrated: get().hydrated,
+      projectIds: Object.keys(get().projects),
+      currentProjectId: get().currentProjectId,
+    });
   },
 
   persist: () => {
     if (typeof window === "undefined") return false;
     const { projects, currentProjectId } = get();
-    const payload = JSON.stringify({ projects, currentProjectId, leftPanelOpen: get().leftPanelOpen, leftPanelView: get().leftPanelView });
+    const payload = JSON.stringify({ projects, currentProjectId, leftPanelOpen: get().leftPanelOpen, leftPanelView: get().leftPanelView, showProjectDashboard: get().showProjectDashboard });
 
     if (isStorageAvailable(window.localStorage)) {
       try {

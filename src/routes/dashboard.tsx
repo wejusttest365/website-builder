@@ -4,6 +4,7 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { CenteredLoader } from "@/components/ui/CenteredLoader";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAuth } from "@/lib/auth";
+import { useBuilder } from "@/lib/builder/store";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardLayout,
@@ -12,14 +13,26 @@ export const Route = createFileRoute("/dashboard")({
 function DashboardLayout() {
   const { user, authReady } = useAuth();
   const navigate = useNavigate();
+  const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
+  const hydrated = useBuilder((s) => s.hydrated);
+
+  useEffect(() => {
+    // Ensure hydration happens so projects are loaded
+    if (!hydrated) {
+      useBuilder.getState().hydrate();
+    }
+  }, [hydrated]);
 
   useEffect(() => {
     if (!authReady) return;
 
     if (!user) {
       navigate({ to: "/" });
+      return;
     }
-  }, [authReady, user]);
+
+    setShowProjectDashboard(true);
+  }, [authReady, navigate, setShowProjectDashboard, user]);
 
   if (!authReady) {
     return (

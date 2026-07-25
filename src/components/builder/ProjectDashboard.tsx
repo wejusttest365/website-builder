@@ -16,6 +16,7 @@ import {
 import { deleteBuilderProject, saveBuilderProject } from "@/services/builderProject";
 import { useCloudProjects } from "@/lib/builder/useCloudProjects";
 import { ProjectCard } from "./ProjectCard";
+import { ClientOnly } from "./ClientOnly";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { EmptyProjectsState } from "./EmptyProjectsState";
 import { useNavigate } from "@tanstack/react-router";
@@ -322,7 +323,9 @@ const navigate = useNavigate();
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-sm text-slate-500">
-                        <span>Edited {formatDate(project.updatedAt)}</span>
+                        <ClientOnly>
+                          <span>Edited {formatDate(project.updatedAt)}</span>
+                        </ClientOnly>
                         <div className="flex items-center gap-1 text-slate-400">
                           <Users className="h-4 w-4" />
                           <span>3</span>

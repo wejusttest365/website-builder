@@ -20,7 +20,12 @@ function Index() {
 
   useEffect(() => {
     if (!initialRedirected.current && user) {
-      // ensure dashboard mode is enabled then redirect to /dashboard
+      const currentPath = typeof window !== "undefined" ? window.location.pathname : "/";
+      if (currentPath !== "/") {
+        initialRedirected.current = true;
+        return;
+      }
+
       setShowProjectDashboard(true);
       initialRedirected.current = true;
       navigate({ to: "/dashboard" as never });

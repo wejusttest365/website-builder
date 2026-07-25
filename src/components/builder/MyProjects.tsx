@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { useBuilder } from "@/lib/builder/store";
 import { useCloudProjects } from "@/lib/builder/useCloudProjects";
 import { useNavigate } from "@tanstack/react-router";
+import { ClientOnly } from "./ClientOnly";
 
 const newProject = useBuilder((s) => s.newProject);
 function formatUpdatedAt(value?: any) {
@@ -160,7 +161,9 @@ const filteredProjects = useMemo(() => {
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock3 className="h-4 w-4" />
-                  <span>{formatUpdatedAt(projectRecord.updatedAt)}</span>
+                  <ClientOnly>
+                    <span>{formatUpdatedAt(projectRecord.updatedAt)}</span>
+                  </ClientOnly>
                 </div>
               </div>
               <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">

@@ -288,6 +288,21 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         selectElement(elementKind === "section" ? null : { kind: elementKind as any, index: Number.isFinite(index) ? index : null, tag });
         setSelectedElementStyle(style);
       }
+      if (data.type === 'open-preview-link') {
+        const href = String(data.payload?.href || '');
+        if (!href) return;
+        try {
+          const isAbsolute = /^(https?:)?\/\//i.test(href);
+          const url = isAbsolute ? href : (window.location.origin + (href.startsWith('/') ? href : '/' + href));
+          window.open(url, '_blank', 'noopener,noreferrer');
+        } catch (_) {}
+      }
+      if (data.type === 'preview-form-submit') {
+        const action = String(data.payload?.action || '');
+        const isAbsolute = /^(https?:)?\/\//i.test(action);
+        const url = isAbsolute ? action : (window.location.origin + (action.startsWith('/') ? action : '/' + action));
+        try { window.open(url, '_blank', 'noopener,noreferrer'); } catch (_) {}
+      }
       if (data.type === "navigate-page") {
         const slug = String(data.payload?.slug ?? "");
         if (!slug || !project) return;

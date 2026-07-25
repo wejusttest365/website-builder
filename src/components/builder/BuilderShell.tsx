@@ -18,7 +18,6 @@ export function BuilderShell() {
   const leftPanelOpen = useBuilder((s) => s.leftPanelOpen);
   const leftPanelView = useBuilder((s) => s.leftPanelView);
   const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
-  const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
   const autosaveTimerRef = useRef<number | null>(null);
   const hasInitialProjectRef = useRef(false);
   const mounted = useMounted();
@@ -41,11 +40,8 @@ export function BuilderShell() {
       if (!leftPanelOpen) {
         setLeftPanelOpen(true);
       }
-      if (leftPanelView !== "widgets" && leftPanelView !== "templates") {
-        setLeftPanelView("widgets");
-      }
     }
-  }, [project, leftPanelOpen, leftPanelView, setLeftPanelOpen, setLeftPanelView]);
+  }, [project, leftPanelOpen, setLeftPanelOpen]);
 
   // Autosave with compact feedback
   useEffect(() => {

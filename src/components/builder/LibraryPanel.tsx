@@ -2,6 +2,7 @@ import { type FormEvent, type SVGProps, useMemo, useRef, useState, useEffect } f
 import { useNavigate } from "@tanstack/react-router";
 import { SECTION_LIBRARY, CATEGORIES, type SectionTemplate } from "@/lib/builder/sections";
 import { useMounted } from "@/hooks/use-mounted";
+import { ClientOnly } from "./ClientOnly";
 import { useBuilder, type Page } from "@/lib/builder/store";
 import { LayoutDashboard, Search, Plus, Copy, ChevronDown, ChevronRight, ChevronLeft, FileText, Layers, FolderOpen, LayoutGrid, Grid2x2, ImageIcon, SlidersHorizontal, Settings, LogOut, BookOpen, Menu, ChevronUp, UserCircle, Bell, Sparkles, X, Eye, EyeOff, Mail, Lock, User, Heart, Trash2, Server, Globe, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ function GoogleLogo(props: React.SVGProps<SVGSVGElement>) {
 }
 
 const MENU_ITEMS = [
+  { key: "dashboard" as const, label: "Dashboard", Icon: LayoutDashboard },
   { key: "pages" as const, label: "Pages", Icon: FileText },
   { key: "templates" as const, label: "Templates", Icon: Layers },
   { key: "widgets" as const, label: "Widgets", Icon: Grid2x2 },
@@ -73,6 +75,7 @@ export function LibraryPanel() {
   const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
   const setLeftPanelViewRaw = useBuilder((s) => s.setLeftPanelView);
   const showProjectDashboard = useBuilder((s) => s.showProjectDashboard);
+  const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
   const setLeftPanelView: (view: PanelViewKey) => void = (view) => {
     setLeftPanelViewRaw(view as any);
   };
@@ -134,12 +137,12 @@ useEffect(() => {
   };
 }, []);
 const routeActiveKey = (() => {
-  const path = currentPath || "/";
+  const path = (currentPath || "/").replace(/\/+$/, "") || "/";
 
-  if (path === "/dashboard" || path === "/dashboard/") return "dashboard";
+  const entries = Object.entries(dashboardPathMap) as [DashboardMenuKey, string][];
+  entries.sort(([, a], [, b]) => b.length - a.length);
 
-  for (const key of Object.keys(dashboardPathMap) as DashboardMenuKey[]) {
-    const route = dashboardPathMap[key];
+  for (const [key, route] of entries) {
     if (path === route || path.startsWith(route + "/")) {
       return key;
     }
@@ -270,12 +273,6 @@ const handleLogout = async () => {
     return () => window.removeEventListener("mousedown", handleOutsideClick);
   }, [accountOpen]);
 
-  // Ensure the left panel is open so the full sidebar is visible after this restore
-  useEffect(() => {
-    setLeftPanelOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const filteredSections = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return SECTION_LIBRARY;
@@ -347,20 +344,26 @@ const handleLogout = async () => {
                   key={key}
                   type="button"
                   onClick={() => {
-  if (showProjectDashboard) {
-    const destination = dashboardPathMap[key as DashboardMenuKey];
+                    if (showProjectDashboard) {
+                      const destination = dashboardPathMap[key as DashboardMenuKey];
 
-    if (destination) {
-      navigate({ to: destination as never });
-    }
+                      if (destination) {
+                        navigate({ to: destination as never });
+                      }
 
-    return;
-  }
+                      return;
+                    }
 
-  setLeftPanelView(key);
-  setOverlayView(key);
-  setLeftPanelOpen(true);
-}}
+                    if (key === "dashboard") {
+                      setShowProjectDashboard(true);
+                      navigate({ to: "/dashboard" as never });
+                      return;
+                    }
+
+                    setLeftPanelView(key);
+                    setOverlayView(key);
+                    setLeftPanelOpen(true);
+                  }}
                   className={`group flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-sm font-semibold transition ${
                     active ? "bg-violet-50 text-violet-900 " : "bg-white text-slate-700  hover:bg-slate-50"
                   }`}
@@ -474,32 +477,42 @@ const handleLogout = async () => {
                             {pages.map((pg) => (
                               <div
                                 key={pg.id}
-                                className={`group flex w-full items-center gap-2 rounded justify-between px-2.5 py-2 text-left text-sm font-semibold  transition ${pg.id === currentPageId ? "bg-violet-50 text-violet-900" : "text-foreground "}`}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (currentProjectId) {
-                                      navigate({ to: `/editor/${currentProjectId}?pageId=${pg.id}` as never } as any);
-                                    } else {
-                                      selectPage(pg.id);
+                                onClick={() => {
+                                  setShowProjectDashboard(false);
+                                  setLeftPanelView("pages");
+                                  selectPage(pg.id);
+
+                                  if (currentProjectId) {
+                                    const editorPath = `/editor/${currentProjectId}`;
+                                    if (typeof window !== "undefined") {
+                                      const url = new URL(window.location.href);
+                                      url.searchParams.set("pageId", pg.id);
+                                      if (window.location.pathname === editorPath) {
+                                        window.history.replaceState(window.history.state, "", url.toString());
+                                      } else {
+                                        navigate({ to: `${editorPath}?pageId=${pg.id}` as never } as any);
+                                      }
                                     }
-                                  }}
-                                  className="min-w-0 text-left"
-                                >
+                                  }
+                                }}
+                                className={`group flex w-full cursor-pointer items-center gap-2 rounded justify-between px-2.5 py-2 text-left text-sm font-semibold transition ${pg.id === currentPageId ? "bg-violet-50 text-violet-900" : "text-foreground "}`}
+                              >
+                                <div className="min-w-0">
                                   <div className="truncate font-medium text-black">{pg.name}</div>
                                   <div className="text-[10px] text-muted-foreground text-black">/{pg.slug}</div>
-                                </button>
+                                </div>
 
-                                <PageActionsMenu
-                                  page={pg}
-                                  pageCount={pages.length}
-                                  onRename={renamePage}
-                                  onSetSlug={setPageSlug}
-                                  onDuplicate={duplicatePage}
-                                  onDelete={deletePage}
-                                  onSeo={setSeoModalPageId}
-                                />
+                                <div onClick={(event) => event.stopPropagation()}>
+                                  <PageActionsMenu
+                                    page={pg}
+                                    pageCount={pages.length}
+                                    onRename={renamePage}
+                                    onSetSlug={setPageSlug}
+                                    onDuplicate={duplicatePage}
+                                    onDelete={deletePage}
+                                    onSeo={setSeoModalPageId}
+                                  />
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -957,7 +970,9 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate font-medium">{project.name}</div>
-                      <div className="text-[10px] text-muted-foreground">Updated {new Date(project.updatedAt).toLocaleDateString()}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Updated <ClientOnly>{new Date(project.updatedAt).toLocaleDateString()}</ClientOnly>
+                      </div>
                     </div>
                     <button
                       type="button"

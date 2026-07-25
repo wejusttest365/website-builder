@@ -4,8 +4,6 @@ import { useBuilder } from "@/lib/builder/store";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Page } from "@/lib/builder/store";
 import { PageActionsMenu } from "./PageActionsMenu";
-const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
-const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
 interface PagesPanelProps {
   pages: Page[];
   currentPageId: string | null;
@@ -31,6 +29,8 @@ export function PagesPanel({
 }: PagesPanelProps) {
   const navigate = useNavigate();
   const currentProjectId = useBuilder((s) => s.currentProjectId);
+  const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
+  const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
   return (
     <TooltipProvider delayDuration={300}>
       <section className="w-full space-y-2">

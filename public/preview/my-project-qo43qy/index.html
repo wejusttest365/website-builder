@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta property="og:title" content="My Project — Home" />
+<meta property="og:type" content="website" />
+<meta name="twitter:title" content="My Project — Home" />
+<title>My Project — Home</title>
+<link rel="stylesheet" href="./css/styles.css" />
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-W14JC88EV7"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);} 
+  gtag('js', new Date());
+  gtag('config', 'G-W14JC88EV7');
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div data-anim="fade-up" style="--wto-dur:700ms;--wto-delay:0ms"><nav data-wto-nav class="w-full bg-white border-b border-gray-200">
+  <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <a href="#" class="text-xl font-bold text-gray-900">Brand</a>
+    <ul data-wto-nav-menu class="hidden md:flex gap-8 text-sm text-gray-700">
+      <li><a href="index.html" class="hover:text-indigo-600">Home</a></li>
+      <li><a href="about-us.html" class="hover:text-indigo-600">About</a></li>
+      <li><a href="services.html" class="hover:text-indigo-600">Services</a></li>
+      <li><a href="contact.html" class="hover:text-indigo-600">Contact</a></li>
+    </ul>
+    <a href="#" class="hidden md:inline-block px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">Get Started</a>
+    <button data-wto-nav-btn aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  </div>
+</nav></div>
+<div data-anim="fade-up" style="--wto-dur:700ms;--wto-delay:0ms"><section class="w-full bg-black relative overflow-hidden">
+  <div class="relative w-full h-96 md:h-screen bg-gray-900 flex items-center justify-center group">
+    <div class="relative w-full h-full overflow-hidden">
+      <div class="w-full h-full flex carousel-track" data-carousel-track style="transition: transform 0.5s ease-in-out; transform: translateX(0%);">
+        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://picsum.photos/id/1018/1200/800" alt="Slide 1" class="w-full h-full object-cover" data-wto-idx="0" /><div class="absolute inset-0 pointer-events-none bg-black/20"></div></div>
+        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://picsum.photos/id/1015/1200/800" alt="Slide 2" class="w-full h-full object-cover" data-wto-idx="1" /><div class="absolute inset-0 pointer-events-none bg-black/20"></div></div>
+        <div class="w-full h-full flex-shrink-0 relative bg-gray-800 flex items-center justify-center"><img src="https://picsum.photos/id/1016/1200/800" alt="Slide 3" class="w-full h-full object-cover" data-wto-idx="2" /><div class="absolute inset-0 pointer-events-none bg-black/20"></div></div>
+      </div>
+    </div>
+    <button type="button" class="absolute top-4 right-4 z-20 rounded-full border border-white/50 bg-white/90 px-3 py-1 text-xs font-semibold text-slate-900 opacity-0 group-hover:opacity-100 transition-all hover:bg-white" data-carousel-autoplay-toggle>
+      Auto: On
+    </button>
+    <button type="button" class="absolute left-4 top-1/2 -translate-y-1/2 z-20 pointer-events-auto bg-white/30 hover:bg-white/50 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100" data-carousel-prev aria-label="Previous"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+    <button type="button" class="absolute right-4 top-1/2 -translate-y-1/2 z-20 pointer-events-auto bg-white/30 hover:bg-white/50 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100" data-carousel-next aria-label="Next"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19l7-7-7-7"/></svg></button>
+  </div>
+  <script>
+    (function() {
+      var script = document.currentScript || document.scripts[document.scripts.length - 1];
+      var section = script ? script.parentElement : null;
+      if (!section) return;
+      var track = section.querySelector('[data-carousel-track]');
+      var prevBtn = section.querySelector('[data-carousel-prev]');
+      var nextBtn = section.querySelector('[data-carousel-next]');
+      if (!track || !prevBtn || !nextBtn) return;
+      var slideCount = track.children.length;
+      var currentIndex = 0;
+      var autoMove = true;
+      var autoMoveInterval = 5000;
+      var autoMoveTimer = null;
+      var autoButton = section.querySelector('[data-carousel-autoplay-toggle]');
+      function setAutoplayButton() {
+        if (!autoButton) return;
+        autoButton.textContent = autoMove ? 'Auto: On' : 'Auto: Off';
+      }
+      function stopAutoMove() {
+        if (autoMoveTimer) {
+          clearInterval(autoMoveTimer);
+          autoMoveTimer = null;
+        }
+      }
+      function startAutoMove() {
+        stopAutoMove();
+        if (!autoMove) return;
+        autoMoveTimer = setInterval(function() {
+          currentIndex = (currentIndex + 1) % slideCount;
+          update();
+        }, autoMoveInterval);
+      }
+      function update() {
+        var percent = 100 * currentIndex;
+        track.style.transform = 'translateX(-' + percent + '%)';
+      }
+      prevBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = (currentIndex - 1 + slideCount) % slideCount;
+        update();
+        if (autoMove) startAutoMove();
+      });
+      nextBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        currentIndex = (currentIndex + 1) % slideCount;
+        update();
+        if (autoMove) startAutoMove();
+      });
+      if (autoButton) {
+        autoButton.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          autoMove = !autoMove;
+          setAutoplayButton();
+          if (autoMove) startAutoMove();
+          else stopAutoMove();
+        });
+      }
+      update();
+      setAutoplayButton();
+      startAutoMove();
+    })();
+  </script>
+</section></div>
+<script src="./js/main.js"></script>
+</body>
+</html>

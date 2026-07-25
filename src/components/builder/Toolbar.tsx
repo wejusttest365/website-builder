@@ -4,10 +4,13 @@ import { buildSiteExport } from "@/lib/builder/preview";
 import JSZip from "jszip";
 import { toast } from "sonner";
 import { Undo2, Redo2, Monitor, Tablet, Smartphone, Download, Save, Moon, Sun } from "lucide-react";
+import { nanoid } from "nanoid";
 
 export function Toolbar() {
   const mounted = useMounted();
   const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
+  const showProjectDashboard = useBuilder((s) => s.showProjectDashboard);
+  const showCanvasControls = Boolean(project) && !showProjectDashboard;
   const undo = useBuilder((s) => s.undo);
   const redo = useBuilder((s) => s.redo);
   const persist = useBuilder((s) => s.persist);
@@ -36,6 +39,54 @@ export function Toolbar() {
     a.download = `${project.name.replace(/\s+/g, "-").toLowerCase()}.zip`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function openPreview() {
+    if (!project || !mounted) return;
+    try {
+      const exportData = await buildSiteExport(project);
+      // ensure there is an index.html pointing to the current page
+      const currentPage = project.pages.find((p) => p.id === project.currentPageId) || project.pages[0];
+      if (currentPage) {
+        const pageFile = exportData.files.find((f) => f.path === `${currentPage.slug}.html`);
+        if (pageFile) {
+          exportData.files.push({ path: "index.html", content: pageFile.content, base64: pageFile.base64 });
+        }
+      }
+
+      const slugify = (s: string) =>
+        (s || "project")
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "site";
+
+      const shortId = nanoid(6).toLowerCase();
+      const slug = `${slugify(project.name)}-${shortId}`;
+
+      const resp = await fetch('/__wto/preview', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug, files: exportData.files }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) {
+        console.error('preview error', data);
+        toast.error('Preview generation failed — falling back to export');
+        await downloadZip();
+        return;
+      }
+
+      // Open preview in new tab — use current origin for local dev, fall back to provided url
+      const origin = window.location.origin;
+      const previewPath = data.url || `/preview/${slug}/index.html`;
+      const previewUrl = origin + previewPath;
+      window.open(previewUrl, '_blank', 'noopener,noreferrer');
+      toast.success('Preview opened', { duration: 2000, position: 'top-center' });
+    } catch (err) {
+      console.error(err);
+      toast.error('Preview failed');
+    }
   }
 
   return (
@@ -101,14 +152,23 @@ export function Toolbar() {
           {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
 
-        <div className="relative">
-          <button
-            className="h-8 px-3 rounded-full border border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2 text-[11px] font-medium"
-            onClick={downloadZip}
-          >
-            <Download className="w-3.5 h-3.5" /> Export ZIP
-          </button>
-        </div>
+        {showCanvasControls ? (
+          <div className="relative">
+            <button
+              className="h-8 px-3 mr-2 rounded-full border border-primary/80 bg-white/90 text-primary hover:bg-white/95 flex items-center gap-2 text-[11px] font-medium"
+              onClick={openPreview}
+              title="Open Preview"
+            >
+              <Monitor className="w-3.5 h-3.5" /> Preview
+            </button>
+            <button
+              className="h-8 px-3 rounded-full border border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2 text-[11px] font-medium"
+              onClick={downloadZip}
+            >
+              <Download className="w-3.5 h-3.5" /> Export ZIP
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

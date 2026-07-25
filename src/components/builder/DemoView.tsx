@@ -34,7 +34,10 @@ export function DemoView({ projectId }: { projectId: string }) {
     window.addEventListener("message", handleResponse);
 
     try {
-      const raw = localStorage.getItem("wto-builder-v2");
+      const raw =
+        localStorage.getItem("wto-builder-v2") ??
+        localStorage.getItem("wto-builder-v1") ??
+        localStorage.getItem("wto-builder-state");
       if (raw) {
         const data = JSON.parse(raw) as { projects: Record<string, Project> };
         const p = data.projects?.[projectId];

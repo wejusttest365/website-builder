@@ -650,6 +650,48 @@ export const RUNTIME_SCRIPT = `
     return true;
   }
 
+  // Prevent navigation in editor mode. Allow previewable links via data attributes.
+  document.addEventListener('click', function(e) {
+    try {
+      const target = e.target instanceof Element ? e.target : (e.target && e.target.parentElement) || null;
+      const a = target && target.closest ? target.closest('a') : null;
+      if (!a) return;
+      const href = a.getAttribute('href') || '';
+      // allow in-page anchors to scroll
+      if (href.startsWith('#')) {
+        if (scrollToHash(href, e)) return;
+        e.preventDefault();
+        return;
+      }
+      // explicit previewable links marked by data attributes
+      const allowPreview = a.getAttribute('data-allow-preview') === 'true' || a.getAttribute('data-wto-allow-preview') === 'true' || a.dataset?.allowPreview === 'true' || a.dataset?.wtoAllowPreview === 'true';
+      if (allowPreview && href) {
+        e.preventDefault();
+        try { parent.postMessage({ __wto: true, type: 'open-preview-link', payload: { href } }, '*'); } catch(_) {}
+        return;
+      }
+      // Block all other navigations inside editor
+      e.preventDefault();
+    } catch (err) {
+      try { parent.postMessage({ __wto: true, type: 'console', payload: { level: 'error', args: [String(err && err.stack ? err.stack : err)] } }, '*'); } catch (_) {}
+    }
+  }, true);
+
+  // Block form submissions in editor and forward for preview if explicitly allowed
+  document.addEventListener('submit', function(e) {
+    try {
+      const form = e.target instanceof HTMLFormElement ? e.target : (e.target && e.target.closest && e.target.closest('form')) || null;
+      if (!form) return;
+      const allow = form.getAttribute('data-allow-preview') === 'true' || form.dataset?.allowPreview === 'true';
+      e.preventDefault();
+      if (allow) {
+        try { parent.postMessage({ __wto: true, type: 'preview-form-submit', payload: { action: form.getAttribute('action') || '', method: form.method || 'get' } }, '*'); } catch(_) {}
+      }
+    } catch (err) {
+      try { parent.postMessage({ __wto: true, type: 'console', payload: { level: 'error', args: [String(err && err.stack ? err.stack : err)] } }, '*'); } catch (_) {}
+    }
+  }, true);
+
   indexAll();
   document.querySelectorAll('[data-wto-section]').forEach(section => indexElementKinds(section));
 
@@ -886,31 +928,31 @@ export const RUNTIME_SCRIPT = `
       if (!target) return;
       if (target.closest('#__wto_tb')) return;
       const nav = target.closest('[data-wto-nav]');
-if (nav) {
-  const anchor = target.closest('a');
+      if (nav) {
+        const anchor = target.closest('a');
 
-  if (anchor) {
-    const href = anchor.getAttribute('href') || "";
-    const normalized = href
-      .replace(/^[./]+/, "")
-      .replace(/\.html(?:[?#].*)?$/, "");
+        if (anchor) {
+          const href = anchor.getAttribute('href') || "";
+          const normalized = href
+            .replace(/^[./]+/, "")
+            .replace(/\.html(?:[?#].*)?$/, "");
 
-    if (!href || href === "#") {
-      e.preventDefault();
-      return;
-    }
+          if (!href || href === "#") {
+            // placeholder nav/menu links should not block section selection.
+            e.preventDefault();
+          }
 
-    if (scrollToHash(href, e)) {
-      return;
-    }
+          if (href && href !== "#" && scrollToHash(href, e)) {
+            return;
+          }
 
-    if (/^(?!https?:|mailto:).+\.html(?:[?#].*)?$/.test(href)) {
-      e.preventDefault();
-      send("navigate-page", { slug: normalized });
-      return;
-    }
-  }
-}
+          if (/^(?!https?:|mailto:).+\.html(?:[?#].*)?$/.test(href)) {
+            e.preventDefault();
+            send("navigate-page", { slug: normalized });
+            return;
+          }
+        }
+      }
       if (target.closest('[data-carousel-prev], [data-carousel-next], [data-carousel-dot], [data-carousel-items-prev], [data-carousel-items-next], [data-carousel-indicator]')) return;
       const section = target.closest('[data-wto-section]');
       if (!section) return;
@@ -1027,7 +1069,12 @@ if (nav) {
   
       e.stopPropagation();
       const href = a.getAttribute('href') || '';
-      if (scrollToHash(href, e)) {
+      if (href.startsWith('#')) {
+        e.preventDefault();
+        if (scrollToHash(href, e)) {
+          closeMenu();
+          return;
+        }
         closeMenu();
         return;
       }
@@ -1156,7 +1203,24 @@ export const EXPORT_RUNTIME = `
       menu.style.display='none';
     };
     btn.addEventListener('click',function(e){e.stopPropagation();toggleMenu();});
-    menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){e.stopPropagation();var href=a.getAttribute('href')||'';if(scrollToHash(href,e)){closeMenu();return;}closeMenu();});});
+    menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){
+      e.stopPropagation();
+      var href=a.getAttribute('href')||'';
+      if (href.startsWith('#')) {
+        e.preventDefault();
+        if (scrollToHash(href,e)) {
+          closeMenu();
+          return;
+        }
+        closeMenu();
+        return;
+      }
+      if (scrollToHash(href,e)) {
+        closeMenu();
+        return;
+      }
+      closeMenu();
+    });});
     document.addEventListener('click',function(e){if(!nav.contains(e.target)&&menu.classList.contains('wto-nav-open')){closeMenu();}});
   });
   document.addEventListener('click',function(e){
@@ -1165,7 +1229,10 @@ export const EXPORT_RUNTIME = `
       while (target && target.nodeName !== 'A') { target = target.parentElement; }
       if (!target || target.nodeName !== 'A') return;
       var href = target.getAttribute('href') || '';
-      if (!href || href === '#' || href.startsWith('http') || href.startsWith('mailto:')) return;
+      if (!href || href === '#' || href.startsWith('http') || href.startsWith('mailto:')) {
+        if (href === '#') e.preventDefault();
+        return;
+      }
       if (href.startsWith('#')) {
         scrollToHash(href,e);
       }
