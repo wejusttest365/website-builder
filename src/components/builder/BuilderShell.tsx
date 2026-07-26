@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { useMounted } from "@/hooks/use-mounted";
-import { toast } from "sonner";
 import { useBuilder } from "@/lib/builder/store";
 import { CenteredLoader } from "@/components/ui/CenteredLoader";
 import { Canvas } from "./Canvas";
@@ -13,12 +12,15 @@ export function BuilderShell() {
   const dark = useBuilder((s) => s.dark);
   const undo = useBuilder((s) => s.undo);
   const redo = useBuilder((s) => s.redo);
-  const persist = useBuilder((s) => s.persist);
+  const persistWithStatus = useBuilder((s) => s.persistWithStatus);
+  const saveStatus = useBuilder((s) => s.saveStatus);
+  const setSaveStatus = useBuilder((s) => s.setSaveStatus);
   const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
   const leftPanelOpen = useBuilder((s) => s.leftPanelOpen);
   const leftPanelView = useBuilder((s) => s.leftPanelView);
   const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
   const autosaveTimerRef = useRef<number | null>(null);
+  const saveStatusResetTimerRef = useRef<number | null>(null);
   const hasInitialProjectRef = useRef(false);
   const mounted = useMounted();
 
@@ -54,24 +56,15 @@ export function BuilderShell() {
 
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
     }
 
     autosaveTimerRef.current = window.setTimeout(() => {
-      const ok = persist();
-      if (ok) {
-        toast.success("Saved", {
-          id: "autosave",
-          duration: 700,
-          position: "bottom-right",
-        });
-      } else {
-        toast.error("Save failed", {
-          id: "autosave",
-          duration: 1400,
-          position: "bottom-right",
-        });
+      const ok = persistWithStatus();
+      if (!ok) {
+        console.error("Autosave failed");
       }
-    }, 400);
+    }, 2500);
 
     return () => {
       if (autosaveTimerRef.current) {
@@ -79,16 +72,37 @@ export function BuilderShell() {
         autosaveTimerRef.current = null;
       }
     };
-  }, [project, persist, hydrated]);
+  }, [project, persistWithStatus, hydrated]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onBeforeUnload = () => {
-      persist();
+      persistWithStatus();
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [hydrated, persist]);
+  }, [hydrated, persistWithStatus]);
+
+  useEffect(() => {
+    if (saveStatusResetTimerRef.current) {
+      window.clearTimeout(saveStatusResetTimerRef.current);
+      saveStatusResetTimerRef.current = null;
+    }
+
+    if (saveStatus !== "saved") return;
+
+    saveStatusResetTimerRef.current = window.setTimeout(() => {
+      setSaveStatus("idle");
+      saveStatusResetTimerRef.current = null;
+    }, 2200);
+
+    return () => {
+      if (saveStatusResetTimerRef.current) {
+        window.clearTimeout(saveStatusResetTimerRef.current);
+        saveStatusResetTimerRef.current = null;
+      }
+    };
+  }, [saveStatus, setSaveStatus]);
 
   // Keyboard shortcuts
   useEffect(() => {

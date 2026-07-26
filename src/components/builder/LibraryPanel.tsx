@@ -317,112 +317,134 @@ const handleLogout = async () => {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="relative h-full min-h-0 flex flex-col bg-background/50">
-        <div className="border-b border-border/70 px-2 py-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Workspace</p>
-              <div className="text-sm font-semibold text-foreground">Sidebar Controls</div>
+        {leftPanelOpen ? (
+          <div className="border-b border-border/70 px-2 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Workspace</p>
+                <div className="text-sm font-semibold text-foreground">Sidebar Controls</div>
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center rounded-md border border-border/70 bg-background/90 px-3 text-xs font-medium text-foreground transition hover:bg-muted"
+                onClick={() => setLeftPanelOpen(!leftPanelOpen)}
+              >
+                <Menu className="h-4 w-4" />
+                <span className="ml-2 hidden sm:inline">Collapse</span>
+              </button>
             </div>
+          </div>
+        ) : (
+          <div className="flex h-24 flex-col items-center justify-center gap-3 border-b border-border/70 px-2 py-3">
             <button
               type="button"
-              className="inline-flex h-9 items-center rounded-full border border-border/70 bg-background/90 px-3 text-xs font-medium text-foreground transition hover:bg-muted "
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-background/90 text-foreground transition hover:bg-muted"
               onClick={() => setLeftPanelOpen(!leftPanelOpen)}
+              aria-label="Expand sidebar"
             >
-              {leftPanelOpen ? "Collapse" : "Expand"}
+              <Menu className="h-4 w-4" />
             </button>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-sm">
+              W
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="px-2 py-2">
            
 
-          <div className="space-y-2">
+          <div className={`${leftPanelOpen ? "space-y-2" : "space-y-1"}`}>
             {primaryMenuItems.map(({ key, label, Icon }) => {
-              const active = leftPanelOpen && activePanelKey === key;
+              const active = activePanelKey === key;
               return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => {
-                    if (showProjectDashboard) {
-                      const destination = dashboardPathMap[key as DashboardMenuKey];
+                <Tooltip key={key}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (showProjectDashboard) {
+                          const destination = dashboardPathMap[key as DashboardMenuKey];
+                          if (destination) {
+                            navigate({ to: destination as never });
+                          }
+                          return;
+                        }
 
-                      if (destination) {
-                        navigate({ to: destination as never });
-                      }
+                        if (key === "dashboard") {
+                          setShowProjectDashboard(true);
+                          navigate({ to: "/dashboard" as never });
+                          return;
+                        }
 
-                      return;
-                    }
-
-                    if (key === "dashboard") {
-                      setShowProjectDashboard(true);
-                      navigate({ to: "/dashboard" as never });
-                      return;
-                    }
-
-                    setLeftPanelView(key);
-                    setOverlayView(key);
-                    setLeftPanelOpen(true);
-                  }}
-                  className={`group flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-sm font-semibold transition ${
-                    active ? "bg-violet-50 text-violet-900 " : "bg-white text-slate-700  hover:bg-slate-50"
-                  }`}
-                >
-                  <span className={`inline-flex h-9 w-9 min-w-[2.25rem] items-center justify-center rounded-xl ${
-                    active ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-600"
-                  }`}>
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="truncate">{label}</span>
-                </button>
+                        setLeftPanelView(key);
+                        setOverlayView(key);
+                      }}
+                      className={`group flex w-full ${leftPanelOpen ? "items-center gap-2 px-2.5 py-2 text-left" : "justify-center px-0 py-2"} rounded-md text-sm font-semibold transition ${
+                        active ? "bg-violet-50 text-violet-900" : "bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${
+                        active ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-600"
+                      }`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      {leftPanelOpen ? <span className="truncate">{label}</span> : null}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side={leftPanelOpen ? "bottom" : "right"}>{label}</TooltipContent>
+                </Tooltip>
               );
             })}
           </div>
 
           {toolMenuItems.length > 0 ? (
             <>
-              <div className="mt-5 mb-2 px-3 text-[10px] uppercase tracking-[0.24em] text-slate-400">Tools</div>
-              <div className="space-y-2">
+              {leftPanelOpen ? (
+                <div className="mt-5 mb-2 px-3 text-[10px] uppercase tracking-[0.24em] text-slate-400">Tools</div>
+              ) : null}
+              <div className={`${leftPanelOpen ? "space-y-2" : "space-y-1"}`}>
                 {toolMenuItems.map(({ key, label, Icon }) => {
-                  const active = leftPanelOpen && activePanelKey === key;
-                  const keyString = key as string;
-                const badge = undefined;
+                  const active = activePanelKey === key;
+                  const badge = undefined;
                   return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => {
-                        setLeftPanelView(key);
-                        if (showProjectDashboard) {
-                          const destination = dashboardPathMap[key as DashboardMenuKey];
-                          if (destination) {
-                            navigate({ to: destination as never });
-                          }
-                        } else {
-                          setOverlayView(key);
-                        }
-                        setLeftPanelOpen(true);
-                      }}
-                      className={`group flex w-full items-center justify-between gap-2 rounded px-2.5 py-2 text-left text-sm font-semibold transition ${
-                        active ? "bg-violet-50 text-violet-900 " : "bg-white text-slate-700   hover:bg-slate-50"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className={`inline-flex h-9 w-9 min-w-[2.25rem] items-center justify-center rounded-xl ${
-                          active ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-600"
-                        }`}>
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <span className="truncate">{label}</span>
-                      </span>
-                      {badge ? (
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                          badge === "Beta" ? "bg-slate-100 text-slate-700" : "bg-violet-100 text-violet-700"
-                        }`}>
-                          {badge}
-                        </span>
-                      ) : null}
-                    </button>
+                    <Tooltip key={key}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLeftPanelView(key);
+                            if (showProjectDashboard) {
+                              const destination = dashboardPathMap[key as DashboardMenuKey];
+                              if (destination) {
+                                navigate({ to: destination as never });
+                              }
+                            } else {
+                              setOverlayView(key);
+                            }
+                          }}
+                          className={`group flex w-full ${leftPanelOpen ? "items-center justify-between gap-2 px-2.5 py-2 text-left" : "justify-center px-0 py-2"} rounded-md text-sm font-semibold transition ${
+                            active ? "bg-violet-50 text-violet-900" : "bg-white text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span className={`flex ${leftPanelOpen ? "items-center gap-2" : "items-center justify-center"}`}>
+                            <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${
+                              active ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-600"
+                            }`}>
+                              <Icon className="h-4 w-4" />
+                            </span>
+                            {leftPanelOpen ? <span className="truncate">{label}</span> : null}
+                          </span>
+                          {leftPanelOpen && badge ? (
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              badge === "Beta" ? "bg-slate-100 text-slate-700" : "bg-violet-100 text-violet-700"
+                            }`}>
+                              {badge}
+                            </span>
+                          ) : null}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side={leftPanelOpen ? "bottom" : "right"}>{label}</TooltipContent>
+                    </Tooltip>
                   );
                 })}
               </div>

@@ -135,6 +135,8 @@ interface BuilderState {
   | "trash"
   
   showProjectDashboard: boolean;
+  saveStatus: "idle" | "saving" | "saved" | "failed";
+  saveErrorMessage: string | null;
 
   setLeftPanelOpen: (v: boolean) => void;
   toggleLeftPanel: () => void;
@@ -151,6 +153,9 @@ interface BuilderState {
    
   ) => void;
   setShowProjectDashboard: (show: boolean) => void;
+  setSaveStatus: (status: "idle" | "saving" | "saved" | "failed") => void;
+  setSaveErrorMessage: (message: string | null) => void;
+  persistWithStatus: () => boolean;
   setSelectedElementStyle: (style: Record<string, string> | null) => void;
 
   hydrate: () => void;
@@ -418,6 +423,8 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   historyIndex: -1,
   hydrated: false,
   showProjectDashboard: false,
+  saveStatus: "idle",
+  saveErrorMessage: null,
 
   setShowProjectDashboard: (show) => {
     set({ showProjectDashboard: show });
@@ -508,6 +515,19 @@ export const useBuilder = create<BuilderState>((set, get) => ({
 
     console.error("Persist failed for all available storage backends.");
     return false;
+  },
+
+  setSaveStatus: (status) => set({ saveStatus: status }),
+  setSaveErrorMessage: (message) => set({ saveErrorMessage: message }),
+  persistWithStatus: () => {
+    set({ saveStatus: "saving", saveErrorMessage: null });
+    const ok = get().persist();
+    if (ok) {
+      set({ saveStatus: "saved", saveErrorMessage: null });
+    } else {
+      set({ saveStatus: "failed", saveErrorMessage: "Could not save project locally." });
+    }
+    return ok;
   },
 
   leftPanelOpen: true,

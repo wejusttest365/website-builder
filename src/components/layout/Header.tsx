@@ -11,7 +11,6 @@ import {
   Download,
   LogOut,
   Monitor,
-  Save,
   Settings,
   Smartphone,
   Tablet,
@@ -19,8 +18,7 @@ import {
   User,
   Redo2,
 } from "lucide-react";
-import { createProject, type ProjectMetadata } from "@/services/project";
-import { saveBuilderProject } from "@/services/builderProject";
+import { SaveStatus } from "@/components/builder/SaveStatus";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -55,7 +53,10 @@ export function Header() {
   const device = useBuilder((s) => s.device);
   const undo = useBuilder((s) => s.undo);
   const redo = useBuilder((s) => s.redo);
-  const persist = useBuilder((s) => s.persist);
+  const toggleLeftPanel = useBuilder((s) => s.toggleLeftPanel);
+  const persistWithStatus = useBuilder((s) => s.persistWithStatus);
+  const saveStatus = useBuilder((s) => s.saveStatus);
+  const saveErrorMessage = useBuilder((s) => s.saveErrorMessage);
   const setDevice = useBuilder((s) => s.setDevice);
   const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
 
@@ -71,39 +72,19 @@ export function Header() {
     setAuthDialogOpen(true);
   };
 
-  const mapBuilderProjectToDashboardMetadata = (project: BuilderProject): ProjectMetadata => {
-    return {
-      id: project.id,
-      name: project.name,
-      templateId: project.selectedTemplateId ?? null,
-      thumbnail: project.thumbnail ?? "",
-      description: project.description,
-      favorite: false,
-      status: "draft",
-      createdAt: project.createdAt,
-      updatedAt: project.updatedAt,
-      pages: project.pages.map((page: { slug: string }) => page.slug),
-      isPublic: false,
-    } as ProjectMetadata;
-  };
-
-  async function handleCloudSave() {
-    if (!project) {
-      toast.error("No project found");
-      return;
-    }
-
-    try {
-      persist();
-      await saveBuilderProject(project);
-      await createProject(mapBuilderProjectToDashboardMetadata(project));
-
-      toast.success("Project saved to cloud!");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to save project");
-    }
-  }
+  const mapBuilderProjectToDashboardMetadata = (project: BuilderProject) => ({
+    id: project.id,
+    name: project.name,
+    templateId: project.selectedTemplateId ?? null,
+    thumbnail: project.thumbnail ?? "",
+    description: project.description,
+    favorite: false,
+    status: "draft",
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    pages: project.pages.map((page: { slug: string }) => page.slug),
+    isPublic: false,
+  });
 
   async function downloadZip() {
     if (!project || !mounted) return;
@@ -135,12 +116,17 @@ export function Header() {
 
   async function openPreview() {
     if (!project || !mounted) return;
+    console.info('[Preview] button clicked', { projectName: project.name, currentPageId: project.currentPageId });
     try {
       const exportData = await buildSiteExport(project);
+      console.info('[Preview] buildSiteExport completed', { projectName: project.name, fileCount: exportData.files.length });
       const currentPage = project.pages.find((p) => p.id === project.currentPageId) || project.pages[0];
       if (currentPage) {
         const pageFile = exportData.files.find((f) => f.path === `${currentPage.slug}.html`);
-        if (pageFile) exportData.files.push({ path: 'index.html', content: pageFile.content, base64: pageFile.base64 });
+        if (pageFile) {
+          exportData.files.push({ path: 'index.html', content: pageFile.content, base64: pageFile.base64 });
+          console.info('[Preview] added index.html alias for current page', { pageSlug: currentPage.slug });
+        }
       }
       const slugify = (s: string) =>
         (s || 'project')
@@ -150,25 +136,38 @@ export function Header() {
           .replace(/^-+|-+$/g, '') || 'site';
       const shortId = nanoid(6).toLowerCase();
       const slug = `${slugify(project.name)}-${shortId}`;
+      console.info('[Preview] generated slug', { slug });
+      const payload = { slug, files: exportData.files };
+      console.info('[Preview] sending preview request', { endpoint: '/__wto/preview', slug, fileCount: exportData.files.length });
       const resp = await fetch('/__wto/preview', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slug, files: exportData.files }),
+        body: JSON.stringify(payload),
       });
-      const data = await resp.json();
+      const text = await resp.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (parseError) {
+        console.error('[Preview] response JSON parse failed', { status: resp.status, statusText: resp.statusText, text, parseError });
+        throw new Error(`Preview response was not valid JSON: ${parseError?.message || String(parseError)}`);
+      }
+      console.info('[Preview] preview request completed', { status: resp.status, ok: resp.ok, data });
       if (!resp.ok || !data?.ok) {
-        toast.error('Preview generation failed');
-        console.error('preview error', data);
+        const errorMessage = data?.error || data?.message || resp.statusText || 'unknown error';
+        console.error('[Preview] preview failed response', { status: resp.status, errorMessage, data });
+        toast.error(`Preview generation failed: ${errorMessage}`);
         return;
       }
       const origin = window.location.origin;
       const previewPath = data.url || `/preview/${slug}/index.html`;
       const previewUrl = origin + previewPath;
+      console.info('[Preview] opening preview URL', { previewUrl });
       window.open(previewUrl, '_blank', 'noopener,noreferrer');
       toast.success('Preview opened', { duration: 2000, position: 'top-center' });
     } catch (err) {
-      console.error(err);
-      toast.error('Preview failed');
+      console.error('[Preview] final exception', err);
+      toast.error(`Preview failed: ${err?.message || String(err)}`);
     }
   }
 
@@ -210,7 +209,7 @@ export function Header() {
           type="button"
           onClick={() => {
             setShowProjectDashboard(true);
-            navigate({ to: '/' });
+            navigate({ to: "/" });
           }}
           className="flex items-center gap-3 text-slate-900 hover:text-slate-900"
         >
@@ -233,7 +232,7 @@ export function Header() {
 
             <button
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
               title="Undo"
               onClick={undo}
             >
@@ -242,7 +241,7 @@ export function Header() {
 
             <button
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
               title="Redo"
               onClick={redo}
             >
@@ -251,11 +250,11 @@ export function Header() {
 
             <button
               type="button"
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${
+              className={`inline-flex h-10 items-center justify-center rounded-md border transition ${
                 device === "desktop"
                   ? "border-slate-900 bg-slate-900 text-white"
                   : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-              }`}
+              } px-3`}
               onClick={() => setDevice("desktop")}
             >
               <Monitor className="w-4 h-4" />
@@ -263,11 +262,11 @@ export function Header() {
 
             <button
               type="button"
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${
+              className={`inline-flex h-10 items-center justify-center rounded-md border transition ${
                 device === "tablet"
                   ? "border-slate-900 bg-slate-900 text-white"
                   : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-              }`}
+              } px-3`}
               onClick={() => setDevice("tablet")}
             >
               <Tablet className="w-4 h-4" />
@@ -275,25 +274,19 @@ export function Header() {
 
             <button
               type="button"
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${
+              className={`inline-flex h-10 items-center justify-center rounded-md border transition ${
                 device === "mobile"
                   ? "border-slate-900 bg-slate-900 text-white"
                   : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-              }`}
+              } px-3`}
               onClick={() => setDevice("mobile")}
             >
               <Smartphone className="w-4 h-4" />
             </button>
 
-            <button
-              type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-              title="Save"
-              onClick={handleCloudSave}
-            >
-              <Save className="w-4 h-4" />
-            </button>
+            <div className="h-6 w-px bg-slate-200/70" />
 
+            <SaveStatus status={saveStatus} errorMessage={saveErrorMessage ?? undefined} onRetry={persistWithStatus} />
           </div>
         ) : null}
 
@@ -303,7 +296,7 @@ export function Header() {
             <>
               <button
                 type="button"
-                className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50"
                 onClick={openPreview}
               >
                 <Monitor className="w-4 h-4" />
@@ -312,7 +305,7 @@ export function Header() {
 
               <button
                 type="button"
-                className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-violet-600 px-3 text-sm font-medium text-white shadow-sm transition hover:bg-violet-700"
                 onClick={downloadZip}
               >
                 <Download className="w-4 h-4" />
@@ -327,7 +320,7 @@ export function Header() {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                    className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
                     <Avatar className="h-9 w-9">
                       {user.photoURL ? (
@@ -378,7 +371,7 @@ export function Header() {
               <div className="hidden items-center gap-2 md:flex">
                 <button
                   type="button"
-                  className="inline-flex h-10 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
                   onClick={() => {
                     setAuthMode("sign-in");
                     setAuthDialogOpen(true);
@@ -388,7 +381,7 @@ export function Header() {
                 </button>
                 <button
                   type="button"
-                  className="inline-flex h-10 items-center justify-center rounded-full bg-violet-950 px-4 text-sm font-semibold text-white transition hover:bg-violet-900"
+                  className="inline-flex h-10 items-center justify-center rounded-md bg-violet-950 px-4 text-sm font-semibold text-white transition hover:bg-violet-900"
                   onClick={() => {
                     setAuthMode("sign-up");
                     setAuthDialogOpen(true);

@@ -2,7 +2,7 @@ import { useMounted } from "@/hooks/use-mounted";
 import { useBuilder } from "@/lib/builder/store";
 import { buildSiteExport } from "@/lib/builder/preview";
 import JSZip from "jszip";
-import { toast } from "sonner";
+import { SaveStatus } from "./SaveStatus";
 import { Undo2, Redo2, Monitor, Tablet, Smartphone, Download, Save, Moon, Sun } from "lucide-react";
 import { nanoid } from "nanoid";
 
@@ -13,7 +13,9 @@ export function Toolbar() {
   const showCanvasControls = Boolean(project) && !showProjectDashboard;
   const undo = useBuilder((s) => s.undo);
   const redo = useBuilder((s) => s.redo);
-  const persist = useBuilder((s) => s.persist);
+  const persistWithStatus = useBuilder((s) => s.persistWithStatus);
+  const saveStatus = useBuilder((s) => s.saveStatus);
+  const saveErrorMessage = useBuilder((s) => s.saveErrorMessage);
   const setDevice = useBuilder((s) => s.setDevice);
   const device = useBuilder((s) => s.device);
   const toggleDark = useBuilder((s) => s.toggleDark);
@@ -43,49 +45,66 @@ export function Toolbar() {
 
   async function openPreview() {
     if (!project || !mounted) return;
+    console.info('[Preview] button clicked', { projectName: project.name, currentPageId: project.currentPageId });
     try {
       const exportData = await buildSiteExport(project);
-      // ensure there is an index.html pointing to the current page
+      console.info('[Preview] buildSiteExport completed', { projectName: project.name, fileCount: exportData.files.length });
+
       const currentPage = project.pages.find((p) => p.id === project.currentPageId) || project.pages[0];
       if (currentPage) {
         const pageFile = exportData.files.find((f) => f.path === `${currentPage.slug}.html`);
         if (pageFile) {
-          exportData.files.push({ path: "index.html", content: pageFile.content, base64: pageFile.base64 });
+          exportData.files.push({ path: 'index.html', content: pageFile.content, base64: pageFile.base64 });
+          console.info('[Preview] added index.html alias for current page', { pageSlug: currentPage.slug });
         }
       }
 
       const slugify = (s: string) =>
-        (s || "project")
+        (s || 'project')
           .toLowerCase()
           .trim()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "") || "site";
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'site';
 
       const shortId = nanoid(6).toLowerCase();
       const slug = `${slugify(project.name)}-${shortId}`;
+      console.info('[Preview] generated slug', { slug });
 
+      const payload = { slug, files: exportData.files };
+      console.info('[Preview] sending preview request', { endpoint: '/__wto/preview', slug, fileCount: exportData.files.length });
       const resp = await fetch('/__wto/preview', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slug, files: exportData.files }),
+        body: JSON.stringify(payload),
       });
-      const data = await resp.json();
+
+      const text = await resp.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (parseError) {
+        console.error('[Preview] response JSON parse failed', { status: resp.status, statusText: resp.statusText, text, parseError });
+        throw new Error(`Preview response was not valid JSON: ${parseError?.message || String(parseError)}`);
+      }
+
+      console.info('[Preview] preview request completed', { status: resp.status, ok: resp.ok, data });
       if (!resp.ok || !data?.ok) {
-        console.error('preview error', data);
-        toast.error('Preview generation failed — falling back to export');
+        const errorMessage = data?.error || data?.message || resp.statusText || 'unknown error';
+        console.error('[Preview] preview failed response', { status: resp.status, errorMessage, data });
+        toast.error(`Preview generation failed: ${errorMessage}`);
         await downloadZip();
         return;
       }
 
-      // Open preview in new tab — use current origin for local dev, fall back to provided url
       const origin = window.location.origin;
       const previewPath = data.url || `/preview/${slug}/index.html`;
       const previewUrl = origin + previewPath;
+      console.info('[Preview] opening preview URL', { previewUrl });
       window.open(previewUrl, '_blank', 'noopener,noreferrer');
       toast.success('Preview opened', { duration: 2000, position: 'top-center' });
     } catch (err) {
-      console.error(err);
-      toast.error('Preview failed');
+      console.error('[Preview] final exception', err);
+      toast.error(`Preview failed: ${err?.message || String(err)}`);
     }
   }
 
@@ -113,20 +132,23 @@ export function Toolbar() {
           <Redo2 className="w-4 h-4" />
         </button>
 
-        <button
-          className="h-8 px-3 rounded-full border border-border/70 bg-background/80 hover:bg-accent/70 text-[11px] font-medium transition"
-          onClick={() => {
-            if (!mounted) return;
-            const ok = persist();
-            if (ok) toast.success("Saved", { duration: 1000, position: "top-center", className: "text-sm" });
-            else toast.error("Save failed", { duration: 2200, position: "top-center" });
-          }}
-        >
+        <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[11px] font-medium text-slate-700 transition">
           <Save className="w-4 h-4" />
-        </button>
+          <button
+            className="text-left"
+            onClick={() => {
+              if (!mounted) return;
+              persistWithStatus();
+            }}
+            type="button"
+          >
+            Save now
+          </button>
+        </div>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <SaveStatus status={saveStatus} errorMessage={saveErrorMessage ?? undefined} onRetry={persistWithStatus} />
         <div className="inline-flex items-center gap-1 rounded-lg bg-muted p-0.5">
           {[
             { d: "desktop", Icon: Monitor },
