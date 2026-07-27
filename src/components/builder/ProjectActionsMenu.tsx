@@ -19,14 +19,16 @@ import type { Project } from "@/lib/builder/store";
 
 interface ProjectActionsMenuProps {
   project: Project;
-  onRename: (projectId: string, name: string) => Promise<void>;
-  onDuplicate: (projectId: string) => Promise<void>;
-  onDelete: (projectId: string) => Promise<void>;
-  onPublish: (projectId: string) => Promise<void>;
-  onExport: (project: Project) => Promise<void>;
+  onRename?: (projectId: string, name: string) => Promise<void>;
+  onDuplicate?: (projectId: string) => Promise<void>;
+  onDelete?: (projectId: string) => Promise<void>;
+  onPublish?: (projectId: string) => Promise<void>;
+  onExport?: (project: Project) => Promise<void>;
+  onOpen?: (projectId: string) => void;
+  onPreview?: (projectId: string) => Promise<void> | void;
 }
 
-export function ProjectActionsMenu({ project, onRename, onDuplicate, onDelete, onPublish, onExport }: ProjectActionsMenuProps) {
+export function ProjectActionsMenu({ project, onRename, onDuplicate, onDelete, onPublish, onExport, onOpen, onPreview }: ProjectActionsMenuProps) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [name, setName] = useState(project.name);
@@ -61,32 +63,64 @@ export function ProjectActionsMenu({ project, onRename, onDuplicate, onDelete, o
         </DropdownMenuTrigger>
 
         <DropdownMenuContent sideOffset={8} align="end" className="w-[14rem]">
-          <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
-            <Edit2 className="h-4 w-4" />
-            Rename Project
-          </DropdownMenuItem>
+          {onOpen ? (
+            <DropdownMenuItem
+              onSelect={() => {
+                onOpen(project.id);
+              }}
+            >
+              <Edit2 className="h-4 w-4" />
+              Edit template
+            </DropdownMenuItem>
+          ) : null}
 
-          <DropdownMenuItem onSelect={() => onDuplicate(project.id)}>
-            <Copy className="h-4 w-4" />
-            Duplicate Project
-          </DropdownMenuItem>
+          {onPreview ? (
+            <DropdownMenuItem
+              onSelect={async () => {
+                await onPreview(project.id);
+              }}
+            >
+              <Download className="h-4 w-4" />
+              Preview
+            </DropdownMenuItem>
+          ) : null}
 
-          <DropdownMenuItem onSelect={() => setDeleteOpen(true)}>
-            <Trash2 className="h-4 w-4" />
-            Delete Project
-          </DropdownMenuItem>
+          {onRename ? (
+            <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+              <Edit2 className="h-4 w-4" />
+              Rename Project
+            </DropdownMenuItem>
+          ) : null}
 
-          <DropdownMenuSeparator />
+          {onDuplicate ? (
+            <DropdownMenuItem onSelect={() => onDuplicate(project.id)}>
+              <Copy className="h-4 w-4" />
+              Duplicate Project
+            </DropdownMenuItem>
+          ) : null}
 
-          <DropdownMenuItem onSelect={() => onPublish(project.id)}>
-            <Upload className="h-4 w-4" />
-            {published ? "Re-publish" : "Publish"}
-          </DropdownMenuItem>
+          {onDelete ? (
+            <DropdownMenuItem onSelect={() => setDeleteOpen(true)}>
+              <Trash2 className="h-4 w-4" />
+              Delete Project
+            </DropdownMenuItem>
+          ) : null}
 
-          <DropdownMenuItem onSelect={() => onExport(project)}>
-            <Download className="h-4 w-4" />
-            Export
-          </DropdownMenuItem>
+          {(onPublish || onExport) ? <DropdownMenuSeparator /> : null}
+
+          {onPublish ? (
+            <DropdownMenuItem onSelect={() => onPublish(project.id)}>
+              <Upload className="h-4 w-4" />
+              {published ? "Re-publish" : "Publish"}
+            </DropdownMenuItem>
+          ) : null}
+
+          {onExport ? (
+            <DropdownMenuItem onSelect={() => onExport(project)}>
+              <Download className="h-4 w-4" />
+              Export
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
 

@@ -13,10 +13,10 @@ import {
   updateProject as updateCloudProject,
   type ProjectMetadata,
 } from "@/services/project";
-import { deleteBuilderProject, saveBuilderProject } from "@/services/builderProject";
+import { deleteBuilderProject } from "@/services/builderProject";
 import { useCloudProjects } from "@/lib/builder/useCloudProjects";
-import { ProjectCard } from "./ProjectCard";
 import { ClientOnly } from "./ClientOnly";
+import { ProjectActionsMenu } from "./ProjectActionsMenu";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { EmptyProjectsState } from "./EmptyProjectsState";
 import { useNavigate } from "@tanstack/react-router";
@@ -53,6 +53,11 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
 const navigate = useNavigate();
   const openProject = async (projectId: string) => {
     await loadCloudProject(projectId);
+    setShowProjectDashboard(false);
+    navigate({
+      to: "/editor/$projectId",
+      params: { projectId },
+    });
     onOpenEditor?.(projectId);
   };
 
@@ -63,19 +68,7 @@ const navigate = useNavigate();
   };
 
   const openTemplates = () => {
-    const createdProjectId = newProject("My Project");
-    navigate({
-  to: "/editor/$projectId",
-  params: {
-    projectId: createdProjectId,
-  },
-});
-
- 
-    setShowProjectDashboard(false);
-    setLeftPanelOpen(true);
-    setLeftPanelView("templates");
-    onOpenEditor?.(createdProjectId);
+    navigate({ to: "/dashboard/templates" as never });
   };
 
   const closeCreateWizard = () => {
@@ -89,18 +82,15 @@ const navigate = useNavigate();
     const name = projectName.trim() || "My Project";
     const createdProjectId = newProject(name);
     navigate({
-  to: "/editor/$projectId",
-  params: {
-    projectId: createdProjectId,
-  },
-});
+      to: "/editor/$projectId",
+      params: {
+        projectId: createdProjectId,
+      },
+    });
 
- 
     setShowProjectDashboard(false);
-    setLeftPanelOpen(true);
-    if (useTemplate) {
-      setLeftPanelView("templates");
-    } else {
+    if (!useTemplate) {
+      setLeftPanelOpen(true);
       setLeftPanelView("widgets");
     }
     setCreateOpen(false);
@@ -127,13 +117,9 @@ const navigate = useNavigate();
   const onRename = async (projectId: string, name: string) => {
     await loadCloudProject(projectId);
     renameProject(projectId, name);
-    const updated = useBuilder.getState().projects[projectId];
-    if (updated) {
-      await saveBuilderProject(updated);
-      await updateCloudProject(projectId, { name });
-      refresh();
-      toast.success("Project renamed");
-    }
+    await updateCloudProject(projectId, { name });
+    refresh();
+    toast.success("Project renamed");
   };
 
   const onDuplicate = async (projectId: string) => {
@@ -141,7 +127,6 @@ const navigate = useNavigate();
     const newId = duplicateProject(projectId);
     const duplicated = useBuilder.getState().projects[newId];
     if (duplicated) {
-      await saveBuilderProject(duplicated);
       await createCloudProject(mapBuilderProjectToDashboardProject(duplicated));
       refresh();
       toast.success("Project duplicated");
@@ -164,13 +149,9 @@ const navigate = useNavigate();
   const onPublish = async (projectId: string) => {
     await loadCloudProject(projectId);
     publishProject(projectId);
-    const published = useBuilder.getState().projects[projectId];
-    if (published) {
-      await saveBuilderProject(published);
-      await updateCloudProject(projectId, { status: "published" });
-      refresh();
-      toast.success("Project published");
-    }
+    await updateCloudProject(projectId, { status: "published" });
+    refresh();
+    toast.success("Project published");
   };
 
   const onExport = async (project: BuilderProject) => {
@@ -242,7 +223,10 @@ const navigate = useNavigate();
         onNext={goToStepTwo}
         onCancel={closeCreateWizard}
         onCreateCustom={() => handleCreateProject(false)}
-        onCreateTemplate={() => handleCreateProject(true)}
+        onCreateTemplate={() => {
+          setCreateOpen(false);
+          navigate({ to: "/dashboard/templates" as never });
+        }}
       />
 
       <div className="space-y-6">
@@ -285,7 +269,10 @@ const navigate = useNavigate();
                 <p className="text-sm font-semibold text-slate-900">Your Projects</p>
                 <p className="text-sm text-slate-500">Manage your active websites in one place.</p>
               </div>
-              <button className="inline-flex items-center gap-1.5 text-sm font-semibold text-violet-700 transition hover:text-violet-900">
+              <button
+                onClick={() => navigate({ to: "/dashboard/projects" as never })}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-violet-700 transition hover:text-violet-900"
+              >
                 View all projects <ChevronRight className="h-4 w-4" />
               </button>
             </div>
@@ -308,28 +295,63 @@ const navigate = useNavigate();
               {visibleProjects.map((project) => {
                 const published = project.status === "published";
                 return (
-                  <div key={project.id} className="group flex min-h-[220px] flex-col justify-between overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                    <div className="relative h-36 overflow-hidden bg-slate-200">
-                      <div className="absolute inset-0 bg-gradient-to-br from-slate-900/10 via-transparent to-slate-900/0" />
-                    </div>
-                    <div className="space-y-3 p-5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-base font-semibold text-slate-950">{project.name}</p>
-                          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">{published ? "Published" : "Draft"}</p>
-                        </div>
-                        <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${published ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>
-                          {published ? "Published" : "Draft"}
-                        </span>
+                  <div
+                    key={project.id}
+                    className="group relative overflow-hidden rounded-2xl border border-border/70 bg-white shadow-sm transition transform hover:-translate-y-1 hover:shadow-lg cursor-pointer"
+                    onClick={() => openProject(project.id)}
+                    title={project.name}
+                  >
+                    <div className="relative h-36 overflow-hidden">
+                      {project.thumbnail ? (
+                        <img
+                          src={project.thumbnail}
+                          alt={project.name}
+                          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="h-full w-full bg-gradient-to-tr from-violet-600 to-emerald-400" />
+                      )}
+
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+
+                      <div className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold">
+                        <Star className={`h-4 w-4 ${project.favorite ? 'text-yellow-400' : 'text-slate-400'}`} />
                       </div>
-                      <div className="flex items-center justify-between text-sm text-slate-500">
-                        <ClientOnly>
-                          <span>Edited {formatDate(project.updatedAt)}</span>
-                        </ClientOnly>
-                        <div className="flex items-center gap-1 text-slate-400">
-                          <Users className="h-4 w-4" />
-                          <span>3</span>
-                        </div>
+
+                      <div className="absolute right-3 top-3">
+                        <ProjectActionsMenu
+                          project={project as any}
+                          onOpen={(id) => openProject(id)}
+                          onPreview={async (id) => {
+                            await loadCloudProject(id);
+                            const p = useBuilder.getState().projects[id];
+                            if (!p) return;
+                            const currentPage = p.pages.find((pg: any) => pg.id === p.currentPageId) || p.pages[0];
+                            if (!currentPage) return;
+                            const previewSlug = `${p.name.replace(/\s+/g, '-').toLowerCase()}-${p.id}`;
+                            const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
+                            const win = window.open(previewUrl, '_blank');
+                            if (!win) return;
+                            const payload = { __lovablePreviewPayload: true, projectId: p.id, project: p, pageId: currentPage.id };
+                            const postInterval = window.setInterval(() => {
+                              if (win.closed) { window.clearInterval(postInterval); return; }
+                              try { win.postMessage(payload, window.location.origin); } catch (_) {}
+                            }, 250);
+                            window.setTimeout(() => window.clearInterval(postInterval), 2000);
+                            win.focus();
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-foreground truncate">{project.name}</h3>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${published ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>{published ? 'Published' : 'Draft'}</span>
+                      </div>
+                      <div className="mt-2 text-[12px] text-muted-foreground flex items-center justify-between">
+                        <div>Edited <ClientOnly>{formatDate(project.updatedAt)}</ClientOnly></div>
+                        <div>{(project.pages || []).length} page{(project.pages || []).length !== 1 ? 's' : ''}</div>
                       </div>
                     </div>
                   </div>

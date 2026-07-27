@@ -19,6 +19,7 @@ import {
   Redo2,
 } from "lucide-react";
 import { SaveStatus } from "@/components/builder/SaveStatus";
+import { EditorTopMenu } from "@/components/builder/EditorTopMenu";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -114,61 +115,54 @@ export function Header() {
     URL.revokeObjectURL(url);
   }
 
+  function slugifyName(name: string) {
+    return name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "project";
+  }
+
   async function openPreview() {
     if (!project || !mounted) return;
-    console.info('[Preview] button clicked', { projectName: project.name, currentPageId: project.currentPageId });
-    try {
-      const exportData = await buildSiteExport(project);
-      console.info('[Preview] buildSiteExport completed', { projectName: project.name, fileCount: exportData.files.length });
-      const currentPage = project.pages.find((p) => p.id === project.currentPageId) || project.pages[0];
-      if (currentPage) {
-        const pageFile = exportData.files.find((f) => f.path === `${currentPage.slug}.html`);
-        if (pageFile) {
-          exportData.files.push({ path: 'index.html', content: pageFile.content, base64: pageFile.base64 });
-          console.info('[Preview] added index.html alias for current page', { pageSlug: currentPage.slug });
-        }
-      }
-      const slugify = (s: string) =>
-        (s || 'project')
-          .toLowerCase()
-          .trim()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-+|-+$/g, '') || 'site';
-      const shortId = nanoid(6).toLowerCase();
-      const slug = `${slugify(project.name)}-${shortId}`;
-      console.info('[Preview] generated slug', { slug });
-      const payload = { slug, files: exportData.files };
-      console.info('[Preview] sending preview request', { endpoint: '/__wto/preview', slug, fileCount: exportData.files.length });
-      const resp = await fetch('/__wto/preview', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const text = await resp.text();
-      let data: any = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch (parseError) {
-        console.error('[Preview] response JSON parse failed', { status: resp.status, statusText: resp.statusText, text, parseError });
-        throw new Error(`Preview response was not valid JSON: ${parseError?.message || String(parseError)}`);
-      }
-      console.info('[Preview] preview request completed', { status: resp.status, ok: resp.ok, data });
-      if (!resp.ok || !data?.ok) {
-        const errorMessage = data?.error || data?.message || resp.statusText || 'unknown error';
-        console.error('[Preview] preview failed response', { status: resp.status, errorMessage, data });
-        toast.error(`Preview generation failed: ${errorMessage}`);
+
+    const currentPage = project.pages.find((p) => p.id === project.currentPageId) || project.pages[0];
+    if (!currentPage) {
+      toast.error('Preview failed: No current page available for preview');
+      return;
+    }
+
+    const previewSlug = `${slugifyName(project.name)}-${project.id}`;
+    const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
+    const previewWindow = window.open(previewUrl, '_blank');
+    if (!previewWindow) {
+      toast.error('Preview failed: Unable to open preview window');
+      return;
+    }
+
+    const payload = {
+      __lovablePreviewPayload: true,
+      projectId: project.id,
+      project,
+      pageId: currentPage.id,
+    };
+
+    previewWindow.postMessage(payload, window.location.origin);
+    const postInterval = window.setInterval(() => {
+      if (previewWindow.closed) {
+        window.clearInterval(postInterval);
         return;
       }
-      const origin = window.location.origin;
-      const previewPath = data.url || `/preview/${slug}/index.html`;
-      const previewUrl = origin + previewPath;
-      console.info('[Preview] opening preview URL', { previewUrl });
-      window.open(previewUrl, '_blank', 'noopener,noreferrer');
-      toast.success('Preview opened', { duration: 2000, position: 'top-center' });
-    } catch (err) {
-      console.error('[Preview] final exception', err);
-      toast.error(`Preview failed: ${err?.message || String(err)}`);
-    }
+      try {
+        previewWindow.postMessage(payload, window.location.origin);
+      } catch (_) {
+        // ignore while the preview window loads
+      }
+    }, 250);
+    window.setTimeout(() => window.clearInterval(postInterval), 2000);
+    previewWindow.focus();
+
+    toast.success('Preview opened', { duration: 2000, position: 'top-center' });
   }
 
   if (!mounted) {
@@ -228,7 +222,7 @@ export function Header() {
         </button>
 
         {showCanvasControls ? (
-          <div className="hidden items-center gap-2 md:flex">
+          <div className="hidden items-center gap-4 md:flex">
 
             <button
               type="button"
@@ -287,6 +281,8 @@ export function Header() {
             <div className="h-6 w-px bg-slate-200/70" />
 
             <SaveStatus status={saveStatus} errorMessage={saveErrorMessage ?? undefined} onRetry={persistWithStatus} />
+
+            <EditorTopMenu />
           </div>
         ) : null}
 

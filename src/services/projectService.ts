@@ -9,6 +9,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { auth, db } from '@/firebase/firebase';
+import { sanitizeForFirestore } from '@/services/firestore';
 import type { Project } from '@/features/projects/project.types';
 
 function getProjectsCollectionRef(userId: string) {
@@ -42,13 +43,18 @@ export async function createProject(project: Project): Promise<string> {
   const user = requireAuthenticatedUser();
   const projectId = project.id ?? doc(getProjectsCollectionRef(user.uid)).id;
 
-  await setDoc(getProjectDocRef(user.uid, projectId), {
-    ...project,
-    id: projectId,
-    ownerId: user.uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  const data = sanitizeForFirestore({
+  ...project,
+  id: projectId,
+  ownerId: user.uid,
+  createdAt: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+}) as Record<string, any>;
+
+await setDoc(
+  getProjectDocRef(user.uid, projectId),
+  data
+);
 
   return projectId;
 }
@@ -73,10 +79,13 @@ export async function getProject(projectId: string): Promise<Project> {
 export async function updateProject(projectId: string, updates: Partial<Project>): Promise<void> {
   const user = requireAuthenticatedUser();
 
-  await updateDoc(getProjectDocRef(user.uid, projectId), {
-    ...updates,
-    updatedAt: serverTimestamp(),
-  });
+  await updateDoc(
+    getProjectDocRef(user.uid, projectId),
+    sanitizeForFirestore({
+      ...updates,
+      updatedAt: serverTimestamp(),
+    })
+  );
 }
 
 export async function deleteProject(projectId: string): Promise<void> {

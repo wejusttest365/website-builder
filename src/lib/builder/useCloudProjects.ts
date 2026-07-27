@@ -71,6 +71,7 @@ export function useCloudProjects() {
 
       try {
         const data = await getProjects(firebaseUser.uid);
+      //  console.log("Cloud projects:", JSON.stringify(data, null, 2));
         if (!isMounted) return;
         setProjects(data);
       } catch (loadError) {

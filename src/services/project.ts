@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import { auth } from "@/firebase/firebase";
 import { db } from "@/firebase/firebase";
+import { sanitizeForFirestore } from "@/services/firestore";
 import type { Project } from "@/features/projects/project.types";
 export type ProjectMetadata = Omit<Project, "ownerId">;
 
@@ -26,26 +27,33 @@ export async function createProject(project: ProjectMetadata) {
 
   if (!user) throw new Error("User not logged in");
 
-  await setDoc(getProjectDocRef(user.uid, project.id), {
-    name: project.name,
-    templateId: project.templateId,
-    thumbnail: project.thumbnail,
-    favorite: project.favorite,
-    status: project.status,
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
-    pages: project.pages,
-
-    ownerId: user.uid,
-    createdAtServer: serverTimestamp(),
-    updatedAtServer: serverTimestamp(),
-  });
+  await setDoc(
+    getProjectDocRef(user.uid, project.id),
+    sanitizeForFirestore({
+      name: project.name,
+      templateId: project.templateId,
+      thumbnail: project.thumbnail,
+      description: project.description,
+      favorite: project.favorite,
+      status: project.status,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+      pages: project.pages,
+      isPublic: project.isPublic,
+      ownerId: user.uid,
+      createdAtServer: serverTimestamp(),
+      updatedAtServer: serverTimestamp(),
+    }),
+    { merge: true }
+  );
 
   return project.id;
 }
 
 export async function getProjects(ownerId: string): Promise<Project[]> {
   const snapshot = await getDocs(getProjectCollectionRef(ownerId));
+
+  console.log("Firestore returned", snapshot.size, "projects");
 
   return snapshot.docs.map((doc) => ({
     ...(doc.data() as Omit<Project, "id">),
@@ -58,10 +66,15 @@ export async function updateProject(projectId: string, updates: Partial<ProjectM
 
   if (!user) throw new Error("User not logged in");
 
-  await updateDoc(getProjectDocRef(user.uid, projectId), {
-    ...updates,
-    updatedAtServer: serverTimestamp(),
-  });
+ const data = sanitizeForFirestore({
+  ...updates,
+  updatedAtServer: serverTimestamp(),
+}) as Record<string, any>;
+
+await updateDoc(
+  getProjectDocRef(user.uid, projectId),
+  data
+);
 }
 
 export const saveProjectMetadata = createProject;

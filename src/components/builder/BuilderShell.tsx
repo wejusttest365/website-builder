@@ -4,7 +4,6 @@ import { useBuilder } from "@/lib/builder/store";
 import { CenteredLoader } from "@/components/ui/CenteredLoader";
 import { Canvas } from "./Canvas";
 import { PropertiesPanel } from "./PropertiesPanel";
-import { TemplateGalleryOverlay } from "./TemplateGalleryOverlay";
 
 export function BuilderShell() {
   const hydrate = useBuilder((s) => s.hydrate);
@@ -141,7 +140,6 @@ export function BuilderShell() {
           </div>
         </div>
       </div>
-      {leftPanelOpen && leftPanelView === "templates" ? <TemplateGalleryOverlay /> : null}
     </div>
   );
 }

@@ -27,19 +27,28 @@ function GoogleLogo(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-const MENU_ITEMS = [
+const EDITOR_NAV_ITEMS = [
   { key: "dashboard" as const, label: "Dashboard", Icon: LayoutDashboard },
+  { key: "projects" as const, label: "My Projects", Icon: FolderOpen },
+  { key: "favorites" as const, label: "Favorites", Icon: Heart },
+] as const;
+
+const CANVAS_TOOLS_ITEMS = [
   { key: "pages" as const, label: "Pages", Icon: FileText },
-  { key: "templates" as const, label: "Templates", Icon: Layers },
   { key: "widgets" as const, label: "Widgets", Icon: Grid2x2 },
+] as const;
+
+const MENU_ITEMS = [
+  ...EDITOR_NAV_ITEMS,
+  ...CANVAS_TOOLS_ITEMS,
+  { key: "templates" as const, label: "Templates", Icon: Layers },
 ] as const;
 
 const DASHBOARD_MENU_ITEMS = [
   { key: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { key: "projects", label: "My Projects", Icon: FolderOpen },
-  { key: "templates", label: "Templates", Icon: Layers },
   { key: "favorites", label: "Favorites", Icon: Heart },
-  { key: "shared", label: "Shared with me", Icon: Users },
+  { key: "templates", label: "Templates", Icon: Layers },
   { key: "trash", label: "Trash", Icon: Trash2 },
 ] as const;
 
@@ -157,16 +166,17 @@ const activePanelKey = showProjectDashboard
     ? leftPanelView
     : "pages";
   const menuItems = showProjectDashboard ? DASHBOARD_MENU_ITEMS : MENU_ITEMS;
-  const primaryMenuItems = showProjectDashboard ? menuItems.slice(0, 5) : menuItems;
-    const toolMenuItems: Array<{
+  const primaryMenuItems = showProjectDashboard ? menuItems.slice(0, 3) : EDITOR_NAV_ITEMS;
+  const canvasMenuItems = showProjectDashboard ? [] : CANVAS_TOOLS_ITEMS;
+  const toolMenuItems: Array<{
     key: PanelViewKey;
     label: string;
     Icon: React.ComponentType<{ className?: string }>;
-  }> = showProjectDashboard ? (menuItems.slice(5) as Array<{
+  }> = showProjectDashboard ? (menuItems.slice(3) as Array<{
     key: PanelViewKey;
     label: string;
     Icon: React.ComponentType<{ className?: string }>;
-  }>) : [];
+  }>) : [{ key: "templates" as const, label: "Templates", Icon: Layers }];
   const currentViewLabel = menuItems.find((item) => item.key === activePanelKey)?.label ?? activePanelKey;
   const [overlayView, setOverlayView] = useState<PanelViewKey | null>(null);
   const overlayLabel = overlayView ? menuItems.find((item) => item.key === overlayView)?.label ?? overlayView : "";
@@ -376,6 +386,28 @@ const handleLogout = async () => {
                           return;
                         }
 
+                        if (key === "projects") {
+                          setShowProjectDashboard(true);
+                          navigate({ to: "/dashboard/projects" as never });
+                          return;
+                        }
+
+                        if (key === "favorites") {
+                          setShowProjectDashboard(true);
+                          navigate({ to: "/dashboard/favorites" as never });
+                          return;
+                        }
+
+                        if (key === "templates") {
+                          if (showProjectDashboard) {
+                            navigate({ to: "/dashboard/templates" as never });
+                            return;
+                          }
+                          setLeftPanelView("templates");
+                          setOverlayView("templates");
+                          return;
+                        }
+
                         setLeftPanelView(key);
                         setOverlayView(key);
                       }}
@@ -396,6 +428,41 @@ const handleLogout = async () => {
               );
             })}
           </div>
+
+          {canvasMenuItems.length > 0 ? (
+            <>
+              <div className={`my-2 ${leftPanelOpen ? "mx-2 h-px bg-slate-200" : "mx-0 h-px bg-slate-200/50"}`} />
+              <div className={`${leftPanelOpen ? "space-y-2" : "space-y-1"}`}>
+                {canvasMenuItems.map(({ key, label, Icon }) => {
+                  const active = activePanelKey === key;
+                  return (
+                    <Tooltip key={key}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLeftPanelView(key);
+                            setOverlayView(key);
+                          }}
+                          className={`group flex w-full ${leftPanelOpen ? "items-center gap-2 px-2.5 py-2 text-left" : "justify-center px-0 py-2"} rounded-md text-sm font-semibold transition ${
+                            active ? "bg-violet-50 text-violet-900" : "bg-white text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${
+                            active ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-600"
+                          }`}>
+                            <Icon className="h-4 w-4" />
+                          </span>
+                          {leftPanelOpen ? <span className="truncate">{label}</span> : null}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side={leftPanelOpen ? "bottom" : "right"}>{label}</TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </>
+          ) : null}
 
           {toolMenuItems.length > 0 ? (
             <>
@@ -541,23 +608,7 @@ const handleLogout = async () => {
                         </section>
                       ) : null}
 
-                      {overlayView === "templates" ? (
-                        <section className="space-y-3">
-                          <div className="rounded-3xl border border-border/70 bg-slate-50 p-4">
-                            <div className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">Templates</div>
-                            <p className="mt-2 text-sm text-foreground">Browse templates in a full-screen gallery experience. Select a design to replace the current page content.</p>
-                            <button
-                              className="mt-4 w-full rounded-2xl bg-primary px-4 py-3 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90"
-                              onClick={() => {
-                                setLeftPanelOpen(true);
-                                setLeftPanelView("templates");
-                              }}
-                            >
-                              Open full gallery
-                            </button>
-                          </div>
-                        </section>
-                      ) : null}
+
 
                       {overlayView === "shared" ? (
                         <section className="space-y-3">
@@ -1000,8 +1051,7 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
                       type="button"
                       className="rounded-full border border-border/70 bg-background px-2 py-1 text-[10px] font-semibold text-foreground transition hover:bg-muted"
                       onClick={() => {
-                        setLeftPanelView("templates");
-                        setLeftPanelOpen(true);
+                        navigate({ to: "/dashboard/templates" as never });
                       }}
                     >
                       Open
@@ -1025,8 +1075,7 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
             {
               label: "Explore",
               onClick: () => {
-                setLeftPanelView("templates");
-                setLeftPanelOpen(true);
+                navigate({ to: "/dashboard/templates" as never });
               },
             }
           )}

@@ -1,12 +1,18 @@
-import { useEffect, useState } from "react";
-import { buildExportBundle } from "@/lib/builder/preview";
+import { useEffect, useMemo, useState } from "react";
+import { APP_CSS_HREF, buildPreviewHTML } from "@/lib/builder/preview";
 import type { Project } from "@/lib/builder/store";
+
+function extractProjectId(param: string) {
+  const match = param.match(/-([A-Za-z0-9]+)$/);
+  return match ? match[1] : param;
+}
 
 export function DemoView({ projectId }: { projectId: string }) {
   const [mounted, setMounted] = useState(false);
   const [proj, setProj] = useState<Project | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const actualProjectId = extractProjectId(projectId);
 
   useEffect(() => {
     setMounted(true);
@@ -24,7 +30,7 @@ export function DemoView({ projectId }: { projectId: string }) {
         pageId?: string | null;
       };
       if (!data || data.__lovablePreviewPayload !== true) return;
-      if (data.projectId !== projectId) return;
+      if (data.projectId !== actualProjectId) return;
       if (!data.project) return;
       setProj(data.project);
       setActivePageId(data.pageId ?? data.project.currentPageId ?? data.project.pages?.[0]?.id ?? null);
@@ -40,7 +46,7 @@ export function DemoView({ projectId }: { projectId: string }) {
         localStorage.getItem("wto-builder-state");
       if (raw) {
         const data = JSON.parse(raw) as { projects: Record<string, Project> };
-        const p = data.projects?.[projectId];
+        const p = data.projects?.[actualProjectId];
         if (p) {
           const urlParams = new URLSearchParams(window.location.search);
           const pageParam = urlParams.get("page")?.replace(/^[./]+/, "").replace(/\.html$/i, "");
@@ -89,6 +95,27 @@ export function DemoView({ projectId }: { projectId: string }) {
     return () => window.removeEventListener("message", handlePreviewMessage);
   }, [mounted, proj]);
 
+  const previewHtml = useMemo(() => {
+    if (!proj || activePageId === null) return null;
+    const page = proj.pages.find((pg) => pg.id === activePageId) ?? proj.pages[0];
+    return buildPreviewHTML({
+      sections: page.sections,
+      globalCss: proj.globalCss || "",
+      globalJs: proj.globalJs || "",
+      editable: false,
+      assets: proj.assets,
+      pages: proj.pages.map((pg) => ({ id: pg.id, slug: pg.slug })),
+      currentPageSlug: page.slug,
+      title: proj.name,
+      description: page.description,
+      keywords: page.keywords,
+      seo: page.seo,
+      projectSeo: proj.seo,
+      customHead: proj.customHead,
+      previewCssHref: APP_CSS_HREF,
+    });
+  }, [proj, activePageId]);
+
   if (!mounted) return null;
 
   if (notFound) {
@@ -104,28 +131,12 @@ export function DemoView({ projectId }: { projectId: string }) {
     );
   }
 
-  if (!proj || activePageId === null) return null;
-
-  const page = proj.pages.find((pg) => pg.id === activePageId) ?? proj.pages[0];
-
-  const bundle = buildExportBundle({
-    sections: (page?.sections ?? []),
-    globalCss: proj?.globalCss ?? "",
-    globalJs: proj?.globalJs ?? "",
-    title: proj?.name ?? "",
-    description: page?.description,
-    keywords: page?.keywords,
-    seo: page?.seo,
-    projectSeo: proj?.seo,
-    customHead: proj?.customHead,
-    assets: proj?.assets,
-    inlineAssets: true,
-  });
+  if (!proj || activePageId === null || !previewHtml) return null;
 
   return (
     <iframe
       title={proj.name}
-      srcDoc={bundle.complete}
+      srcDoc={previewHtml}
       style={{ width: "100vw", height: "100vh", border: 0 }}
     />
   );

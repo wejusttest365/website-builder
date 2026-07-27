@@ -170,7 +170,8 @@ export function PageActionsMenu({ page, pageCount, onRename, onSetSlug, onDuplic
             <AlertDialogCancel onClick={() => setDeleteOpen(false)}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground"
-              onClick={() => {
+              onClick={(e: any) => {
+                try { e?.preventDefault(); } catch (_) {}
                 onDelete(page.id);
                 setDeleteOpen(false);
               }}

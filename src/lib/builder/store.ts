@@ -1,10 +1,13 @@
- import { saveBuilderProject, getBuilderProject } from "@/services/builderProject";
+ import { auth } from "@/firebase/firebase";
+import { saveBuilderProject as saveBuilderProjectState, getBuilderProject } from "@/services/builderProject";
+import { saveProjectMetadata } from "@/services/project";
+import type { ProjectMetadata } from "@/services/project";
 import { create } from "zustand";
 import { nanoid } from "nanoid"; 
 import type { SectionTemplate } from "./sections";
 import type { TemplateDefinition } from "./templates";
 import { createImageAssetReference, normalizeAssetMap, saveImageBlob, type BuilderAssetEntry } from "./image-storage";
-loadCloudProject: (id: string) => Promise<void>;
+
 export interface PageSection {
   id: string;
   templateId: string;
@@ -156,12 +159,13 @@ interface BuilderState {
   setSaveStatus: (status: "idle" | "saving" | "saved" | "failed") => void;
   setSaveErrorMessage: (message: string | null) => void;
   persistWithStatus: () => boolean;
+  saveProjectToCloud: () => Promise<boolean>;
   setSelectedElementStyle: (style: Record<string, string> | null) => void;
 
   hydrate: () => void;
   persist: () => boolean;
 
-  saveBuilderProject: (name?: string) => string;
+  createProject: (name?: string) => string;
   newProject: (name?: string) => string;
   selectProject: (id: string) => void;
   loadProject: (id: string) => void;
@@ -389,13 +393,51 @@ function emptyProject(name = "Untitled Project"): Project {
     customHead: "",
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    thumbnail: undefined,
+    thumbnail: "",
   };
 }
 
 function getCurrentPage(project: Project | null): Page | null {
   if (!project) return null;
   return project.pages.find((p) => p.id === project.currentPageId) ?? project.pages[0] ?? null;
+}
+
+function mapBuilderProjectToMetadata(project: Project): ProjectMetadata {
+  return {
+    id: project.id,
+    name: project.name,
+    templateId: project.selectedTemplateId ?? null,
+    thumbnail: project.thumbnail ?? "",
+    description: project.description,
+    favorite: false,
+    status: "draft",
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    pages: project.pages.map((page) => page.slug),
+    isPublic: false,
+  };
+}
+
+async function persistProjectToCloud(project: Project): Promise<boolean> {
+  console.log("persistProjectToCloud()");
+  console.log("Current user:", auth.currentUser);
+  console.log("Project:", project);
+
+  const firebaseUser = auth.currentUser;
+  if (!firebaseUser) {
+    console.error("No authenticated user");
+    return false;
+  }
+
+  try {
+    await saveBuilderProjectState(project);
+    await saveProjectMetadata(mapBuilderProjectToMetadata(project));
+    console.log("Project saved successfully");
+    return true;
+  } catch (error) {
+    console.error("Failed to sync project to Firestore", error);
+    return false;
+  }
 }
 
 // Public helper so views/exports can pick the current page.
@@ -524,10 +566,18 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const ok = get().persist();
     if (ok) {
       set({ saveStatus: "saved", saveErrorMessage: null });
+      void get().saveProjectToCloud().catch((error) => {
+        console.error("Project cloud sync failed", error);
+      });
     } else {
       set({ saveStatus: "failed", saveErrorMessage: "Could not save project locally." });
     }
     return ok;
+  },
+  saveProjectToCloud: async () => {
+    const currentProject = get().currentProject();
+    if (!currentProject) return false;
+    return persistProjectToCloud(currentProject);
   },
 
   leftPanelOpen: true,
@@ -543,13 +593,13 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
   currentPage: () => getCurrentPage(get().currentProject()),
 
-  saveBuilderProject: (name = "Untitled Project") => {
+  createProject: (name = "Untitled Project") => {
     return get().newProject(name);
   },
 
   newProject: (name = "Untitled Project") => {
-  const p = emptyProject(name);
-  const page = p.pages[0];
+    const p = emptyProject(name);
+    const page = p.pages[0];
 
   set((s) => ({
     projects: { ...s.projects, [p.id]: p },
@@ -569,6 +619,9 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   }));
 
   get().persist();
+  void get().saveProjectToCloud().catch((error) => {
+    console.error("Failed to save new project to Firestore", error);
+  });
   return p.id;
 },
 
@@ -623,6 +676,12 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       return { projects: { ...s.projects, [id]: { ...p, name, updatedAt: Date.now() } } };
     });
     get().persist();
+    const currentProject = get().currentProject();
+    if (currentProject) {
+      void persistProjectToCloud(currentProject).catch((error) => {
+        console.error("Failed to sync renamed project to Firestore", error);
+      });
+    }
   },
 
   duplicateProject: (id) => {
@@ -639,6 +698,9 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     };
     set((s) => ({ projects: { ...s.projects, [nid]: copy } }));
     get().persist();
+    void persistProjectToCloud(copy).catch((error) => {
+      console.error("Failed to sync duplicated project to Firestore", error);
+    });
     return nid;
   },
 
@@ -661,6 +723,12 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       return { projects: { ...s.projects, [id]: next } };
     });
     get().persist();
+    const currentProject = get().currentProject();
+    if (currentProject) {
+      void persistProjectToCloud(currentProject).catch((error) => {
+        console.error("Failed to sync published project to Firestore", error);
+      });
+    }
   },
 
   // -------- Pages --------
@@ -870,7 +938,12 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       currentPageId: page.id,
     });
     set({ selectedSectionId: null, selectedElement: null, selectedElementStyle: null, history: [{ pageId: page.id, sections: JSON.parse(JSON.stringify(page.sections)), globalCss: resetProjectBase.globalCss ?? "", globalJs: resetProjectBase.globalJs ?? "" }], historyIndex: 0 });
-    get().persist();
+    const currentProject = get().currentProject();
+    if (currentProject) {
+      void persistProjectToCloud(currentProject).catch((error) => {
+        console.error("Failed to sync template application to Firestore", error);
+      });
+    }
   },
 
   updateSection: (id, patch) => {
@@ -1111,7 +1184,15 @@ function updateCurrent(
     const next: Project = { ...cur, ...patch, updatedAt: Date.now() };
     return { projects: { ...s.projects, [s.currentProjectId]: next } };
   });
-  if (persist) get().persist();
+  if (persist) {
+    get().persist();
+    const currentProject = get().currentProject();
+    if (currentProject) {
+      void persistProjectToCloud(currentProject).catch((error) => {
+        console.error("Failed to sync current project to Firestore", error);
+      });
+    }
+  }
 }
 
 function updatePageSections(
@@ -1134,6 +1215,12 @@ function updatePageSections(
     };
   });
   get().persist();
+  const currentProject = get().currentProject();
+  if (currentProject) {
+    void persistProjectToCloud(currentProject).catch((error) => {
+      console.error("Failed to sync current project to Firestore", error);
+    });
+  }
 }
 
 function applyHistoryEntry(
@@ -1163,4 +1250,10 @@ function applyHistoryEntry(
     };
   });
   get().persist();
+  const currentProject = get().currentProject();
+  if (currentProject) {
+    void persistProjectToCloud(currentProject).catch((error) => {
+      console.error("Failed to sync history entry to Firestore", error);
+    });
+  }
 }

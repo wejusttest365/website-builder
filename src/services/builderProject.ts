@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { auth } from "@/firebase/firebase";
 import { db } from "@/firebase/firebase";
+import { sanitizeForFirestore } from "@/services/firestore";
 import type { Project } from "@/lib/builder/store";
 function getProjectDocRef(userId: string, projectId: string) {
   return doc(db, "users", userId, "builderProjects", projectId);
@@ -21,7 +22,7 @@ export async function saveBuilderProject(project: Project) {
   await setDoc(
     getProjectDocRef(user.uid, project.id),
     {
-      ...project,
+      ...sanitizeForFirestore(project),
       updatedAtServer: serverTimestamp(),
     },
     { merge: true }
