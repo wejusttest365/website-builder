@@ -5,7 +5,7 @@ export interface Project {
   thumbnail: string; 
   description?: string; 
   favorite: boolean; 
-  status: "draft" | "published" | "archived"; 
+  status: "draft" | "published" | "archived" | "trashed" | "private"; 
   createdAt: number; 
   updatedAt: number; 
   pages: string[]; 

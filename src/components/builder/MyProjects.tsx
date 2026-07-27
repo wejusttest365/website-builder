@@ -20,9 +20,23 @@ import { CreateProjectDialog } from "./CreateProjectDialog";
 import { PremiumThumbnailPlaceholder } from "./PremiumThumbnailPlaceholder";
 import { formatUpdatedAt } from "@/lib/utils";
 
-export function MyProjects() {
+interface MyProjectsProps {
+  title?: string;
+  subtitle?: string;
+  showOnlyFavorites?: boolean;
+  showOnlyTrashed?: boolean;
+  hideCreateAction?: boolean;
+}
+
+export function MyProjects({
+  title = "My Projects",
+  subtitle = "Manage all your website projects in one place.",
+  showOnlyFavorites = false,
+  showOnlyTrashed = false,
+  hideCreateAction = false,
+}: MyProjectsProps) {
   const { user } = useAuth();
-  const { projects, loading, error } = useCloudProjects();
+  const { projects, loading, error, refresh } = useCloudProjects();
 //   console.log("loading =", loading);
 // console.log("error =", error);
 // console.log("projects =", projects);
@@ -36,6 +50,7 @@ export function MyProjects() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteMode, setDeleteMode] = useState<"move-to-trash" | "delete-forever">("move-to-trash");
   const [activeProject, setActiveProject] = useState<any | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const navigate = useNavigate();
@@ -45,6 +60,7 @@ export function MyProjects() {
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
   const [projectName, setProjectName] = useState("My Project");
   const [exportLoading, setExportLoading] = useState(false);
+  const [animatingFavoriteId, setAnimatingFavoriteId] = useState<string | null>(null);
   const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
 
   useEffect(() => setLocalProjects(projects), [projects]);
@@ -54,6 +70,7 @@ export function MyProjects() {
     try {
       await updateCloudProject(activeProject.id, { name: renameValue });
       setLocalProjects((prev: any[]) => prev.map((p) => (p.id === activeProject.id ? { ...p, name: renameValue } : p)));
+      refresh();
     } catch (err) {
       console.error(err);
     } finally {
@@ -67,27 +84,37 @@ export function MyProjects() {
     setDeleteLoading(true);
 
     try {
-      await deleteCloudProject(activeProject.id);
-      try {
-        await deleteBuilderProject(activeProject.id);
-      } catch (e) {
-        // Ignore if builder project was not present locally.
+      if (deleteMode === "delete-forever") {
+        await deleteCloudProject(activeProject.id);
+        try {
+          await deleteBuilderProject(activeProject.id);
+        } catch (e) {
+          // Ignore if builder project was not present locally.
+        }
+
+        setLocalProjects((prev: any[]) => prev.filter((p) => p.id !== activeProject.id));
+        refresh();
+        toast.success("Project permanently deleted");
+      } else {
+        const now = Date.now();
+        await updateCloudProject(activeProject.id, { status: "trashed", updatedAt: now });
+        setLocalProjects((prev: any[]) => prev.map((p) => (p.id === activeProject.id ? { ...p, status: "trashed", updatedAt: now } : p)));
+        refresh();
+
+        if (currentProjectId === activeProject.id) {
+          navigate({ to: "/dashboard" as never });
+        }
+
+        toast.success("Project moved to Trash");
       }
-
-      setLocalProjects((prev: any[]) => prev.filter((p) => p.id !== activeProject.id));
-
-      if (currentProjectId === activeProject.id) {
-        navigate({ to: "/dashboard" as never });
-      }
-
-      toast.success("Project deleted successfully");
     } catch (err) {
       console.error(err);
-      toast.error("Failed to delete project. Please try again.");
+      toast.error(deleteMode === "delete-forever" ? "Failed to delete project permanently. Please try again." : "Failed to move project to Trash. Please try again.");
     } finally {
       setDeleteLoading(false);
       setDeleteOpen(false);
       setActiveProject(null);
+      setDeleteMode("move-to-trash");
     }
   }
 
@@ -151,6 +178,7 @@ export function MyProjects() {
         },
         ...(prev || []),
       ]);
+      refresh();
 
       toast.success("Project duplicated successfully");
     } catch (err) {
@@ -206,6 +234,41 @@ export function MyProjects() {
     toast.success("Preview opened", { duration: 2000, position: "top-center" });
   }
 
+  async function handleRestoreProject(projectRecord: any) {
+    const now = Date.now();
+    try {
+      await updateCloudProject(projectRecord.id, { status: "draft", updatedAt: now });
+      setLocalProjects((prev: any[]) => prev.map((p) => (p.id === projectRecord.id ? { ...p, status: "draft", updatedAt: now } : p)));
+      refresh();
+      toast.success("Project restored successfully");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to restore project. Please try again.");
+    }
+  }
+
+  async function handleToggleFavorite(projectRecord: any) {
+    const nextValue = !projectRecord.favorite;
+    const projectId = projectRecord.id;
+
+    setAnimatingFavoriteId(projectId);
+    setLocalProjects((prev: any[]) => prev.map((p) => (p.id === projectId ? { ...p, favorite: nextValue } : p)));
+
+    try {
+      await updateCloudProject(projectId, { favorite: nextValue });
+      refresh();
+      toast.success(nextValue ? "Added to favorites" : "Removed from favorites");
+    } catch (err) {
+      console.error(err);
+      setLocalProjects((prev: any[]) => prev.map((p) => (p.id === projectId ? { ...p, favorite: !nextValue } : p)));
+      toast.error("Failed to update favorites. Please try again.");
+    } finally {
+      window.setTimeout(() => {
+        setAnimatingFavoriteId((currentId) => (currentId === projectId ? null : currentId));
+      }, 180);
+    }
+  }
+
   async function handleExportProject(projectId: string) {
     setExportLoading(true);
     try {
@@ -243,35 +306,45 @@ export function MyProjects() {
 
   const filteredProjects = useMemo(() => {
     const search = q.trim().toLowerCase();
-    let list = localProjects ?? [];
+    let list = (localProjects ?? []).filter((p: any) => {
+      if (showOnlyTrashed) return p.status === "trashed";
+      if (showOnlyFavorites) return p.favorite && p.status !== "trashed";
+      return p.status !== "trashed";
+    });
+
     if (search) {
       list = list.filter((p: any) => (p.name || "").toLowerCase().includes(search));
     }
+
     const byDate = (a: any, b: any, key = "updatedAt") => {
       const aVal = typeof a[key]?.toDate === "function" ? a[key].toDate().getTime() : Number(a[key] ?? 0);
       const bVal = typeof b[key]?.toDate === "function" ? b[key].toDate().getTime() : Number(b[key] ?? 0);
       return bVal - aVal;
     };
-    switch (sort) {
-      case "newest":
-        list = list.slice().sort((a: any, b: any) => byDate(a, b, "createdAt"));
-        break;
-      case "oldest":
-        list = list.slice().sort((a: any, b: any) => -byDate(a, b, "createdAt"));
-        break;
-      case "az":
-        list = list.slice().sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
-        break;
-      case "recent":
-        list = list.slice().sort((a: any, b: any) => byDate(a, b, "updatedAt"));
-        break;
-    }
+
+    list = list.slice().sort((a: any, b: any) => {
+      const favoriteDiff = Number(Boolean(b.favorite)) - Number(Boolean(a.favorite));
+      if (favoriteDiff !== 0) return favoriteDiff;
+
+      switch (sort) {
+        case "az":
+          return (a.name || "").localeCompare(b.name || "");
+        case "newest":
+          return byDate(a, b, "createdAt");
+        case "oldest":
+          return -byDate(a, b, "createdAt");
+        case "recent":
+        default:
+          return byDate(a, b, "updatedAt");
+      }
+    });
+
     if (statusFilter !== "all") {
       list = list.filter((p: any) => (p.status ?? "draft") === statusFilter);
     }
 
     return list;
-  }, [localProjects, q, sort]);
+  }, [localProjects, q, showOnlyFavorites, showOnlyTrashed, sort, statusFilter]);
 
   if (loading) {
     return (
@@ -301,50 +374,46 @@ export function MyProjects() {
     );
   }
 
-  if (!projects.length) {
-  return (
-    <div className="rounded-[32px] border border-dashed border-border/70 bg-slate-50 p-10 text-center shadow-sm">
-      {/* DEBUG */}
-      <div className="mb-6 rounded-lg bg-red-100 border border-red-300 p-4 text-left text-red-700">
-        <div><strong>loading:</strong> {String(loading)}</div>
-        <div><strong>error:</strong> {String(error)}</div>
-        <div><strong>projects.length:</strong> {projects.length}</div>
-        <div><strong>filteredProjects.length:</strong> {filteredProjects.length}</div>
-        <pre className="mt-2 text-xs overflow-auto">
-          {JSON.stringify(projects, null, 2)}
-        </pre>
-      </div>
+  if (!filteredProjects.length) {
+    return (
+      <div className="p-6">
+        <div className="rounded-[32px] border border-dashed border-border/70 bg-slate-50 p-10 text-center shadow-sm">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-violet-100 text-violet-700">
+            <Folder className="h-10 w-10" />
+          </div>
 
-      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-violet-100 text-violet-700">
-        <Folder className="h-10 w-10" />
-      </div>
+          <div className="mt-6 text-2xl font-semibold text-foreground">
+            {showOnlyTrashed ? "Trash is empty" : showOnlyFavorites ? "No favorite projects yet" : "No projects yet"}
+          </div>
 
-      <div className="mt-6 text-2xl font-semibold text-foreground">
-        No projects yet
-      </div>
+          <p className="mx-auto mt-3 max-w-xs text-sm text-muted-foreground">
+            {showOnlyTrashed
+              ? "Deleted projects will appear here until you restore or permanently delete them."
+              : showOnlyFavorites
+                ? "Mark projects as favorites to see them here."
+                : "Create your first project to begin building websites with your own pages, widgets, and templates."}
+          </p>
 
-      <p className="mx-auto mt-3 max-w-xs text-sm text-muted-foreground">
-        Create your first project to begin building websites with your own pages,
-        widgets, and templates.
-      </p>
-
-      <div className="mt-6 flex items-center justify-center gap-3">
-        <Button
-          type="button"
-          className=""
-          variant="ghost"
-          onClick={() => {
-            const id = newProject("My Project");
-            navigate({ to: "/editor/$projectId", params: { projectId: id } });
-          }}
-        >
-          <Plus className="h-5 w-5 text-violet-600" />
-          <span className="ml-2">Create Project</span>
-        </Button>
+          {!showOnlyFavorites && !showOnlyTrashed ? (
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <Button
+                type="button"
+                className="my-2 inline-flex items-center justify-center rounded bg-violet-950 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-950/10 transition hover:bg-violet-900 hover:text-white"
+                variant="ghost"
+                onClick={() => {
+                  const id = newProject("My Project");
+                  navigate({ to: "/editor/$projectId", params: { projectId: id } });
+                }}
+              >
+                <Plus className="h-5 w-5 text-white" />
+                Create Project
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -372,15 +441,17 @@ export function MyProjects() {
         <div className="rounded-2xl bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">My Projects</h1>
-              <p className="mt-1 text-sm text-slate-500">Manage all your website projects in one place.</p>
+              <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+              <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
             </div>
 
             <div className="flex items-center gap-4">
-              <Button className="h-12 rounded-lg bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-md hover:brightness-105" onClick={() => { setProjectName("My Project"); setWizardStep(1); setCreateOpen(true); }}>
-                <Plus className="h-4 w-4" />
-                <span className="ml-2">Create New Project</span>
-              </Button>
+              {!hideCreateAction && !showOnlyFavorites && !showOnlyTrashed ? (
+                <Button className="h-12 rounded-lg bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-md hover:brightness-105" onClick={() => { setProjectName("My Project"); setWizardStep(1); setCreateOpen(true); }}>
+                  <Plus className="h-4 w-4" />
+                  <span className="ml-2">Create New Project</span>
+                </Button>
+              ) : null}
             </div>
           </div>
 
@@ -432,16 +503,20 @@ export function MyProjects() {
         </Dialog>
 
         {/* Delete Confirmation */}
-        <AlertDialog open={deleteOpen} onOpenChange={(open) => { if (!open) { setDeleteOpen(false); setActiveProject(null); } }}>
+        <AlertDialog open={deleteOpen} onOpenChange={(open) => { if (!open) { setDeleteOpen(false); setActiveProject(null); setDeleteMode("move-to-trash"); } }}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete project?</AlertDialogTitle>
-              <AlertDialogDescription>Are you sure you want to delete this project? This action cannot be undone.</AlertDialogDescription>
+              <AlertDialogTitle>{deleteMode === "delete-forever" ? "Permanently delete project?" : "Move project to Trash?"}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteMode === "delete-forever"
+                  ? "Are you sure you want to permanently delete this project? This action cannot be undone."
+                  : "This project will be moved to Trash and can be restored later."}
+              </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setDeleteOpen(false); setActiveProject(null); }}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel onClick={() => { setDeleteOpen(false); setActiveProject(null); setDeleteMode("move-to-trash"); }}>Cancel</AlertDialogCancel>
               <AlertDialogAction onClick={handleDeleteConfirm} disabled={deleteLoading}>
-                {deleteLoading ? "Deleting…" : "Delete"}
+                {deleteLoading ? (deleteMode === "delete-forever" ? "Deleting…" : "Moving…") : (deleteMode === "delete-forever" ? "Delete Forever" : "Move to Trash")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -455,7 +530,7 @@ export function MyProjects() {
           const isSelected = projectRecord.id === currentProjectId;
           const pagesCount = Array.isArray(projectRecord.pages) ? projectRecord.pages.length : 0;
           return (
-            <div key={projectRecord.id} className={`group w-full rounded-[20px] border bg-white transition transform hover:-translate-y-1 hover:shadow-xl overflow-hidden`}> 
+            <div key={projectRecord.id} className={`group w-full rounded-[20px] border bg-white transition transform hover:-translate-y-1 hover:shadow-xl overflow-hidden ${showOnlyTrashed ? "cursor-default" : "cursor-pointer"}`}> 
               <div className="relative h-44">
                 {projectRecord.thumbnail ? (
                   <img src={projectRecord.thumbnail} alt={projectRecord.name} className="h-44 w-full object-cover" />
@@ -468,34 +543,48 @@ export function MyProjects() {
                 )}
 
                 <div className="absolute right-3 top-3 flex items-center gap-2">
-                  <button
-                    className="rounded-full bg-white p-2 shadow-sm"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      setLocalProjects((prev: any[]) => prev.map((p) => (p.id === projectRecord.id ? { ...p, favorite: !p.favorite } : p)));
-                      try {
-                        await updateCloudProject(projectRecord.id, { favorite: !projectRecord.favorite });
-                      } catch (err) {
-                        console.error(err);
-                      }
-                    }}
-                  >
-                    <Star className={`h-4 w-4 ${projectRecord.favorite ? "text-yellow-400" : "text-slate-400"}`} />
-                  </button>
+                  {!showOnlyTrashed ? (
+                    <button
+                      className="rounded-full bg-white p-2 shadow-sm transition-transform duration-150"
+                      style={{ transform: animatingFavoriteId === projectRecord.id ? "scale(1.15)" : "scale(1)" }}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await handleToggleFavorite(projectRecord);
+                      }}
+                    >
+                      <Star
+                        className={`h-4 w-4 transition-all duration-200 ${projectRecord.favorite ? "text-yellow-400" : "text-slate-400"}`}
+                        fill={projectRecord.favorite ? "currentColor" : "none"}
+                        strokeWidth={projectRecord.favorite ? 1.8 : 1.8}
+                      />
+                    </button>
+                  ) : null}
 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className="rounded-full bg-white p-2 shadow-sm text-slate-500 hover:bg-slate-100">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent sideOffset={8} align="end" className="w-44">
-                      <DropdownMenuItem onSelect={() => { setActiveProject(projectRecord); setRenameValue(projectRecord.name || ""); setRenameOpen(true); }}>Rename</DropdownMenuItem>
-                      <DropdownMenuItem onSelect={async () => { try { await updateCloudProject(projectRecord.id, { status: "published" }); setLocalProjects((prev: any[]) => prev.map((p) => p.id === projectRecord.id ? { ...p, status: "published" } : p)); } catch (err) { console.error(err); } }}>Publish</DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => handleDuplicateProject(projectRecord)}>Duplicate</DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => { setActiveProject(projectRecord); setDeleteOpen(true); }}>Delete</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {showOnlyTrashed ? (
+                    <div className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-700">
+                      Deleted
+                    </div>
+                  ) : (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="rounded-full bg-white p-2 shadow-sm text-slate-500 hover:bg-slate-100">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent sideOffset={8} align="end" className="w-44">
+                        <DropdownMenuItem onSelect={() => { setActiveProject(projectRecord); setRenameValue(projectRecord.name || ""); setRenameOpen(true); }}>Rename</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={async () => { try { await updateCloudProject(projectRecord.id, { status: "published" }); setLocalProjects((prev: any[]) => prev.map((p) => p.id === projectRecord.id ? { ...p, status: "published" } : p)); } catch (err) { console.error(err); } }}>Publish</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => handleDuplicateProject(projectRecord)}>Duplicate</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => {
+                          setActiveProject(projectRecord);
+                          setDeleteMode(showOnlyTrashed ? "delete-forever" : "move-to-trash");
+                          setDeleteOpen(true);
+                        }}>
+                          {showOnlyTrashed ? "Delete Forever" : "Delete"}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </div>
               </div>
 
@@ -525,39 +614,53 @@ export function MyProjects() {
                 </div>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <Button size="sm" variant="outline" className="h-11 w-full flex items-center justify-center gap-2" onClick={async () => { await loadCloudProject(projectRecord.id); navigate({ to: "/editor/$projectId", params: { projectId: projectRecord.id } }); }}>
-                    <Edit2 className="h-4 w-4" /> Edit
-                  </Button>
-                  <Button size="sm" className="h-11 w-full bg-violet-600 text-white hover:bg-violet-700 flex items-center justify-center gap-2" onClick={async () => { await handlePreviewProject(projectRecord.id); }}>
-                    <Eye className="h-4 w-4" /> Preview
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-11 w-full flex items-center justify-center gap-2" onClick={() => handleExportProject(projectRecord.id)} disabled={exportLoading}>
-                    <Download className="h-4 w-4" /> Export HTML
-                  </Button>
-                  <Button size="sm" variant="destructive" className="h-11 w-full flex items-center justify-center gap-2" onClick={() => { setActiveProject(projectRecord); setDeleteOpen(true); }}>
-                    <Trash2 className="h-4 w-4" /> {deleteLoading && activeProject?.id === projectRecord.id ? "Deleting…" : "Delete"}
-                  </Button>
+                  {showOnlyTrashed ? (
+                    <>
+                      <Button size="sm" variant="outline" className="h-11 w-full flex items-center justify-center gap-2" onClick={() => handleRestoreProject(projectRecord)}>
+                        <Star className="h-4 w-4" /> Restore
+                      </Button>
+                      <Button size="sm" variant="destructive" className="h-11 w-full flex items-center justify-center gap-2" onClick={() => { setActiveProject(projectRecord); setDeleteMode("delete-forever"); setDeleteOpen(true); }}>
+                        <Trash2 className="h-4 w-4" /> Delete Forever
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button size="sm" variant="outline" className="h-11 w-full flex items-center justify-center gap-2" onClick={async () => { await loadCloudProject(projectRecord.id); navigate({ to: "/editor/$projectId", params: { projectId: projectRecord.id } }); }}>
+                        <Edit2 className="h-4 w-4" /> Edit
+                      </Button>
+                      <Button size="sm" className="h-11 w-full bg-violet-600 text-white hover:bg-violet-700 flex items-center justify-center gap-2" onClick={async () => { await handlePreviewProject(projectRecord.id); }}>
+                        <Eye className="h-4 w-4" /> Preview
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-11 w-full flex items-center justify-center gap-2" onClick={() => handleExportProject(projectRecord.id)} disabled={exportLoading}>
+                        <Download className="h-4 w-4" /> Export HTML
+                      </Button>
+                      <Button size="sm" variant="destructive" className="h-11 w-full flex items-center justify-center gap-2" onClick={() => { setActiveProject(projectRecord); setDeleteMode("move-to-trash"); setDeleteOpen(true); }}>
+                        <Trash2 className="h-4 w-4" /> {deleteLoading && activeProject?.id === projectRecord.id ? "Moving…" : "Delete"}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           );
         })}
 
-        {/* Create New Card */}
-        <div className="group w-full rounded-[20px] border-2 border-dashed border-border bg-white transition transform hover:-translate-y-1 hover:shadow-xl flex flex-col items-center justify-center p-6">
-          <div className="h-36 w-full flex items-center justify-center bg-transparent">
-            <div className="flex flex-col items-center justify-center">
-              <div className="h-12 w-12 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center">
-                <Plus className="h-6 w-6" />
-              </div>
-              <h3 className="mt-4 text-lg font-semibold text-slate-900">Create New Project</h3>
-              <p className="mt-1 text-sm text-slate-500">Start building your next amazing website</p>
-              <div className="mt-4">
-                <Button onClick={() => { setProjectName("My Project"); setWizardStep(1); setCreateOpen(true); }} className="bg-gradient-to-r from-violet-600 to-violet-500 text-white">Create New Project</Button>
+        {!showOnlyFavorites && !showOnlyTrashed ? (
+          <div className="group w-full rounded-[20px] border-2 border-dashed border-border bg-white transition transform hover:-translate-y-1 hover:shadow-xl flex flex-col items-center justify-center p-6">
+            <div className="h-36 w-full flex items-center justify-center bg-transparent">
+              <div className="flex flex-col items-center justify-center">
+                <div className="h-12 w-12 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center">
+                  <Plus className="h-6 w-6" />
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-slate-900">Create New Project</h3>
+                <p className="mt-1 text-sm text-slate-500">Start building your next amazing website</p>
+                <div className="mt-4">
+                  <Button onClick={() => { setProjectName("My Project"); setWizardStep(1); setCreateOpen(true); }} className="bg-gradient-to-r from-violet-600 to-violet-500 text-white">Create New Project</Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
     </div>
