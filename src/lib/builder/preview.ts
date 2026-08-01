@@ -1,10 +1,15 @@
-import type { PageSection, Project, PageSeo, ProjectSeo } from "./store";
-import { getImageBlob, type BuilderAssetEntry } from "./image-storage";
+﻿import type { PageSection, Project, PageSeo, ProjectSeo } from "./store";
+import { getImageBlob, getAssetValue, type BuilderAssetEntry } from "./image-storage";
+import { buildBootstrapExport } from "./bootstrapExport";
+import { getWidgetBootstrapExport } from "@/components/builder/widgets/widgetRegistry";
 import appCssUrl from "@/styles.css?url";
 import appCssRaw from "@/styles.css?raw";
 
 export const APP_CSS_HREF = appCssUrl;
 export const APP_CSS_TEXT = appCssRaw;
+const BOOTSTRAP_CSS_HREF = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css";
+const BOOTSTRAP_JS_HREF = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js";
+const FONT_AWESOME_HREF = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css";
 
 function extractCssFromViteRaw(raw: string) {
   const wrapperMatch = raw.match(/const\s+__vite__css\s*=\s*(?:JSON\.parse\()?(?:(['"`]))([\s\S]*?)\1\)?;/);
@@ -198,13 +203,13 @@ function escapeInlineScript(js: string) {
     .replace(/\u2029/g, "\\u2029");
 }
 
+function getGridColumnCount(widgetInstance: { layout?: { columns?: unknown }; content?: { columns?: unknown[] } } | undefined) {
+  const count = Number((widgetInstance as any)?.layout?.columns ?? (widgetInstance as any)?.content?.columns?.length ?? 1);
+  return Math.max(1, Math.min(6, Number.isFinite(count) ? count : 1));
+}
+
 function resolveAssetValue(value: BuilderAssetEntry | string | undefined) {
-  if (typeof value === "string") return value;
-  if (!value) return undefined;
-  if (typeof value.previewSrc === "string" && /^(data:|https?:|blob:)/i.test(value.previewSrc)) return value.previewSrc;
-  if (typeof value.src === "string" && /^(data:|https?:|blob:)/i.test(value.src)) return value.src;
-  if (value.filename) return `images/${value.filename}`;
-  return value.src;
+  return getAssetValue(value);
 }
 
 // Rewrite `images/<filename>` refs with the resolved asset value from the asset map.
@@ -216,6 +221,7 @@ export function resolveAssetPaths(html: string, assets?: Record<string, BuilderA
     if (!data) continue;
     const safeName = normalizeAssetRef(name);
     const variants = [
+      `builder://images/${safeName}`,
       `images/${safeName}`,
       `/${safeName}`,
       `./images/${safeName}`,
@@ -242,6 +248,13 @@ export function resolvePageLinks(html: string, pages: { id: string; slug: string
 }
 
 export const RUNTIME_CSS = `
+.builder-editor-only,
+[data-builder-editor-only="1"] { display: none !important; }
+body[data-builder-edit-mode="1"] .builder-editor-only,
+body[data-builder-edit-mode="1"] [data-builder-editor-only="1"] { display: flex !important; }
+body[data-builder-edit-mode="1"] .builder-editor-only.inline-flex,
+body[data-builder-edit-mode="1"] [data-builder-editor-only="1"].inline-flex { display: inline-flex !important; }
+
 details > summary { list-style: none; }
 details > summary::-webkit-details-marker { display: none; }
 details > summary .wto-chevron { transition: transform .25s ease; display: inline-block; }
@@ -353,6 +366,21 @@ div:has(nav) { position: relative; z-index: 9999; }
 [data-anim="slide-left"].wto-in { animation-name: wto-slide-left; }
 [data-anim="slide-right"].wto-in { animation-name: wto-slide-right; }
 [data-anim="zoom-in"].wto-in { animation-name: wto-zoom-in; }
+
+.wto-container-drop-target {
+  outline: 2px solid rgba(99, 102, 241, 0.35);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.14), 0 14px 38px rgba(99, 102, 241, 0.12);
+  border-radius: 16px;
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.wto-container-drop-indicator {
+  height: 3px;
+  border-radius: 9999px;
+  margin: 10px 0;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.95), rgba(129, 140, 248, 0.68));
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
+}
 [data-anim="zoom-out"].wto-in { animation-name: wto-zoom-out; }
 [data-anim="flip"].wto-in { animation-name: wto-flip; }
 [data-anim="bounce"].wto-in { animation-name: wto-bounce; }
@@ -381,6 +409,12 @@ export const RUNTIME_SCRIPT = `
   const send = (type, payload) => parent.postMessage({ __wto: true, type, payload }, '*');
 
   // Placeholder insertion to reserve space when dragging a new widget/section
+  function clearContainerDropState() {
+    document.querySelectorAll('[data-container-widget-id]').forEach((el) => el.classList.remove('wto-container-drop-target'));
+    document.querySelectorAll('.wto-container-drop-indicator').forEach((el) => el.remove());
+    try { parent.postMessage({ __wto: true, type: 'container-drop-target', payload: { containerId: null, insertIndex: null } }, '*'); } catch (_) {}
+  }
+
   function removeDropPlaceholder() {
     const existing = document.getElementById('__wto_drop_placeholder');
     if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
@@ -432,19 +466,75 @@ export const RUNTIME_SCRIPT = `
     return ph;
   }
 
-  function showDropTarget(y) {
+  function showDropTarget(y, widgetId) {
     try {
       removeDropPlaceholder();
+      clearContainerDropState();
+
+      const supportedChildTypes = new Set(['heading', 'text', 'button', 'image']);
+      const isSupportedChildWidget = !!widgetId && supportedChildTypes.has(String(widgetId).replace(/-v\d+$/, ''));
       const el = document.elementFromPoint(10, Number(y) || 0);
+      const containerEl = el && el.closest && el.closest('[data-container-widget-id]');
+      if (isSupportedChildWidget && containerEl) {
+        const containerId = containerEl.getAttribute('data-container-widget-id');
+        const childWrappers = Array.from(containerEl.querySelectorAll('[data-container-child-wrapper="1"]'));
+        let insertIndex = childWrappers.length;
+        let targetWrapper = null;
+        let position = 'after';
+
+        if (childWrappers.length) {
+          const rects = childWrappers.map((wrapper) => ({ wrapper, rect: wrapper.getBoundingClientRect() }));
+          const target = rects.find((entry) => {
+            const rect = entry.rect;
+            return Number(y) >= rect.top && Number(y) <= rect.bottom;
+          });
+
+          if (target) {
+            targetWrapper = target.wrapper;
+            const rect = target.rect;
+            const midpoint = rect.top + rect.height / 2;
+            position = Number(y) < midpoint ? 'before' : 'after';
+            insertIndex = Number(targetWrapper.getAttribute('data-container-child-index')) + (position === 'before' ? 0 : 1);
+          } else {
+            const nearest = rects.reduce((best, entry) => {
+              const currentDistance = Math.abs((entry.rect.top + entry.rect.height / 2) - Number(y));
+              const bestDistance = best ? Math.abs((best.rect.top + best.rect.height / 2) - Number(y)) : Infinity;
+              return currentDistance < bestDistance ? entry : best;
+            }, null);
+            if (nearest) {
+              targetWrapper = nearest.wrapper;
+              const rect = nearest.rect;
+              const midpoint = rect.top + rect.height / 2;
+              position = Number(y) < midpoint ? 'before' : 'after';
+              insertIndex = Number(nearest.wrapper.getAttribute('data-container-child-index')) + (position === 'before' ? 0 : 1);
+            }
+          }
+        }
+
+        containerEl.classList.add('wto-container-drop-target');
+        const indicator = document.createElement('div');
+        indicator.className = 'wto-container-drop-indicator';
+        if (targetWrapper && targetWrapper.parentNode) {
+          if (position === 'before') {
+            targetWrapper.parentNode.insertBefore(indicator, targetWrapper);
+          } else {
+            targetWrapper.parentNode.insertBefore(indicator, targetWrapper.nextSibling);
+          }
+        } else {
+          containerEl.appendChild(indicator);
+        }
+
+        try { parent.postMessage({ __wto: true, type: 'container-drop-target', payload: { containerId, insertIndex } }, '*'); } catch (_) {}
+        return;
+      }
+
       const sec = el && el.closest && el.closest('[data-wto-section]');
       if (!sec) {
-        // no obvious section; append placeholder at end
         const secs = document.querySelectorAll('[data-wto-section]');
         if (secs.length) {
           const last = secs[secs.length - 1];
           insertDropPlaceholderAfter(last);
         } else {
-          // insert at top of body
           const first = document.body.firstElementChild;
           if (first) insertDropPlaceholderBefore(first);
           else document.body.appendChild(document.createElement('div'));
@@ -462,15 +552,23 @@ export const RUNTIME_SCRIPT = `
 
   function hideDropTarget() {
     removeDropPlaceholder();
+    clearContainerDropState();
   }
 
   window.addEventListener('message', (event) => {
     const data = event.data;
     if (!data || !data.__wto || typeof data.type !== 'string') return;
     if (data.type === 'show-drop-target') {
-      showDropTarget(Number(data.payload?.y ?? 0));
+      showDropTarget(Number(data.payload?.y ?? 0), data.payload?.widgetId ? String(data.payload.widgetId) : null);
     } else if (data.type === 'hide-drop-target') {
       hideDropTarget();
+    } else if (data.type === 'set-selected-section') {
+      try {
+        const sid = String(data.payload?.sectionId ?? '');
+        if (typeof window.__wtoSelect === 'function') {
+          window.__wtoSelect(sid || '');
+        }
+      } catch (_) {}
     } else if (data.type === 'show-upload-target') {
       try {
         const sid = String(data.payload?.sectionId || '');
@@ -565,30 +663,199 @@ export const RUNTIME_SCRIPT = `
   }
 
   function resolveElementSelection(target) {
-    if (!target) return { elementKind: 'section', index: null, tag: null };
+    if (!target) return { elementKind: 'section', index: null, tag: null, sectionId: null, widgetId: null, widgetType: null, parentWidgetId: null, childId: null, elementKey: null, elementType: null };
     const section = target.closest && target.closest('[data-wto-section]');
+    const widgetRoot = target.closest && target.closest('[data-wto-widget-root], [data-widget-id]');
+    const sectionWidgetRoot = section ? section.querySelector('[data-wto-widget-root]') : null;
+    const rootWidgetId = widgetRoot ? widgetRoot.getAttribute('data-widget-id') : null;
+    const rootWidgetType = widgetRoot ? widgetRoot.getAttribute('data-widget') : null;
+
+    const widgetElement = target.closest && target.closest('[data-wto-widget-element-key]');
+    if (widgetElement) {
+      const root = widgetElement.closest && widgetElement.closest('[data-widget-id], [data-wto-widget-root]');
+      const containerChildWrapper = target.closest && target.closest('[data-container-parent-widget-id],[data-wto-parent-widget-id]');
+      const columnWrapper = target.closest && target.closest('[data-grid-column-id]');
+      const columnId = (columnWrapper && columnWrapper.getAttribute('data-grid-column-id')) || null;
+      const parentWidgetId = containerChildWrapper
+        ? containerChildWrapper.getAttribute('data-container-parent-widget-id') || containerChildWrapper.getAttribute('data-wto-parent-widget-id')
+        : (root ? root.getAttribute('data-widget-id') : null);
+      const childId = containerChildWrapper
+        ? containerChildWrapper.getAttribute('data-container-child-id') || containerChildWrapper.getAttribute('data-wto-child-id')
+        : null;
+      return {
+        sectionId: section ? section.dataset.wtoSection : null,
+        elementKind: 'widget',
+        index: null,
+        tag: widgetElement.tagName ? widgetElement.tagName.toLowerCase() : null,
+        widgetId: root ? root.getAttribute('data-widget-id') : null,
+        widgetType: root ? root.getAttribute('data-widget') : null,
+        parentWidgetId,
+        childId,
+        elementKey: childId || widgetElement.getAttribute('data-wto-widget-element-key'),
+        elementType: widgetElement.getAttribute('data-wto-widget-element-type') || null,
+        columnId,
+      };
+    }
+    const childWrapper = target.closest && target.closest('[data-container-parent-widget-id],[data-wto-parent-widget-id]');
+    if (childWrapper) {
+      const widgetRootForChild = childWrapper.closest && childWrapper.closest('[data-widget-id], [data-wto-widget-root]');
+      const wrapperChildId = childWrapper.getAttribute('data-container-child-id') || childWrapper.getAttribute('data-wto-child-id');
+      const wrapperElementKey = childWrapper.getAttribute('data-wto-widget-element-key') || wrapperChildId;
+      const parentWidgetIdFromAttr = childWrapper.getAttribute('data-container-parent-widget-id') || childWrapper.getAttribute('data-wto-parent-widget-id');
+      const columnId = childWrapper.getAttribute('data-grid-column-id') || null;
+      const result = {
+        sectionId: section ? section.dataset.wtoSection : null,
+        elementKind: 'widget',
+        index: null,
+        tag: childWrapper.tagName ? childWrapper.tagName.toLowerCase() : null,
+        widgetId: parentWidgetIdFromAttr,
+        widgetType: widgetRootForChild ? widgetRootForChild.getAttribute('data-widget') : null,
+        parentWidgetId: parentWidgetIdFromAttr,
+        childId: wrapperChildId,
+        elementKey: wrapperElementKey,
+        elementType: childWrapper.getAttribute('data-wto-widget-element-type') || null,
+        columnId,
+      };
+      console.log('resolveElementSelection -> child wrapper detected', result);
+      return result;
+    }
+    const sectionEl = target.closest && target.closest('[data-wto-section]');
     const tag = target.tagName ? target.tagName.toLowerCase() : null;
     const img = target.closest && target.closest('img');
     if (img) {
+      const childWrapper = img.closest && img.closest('[data-container-parent-widget-id],[data-wto-parent-widget-id]');
+      if (childWrapper) {
+        const parentWidgetIdFromAttr = childWrapper.getAttribute('data-container-parent-widget-id') || childWrapper.getAttribute('data-wto-parent-widget-id');
+        const wrapperChildId = childWrapper.getAttribute('data-container-child-id') || childWrapper.getAttribute('data-wto-child-id');
+        const columnId = childWrapper.getAttribute('data-grid-column-id') || null;
+        return {
+          sectionId: section ? section.dataset.wtoSection : null,
+          elementKind: 'widget',
+          index: null,
+          tag: childWrapper.tagName ? childWrapper.tagName.toLowerCase() : null,
+          widgetId: parentWidgetIdFromAttr,
+          widgetType: childWrapper.closest('[data-widget-id]')?.getAttribute('data-widget') || null,
+          parentWidgetId: parentWidgetIdFromAttr,
+          childId: wrapperChildId,
+          elementKey: wrapperChildId,
+          elementType: childWrapper.getAttribute('data-wto-widget-element-type') || 'image',
+        };
+      }
       const idx = img.getAttribute('data-wto-image-index');
-      return { sectionId: section ? section.dataset.wtoSection : null, elementKind: 'image', index: idx != null ? Number(idx) : null, tag: 'img' };
+      return {
+        sectionId: sectionEl ? sectionEl.dataset.wtoSection : null,
+        elementKind: 'image',
+        index: idx != null ? Number(idx) : null,
+        tag: 'img',
+        widgetId: rootWidgetId,
+        widgetType: rootWidgetType,
+        parentWidgetId: null,
+        childId: null,
+        elementKey: null,
+        elementType: null,
+      };
     }
     const link = target.closest && target.closest('a,button');
     if (link) {
+      console.log('link detected', { link: link.outerHTML.substring(0, 100), target: target.outerHTML.substring(0, 100) });
+      const childWrapper = link.closest && link.closest('[data-container-parent-widget-id],[data-wto-parent-widget-id]');
+      console.log('childWrapper search result', { found: !!childWrapper, wrapper: childWrapper?.outerHTML.substring(0, 100) });
+      if (childWrapper) {
+        const parentWidgetIdFromAttr = childWrapper.getAttribute('data-container-parent-widget-id') || childWrapper.getAttribute('data-wto-parent-widget-id');
+        const wrapperChildId = childWrapper.getAttribute('data-container-child-id') || childWrapper.getAttribute('data-wto-child-id');
+        const columnId = childWrapper.getAttribute('data-grid-column-id') || null;
+        console.log('child wrapper found!', { parentWidgetIdFromAttr, wrapperChildId });
+        return {
+          sectionId: section ? section.dataset.wtoSection : null,
+          elementKind: 'widget',
+          index: null,
+          tag: childWrapper.tagName ? childWrapper.tagName.toLowerCase() : null,
+          widgetId: parentWidgetIdFromAttr,
+          widgetType: childWrapper.closest('[data-widget-id]')?.getAttribute('data-widget') || null,
+          parentWidgetId: parentWidgetIdFromAttr,
+          childId: wrapperChildId,
+          elementKey: wrapperChildId,
+          elementType: childWrapper.getAttribute('data-wto-widget-element-type') || 'button',
+        };
+      }
       const idx = link.getAttribute('data-wto-link-index');
-      return { sectionId: section ? section.dataset.wtoSection : null, elementKind: 'link', index: idx != null ? Number(idx) : null, tag: link.tagName ? link.tagName.toLowerCase() : null };
+      return {
+        sectionId: sectionEl ? sectionEl.dataset.wtoSection : null,
+        elementKind: 'link',
+        index: idx != null ? Number(idx) : null,
+        tag: link.tagName ? link.tagName.toLowerCase() : null,
+        widgetId: rootWidgetId,
+        widgetType: rootWidgetType,
+        parentWidgetId: null,
+        childId: null,
+        elementKey: null,
+        elementType: null,
+      };
     }
     const textEl = findEditableTextTarget(target);
     if (textEl) {
+      const childWrapper = textEl.closest && textEl.closest('[data-container-parent-widget-id],[data-wto-parent-widget-id]');
+      if (childWrapper) {
+        const parentWidgetIdFromAttr = childWrapper.getAttribute('data-container-parent-widget-id') || childWrapper.getAttribute('data-wto-parent-widget-id');
+        const wrapperChildId = childWrapper.getAttribute('data-container-child-id') || childWrapper.getAttribute('data-wto-child-id');
+        return {
+          sectionId: section ? section.dataset.wtoSection : null,
+          elementKind: 'widget',
+          index: null,
+          tag: childWrapper.tagName ? childWrapper.tagName.toLowerCase() : null,
+          widgetId: parentWidgetIdFromAttr,
+          widgetType: childWrapper.closest('[data-widget-id]')?.getAttribute('data-widget') || null,
+          parentWidgetId: parentWidgetIdFromAttr,
+          childId: wrapperChildId,
+          elementKey: wrapperChildId,
+          elementType: childWrapper.getAttribute('data-wto-widget-element-type') || 'text',
+        };
+      }
       const idx = textEl.getAttribute('data-wto-text-index');
-      return { sectionId: section ? section.dataset.wtoSection : null, elementKind: 'text', index: idx != null ? Number(idx) : null, tag: textEl.tagName ? textEl.tagName.toLowerCase() : null };
+      return {
+        sectionId: sectionEl ? sectionEl.dataset.wtoSection : null,
+        elementKind: 'text',
+        index: idx != null ? Number(idx) : null,
+        tag: textEl.tagName ? textEl.tagName.toLowerCase() : null,
+        widgetId: rootWidgetId,
+        widgetType: rootWidgetType,
+        parentWidgetId: null,
+        childId: null,
+        elementKey: null,
+        elementType: null,
+      };
     }
     const containerEl = target.closest && target.closest('div,section,article,aside,main,header,footer,ul,ol,li,form,figure,figcaption,table,tr,td,th');
-    if (containerEl && containerEl !== section && containerEl !== document.body && containerEl !== document.documentElement) {
+    if (containerEl && containerEl !== sectionEl && containerEl !== document.body && containerEl !== document.documentElement) {
       const idx = containerEl.getAttribute('data-wto-idx');
-      return { sectionId: section ? section.dataset.wtoSection : null, elementKind: 'container', index: idx != null ? Number(idx) : null, tag: containerEl.tagName ? containerEl.tagName.toLowerCase() : tag };
+      return {
+        sectionId: sectionEl ? sectionEl.dataset.wtoSection : null,
+        elementKind: 'container',
+        index: idx != null ? Number(idx) : null,
+        tag: containerEl.tagName ? containerEl.tagName.toLowerCase() : tag,
+        widgetId: rootWidgetId,
+        widgetType: rootWidgetType,
+        parentWidgetId: null,
+        childId: null,
+        elementKey: null,
+        elementType: null,
+      };
     }
-    return { sectionId: section ? section.dataset.wtoSection : null, elementKind: 'section', index: null, tag };
+    if (sectionWidgetRoot) {
+      return {
+        sectionId: section ? section.dataset.wtoSection : null,
+        elementKind: 'widget',
+        index: null,
+        tag: sectionWidgetRoot.tagName ? sectionWidgetRoot.tagName.toLowerCase() : null,
+        widgetId: sectionWidgetRoot.getAttribute('data-widget-id') || null,
+        widgetType: sectionWidgetRoot.getAttribute('data-widget') || null,
+        parentWidgetId: null,
+        childId: null,
+        elementKey: null,
+        elementType: null,
+      };
+    }
+    return { sectionId: sectionEl ? sectionEl.dataset.wtoSection : null, elementKind: 'section', index: null, tag, widgetId: null, widgetType: null, parentWidgetId: null, childId: null, elementKey: null, elementType: null };
   }
 
   function getSelectionTargetElement(target) {
@@ -626,6 +893,42 @@ export const RUNTIME_SCRIPT = `
 
   function clearElementSelectionHighlight() {
     document.querySelectorAll('.wto-element-selected').forEach(el => el.classList.remove('wto-element-selected'));
+  }
+
+  function clearDuplicateControls() {
+    document.querySelectorAll('.wto-duplicate-control').forEach(el => el.remove());
+  }
+
+  function applyDuplicateControl(target) {
+    clearDuplicateControls();
+    if (!target || !(target instanceof Element)) return null;
+    const host = target.closest && target.closest('img, a, button, h1, h2, h3, h4, h5, h6, p, li, span, strong, em, b, i, small, blockquote, cite, label, div, section, article, aside, main, header, footer, ul, ol, form, figure, figcaption, table, tr, td, th');
+    if (!host) return null;
+    const rect = host.getBoundingClientRect();
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'wto-duplicate-control';
+    btn.setAttribute('aria-label', 'Duplicate element');
+    btn.innerHTML = '<i class="fa-solid fa-copy"></i>';
+    btn.style.cssText = 'position:fixed;left:' + Math.max(8, Math.min(window.innerWidth - 36, rect.right + 8)) + 'px;top:' + Math.max(8, Math.min(window.innerHeight - 36, rect.top + 8)) + 'px;z-index:10005;width:28px;height:28px;border:0;border-radius:9999px;background:#fff;color:#111827;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(15,23,42,0.14);cursor:pointer;pointer-events:auto;';
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const section = host.closest('[data-wto-section]');
+      const widgetElement = host.closest('[data-wto-widget-element-key]');
+      const widgetRoot = widgetElement?.closest('[data-widget-id], [data-wto-widget-root]');
+      send('element-duplicate', {
+        sectionId: section?.dataset.wtoSection ?? null,
+        widgetId: widgetRoot?.getAttribute('data-widget-id') ?? null,
+        elementKey: widgetElement?.getAttribute('data-wto-widget-element-key') ?? null,
+        elementType: widgetElement?.getAttribute('data-wto-widget-element-type') ?? null,
+        kind: widgetElement ? 'widget' : 'text',
+        index: host.getAttribute('data-wto-text-index') ?? host.getAttribute('data-wto-image-index') ?? host.getAttribute('data-wto-link-index') ?? null,
+        tag: host.tagName ? host.tagName.toLowerCase() : null,
+      });
+    });
+    document.body.appendChild(btn);
+    return btn;
   }
 
   function applyElementSelectionHighlight(target) {
@@ -728,18 +1031,456 @@ export const RUNTIME_SCRIPT = `
   // Inline section toolbar
   const tb = document.createElement('div');
   tb.id = '__wto_tb';
-  tb.style.cssText = 'position:fixed;z-index:10003;display:none;gap:2px;background:#0f172a;color:#fff;border-radius:8px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.3);font:14px system-ui;';
+  tb.style.cssText = 'position:fixed;z-index:10003;display:none;gap:4px;background:rgba(15,23,42,0.96);color:#fff;border-radius:14px;padding:6px 8px;box-shadow:0 14px 40px rgba(15,23,42,0.28);font:0/0 a;pointer-events:auto;';
   const btns = [
-    ['up','↑','Move up'], ['down','↓','Move down'],
-    ['top','⤒','Move to top'], ['bottom','⤓','Move to bottom'],
-    ['dup','⧉','Duplicate'], ['del','🗑','Delete'],
+    ['move-up','fa-solid fa-arrow-up','Move Up'],
+    ['move-down','fa-solid fa-arrow-down','Move Down'],
+    ['dup','fa-solid fa-clone','Duplicate'],
+    ['add','fa-solid fa-plus','Add Element'],
+    ['del','fa-solid fa-trash','Delete'],
   ];
-  tb.innerHTML = btns.map(b => '<button data-act="'+b[0]+'" title="'+b[2]+'" style="all:unset;padding:4px 8px;border-radius:4px;cursor:pointer;color:#fff;">'+b[1]+'</button>').join('');
+  tb.innerHTML = btns.map(b => '<button data-act="'+b[0]+'" title="'+b[2]+'" style="all:unset;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;cursor:pointer;color:#e2e8f0;background:rgba(255,255,255,0.06);border:1px solid rgba(148,163,184,0.16);transition:background .15s ease;color:#f8fafc;"><i class="'+b[1]+'" style="font-size:14px;width:16px;text-align:center"></i></button>').join('');
   document.body.appendChild(tb);
+  const styleControlWrapper = document.createElement('div');
+  styleControlWrapper.style.cssText = 'display:none;align-items:center;gap:6px;padding:0 4px;';
+  const toolbarButtonCss = 'all:unset;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;cursor:pointer;color:#f8fafc;background:rgba(255,255,255,0.06);border:1px solid rgba(148,163,184,0.16);transition:background .15s ease, transform .15s ease;position:relative;';
+  const gridColumnsButton = document.createElement('button');
+  gridColumnsButton.type = 'button';
+  gridColumnsButton.dataset.act = 'grid-columns';
+  gridColumnsButton.setAttribute('aria-label', 'Grid columns');
+  gridColumnsButton.style.cssText = toolbarButtonCss;
+  gridColumnsButton.innerHTML = '<i class="fa-solid fa-table-columns" style="font-size:14px;width:16px;text-align:center"></i>';
+  const fontFamilyButton = document.createElement('button');
+  fontFamilyButton.type = 'button';
+  fontFamilyButton.dataset.act = 'font-family';
+  fontFamilyButton.setAttribute('aria-label', 'Font family');
+  fontFamilyButton.style.cssText = toolbarButtonCss;
+  fontFamilyButton.innerHTML = '<i class="fa-solid fa-font" style="font-size:14px;width:16px;text-align:center"></i>';
+  const fontSizeButton = document.createElement('button');
+  fontSizeButton.type = 'button';
+  fontSizeButton.dataset.act = 'font-size';
+  fontSizeButton.setAttribute('aria-label', 'Font size');
+  fontSizeButton.style.cssText = toolbarButtonCss;
+  fontSizeButton.innerHTML = '<i class="fa-solid fa-text-height" style="font-size:14px;width:16px;text-align:center"></i>';
+  const fontColorButton = document.createElement('button');
+  fontColorButton.type = 'button';
+  fontColorButton.dataset.act = 'font-color';
+  fontColorButton.setAttribute('aria-label', 'Text color');
+  fontColorButton.style.cssText = toolbarButtonCss + 'padding-bottom:2px;';
+  fontColorButton.innerHTML = '<i class="fa-solid fa-palette" style="font-size:14px;width:16px;text-align:center"></i>';
+  const colorIndicator = document.createElement('span');
+  colorIndicator.style.cssText = 'position:absolute;left:50%;bottom:5px;transform:translateX(-50%);width:12px;height:12px;border-radius:9999px;border:1px solid rgba(255,255,255,0.8);background:#111827;';
+  fontColorButton.appendChild(colorIndicator);
+  styleControlWrapper.appendChild(fontFamilyButton);
+  styleControlWrapper.appendChild(fontSizeButton);
+  styleControlWrapper.appendChild(fontColorButton);
+  const deleteButton = tb.querySelector('[data-act="del"]');
+  if (deleteButton) {
+    tb.insertBefore(styleControlWrapper, deleteButton);
+    tb.insertBefore(gridColumnsButton, deleteButton);
+  } else {
+    tb.appendChild(styleControlWrapper);
+    tb.appendChild(gridColumnsButton);
+  }
+
+  const fontFamilyOptions = [
+    { label: 'Inter', value: 'Inter, ui-sans-serif, system-ui, sans-serif' },
+    { label: 'Arial', value: 'Arial, sans-serif' },
+    { label: 'Helvetica', value: 'Helvetica, Arial, sans-serif' },
+    { label: 'Georgia', value: 'Georgia, serif' },
+    { label: 'Times New Roman', value: 'Times New Roman, serif' },
+    { label: 'Poppins', value: 'Poppins, ui-sans-serif, system-ui, sans-serif' },
+  ];
+  const fontSizeOptions = ['12px','14px','16px','18px','20px','24px','28px','32px','40px','48px','56px','64px'];
+  const colorPalette = ['#111827', '#374151', '#6b7280', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ffffff'];
+
+  const popoverCommonCss = 'position:fixed;display:none;z-index:10006;min-width:180px;max-width:220px;border-radius:8px;border:1px solid rgba(15,23,42,0.12);background:#ffffff;color:#111827;box-shadow:0 18px 45px rgba(15,23,42,0.12);padding:12px;gap:8px;font:14px/1.4 system-ui;max-height:min(320px, calc(100vh - 24px));overflow-y:auto;overflow-x:hidden;';
+  const fontFamilyPopover = document.createElement('div');
+  fontFamilyPopover.className = '__wto-popup';
+  fontFamilyPopover.style.cssText = popoverCommonCss;
+  const fontSizePopover = document.createElement('div');
+  fontSizePopover.className = '__wto-popup';
+  fontSizePopover.style.cssText = popoverCommonCss;
+  const fontColorPopover = document.createElement('div');
+  fontColorPopover.className = '__wto-popup';
+  fontColorPopover.style.cssText = popoverCommonCss;
+  const gridColumnsPopover = document.createElement('div');
+  gridColumnsPopover.className = '__wto-popup';
+  gridColumnsPopover.style.cssText = popoverCommonCss;
+
+  function createPopoverTitle(text) {
+    const title = document.createElement('div');
+    title.textContent = text;
+    title.style.cssText = 'font-size:12px;font-weight:600;color:#111827;margin-bottom:8px;';
+    return title;
+  }
+
+  function createOptionButton(label, styleText, isActive) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.style.cssText = 'all:unset;display:flex;align-items:center;width:100%;padding:8px 10px;border-radius:8px;text-align:left;color:#111827;cursor:pointer;background:' + (isActive ? 'rgba(59,130,246,0.12)' : 'transparent') + ';font:13px/1.3 system-ui;';
+    button.onmouseover = () => button.style.background = isActive ? 'rgba(59,130,246,0.16)' : 'rgba(15,23,42,0.04)';
+    button.onmouseout = () => button.style.background = isActive ? 'rgba(59,130,246,0.12)' : 'transparent';
+    button.textContent = label;
+    if (styleText) button.style.fontFamily = styleText;
+    return button;
+  }
+
+  function createColorSwatch(color, isActive) {
+    const swatch = document.createElement('button');
+    swatch.type = 'button';
+    swatch.style.cssText = 'all:unset;width:28px;height:28px;border-radius:9999px;margin:0 4px 4px 0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;border:' + (color === '#ffffff' ? '1px solid #d1d5db' : '1px solid transparent') + ';background:' + color + ';';
+    const dot = document.createElement('span');
+    dot.style.cssText = 'width:16px;height:16px;border-radius:9999px;background:' + color + ';box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);';
+    swatch.appendChild(dot);
+    if (isActive) {
+      swatch.style.boxShadow = '0 0 0 2px rgba(59,130,246,0.24)';
+    }
+    swatch.dataset.color = color;
+    return swatch;
+  }
+
+  function hideAllPopovers() {
+    fontFamilyPopover.style.display = 'none';
+    fontSizePopover.style.display = 'none';
+    fontColorPopover.style.display = 'none';
+    gridColumnsPopover.style.display = 'none';
+    fontFamilyButton.style.background = toolbarButtonCss;
+    fontSizeButton.style.background = toolbarButtonCss;
+    fontColorButton.style.background = toolbarButtonCss;
+    gridColumnsButton.style.background = toolbarButtonCss;
+  }
+
+  function positionPopover(button, popover) {
+    const rect = button.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const left = Math.min(viewportWidth - 240, Math.max(8, rect.left));
+    const maxHeight = Math.max(180, Math.min(320, viewportHeight - 24));
+    popover.style.left = left + 'px';
+    popover.style.maxHeight = maxHeight + 'px';
+    popover.style.overflowY = 'auto';
+    popover.style.overflowX = 'hidden';
+    popover.style.display = 'flex';
+    popover.style.flexDirection = 'column';
+    popover.style.visibility = 'hidden';
+    const contentHeight = popover.scrollHeight || popover.offsetHeight || 220;
+    const availableBelow = viewportHeight - rect.bottom - 8;
+    const availableAbove = rect.top - 8;
+    const shouldOpenAbove = availableBelow < contentHeight + 8 && availableAbove > availableBelow;
+    const top = shouldOpenAbove
+      ? Math.max(8, rect.top - Math.min(contentHeight, maxHeight) - 8)
+      : Math.min(viewportHeight - Math.min(contentHeight, maxHeight) - 8, rect.bottom + 8);
+    popover.style.top = top + 'px';
+    popover.style.visibility = 'visible';
+  }
+
+  function applyFontFamily(family) {
+    sendElementStyleUpdate({ fontFamily: family });
+    hideAllPopovers();
+  }
+
+  function applyFontSize(size) {
+    sendElementStyleUpdate({ fontSize: size });
+    hideAllPopovers();
+  }
+
+  function applyFontColor(color) {
+    sendElementStyleUpdate({ color });
+    updateColorIndicator(color);
+  }
+
+  function updateColorIndicator(color) {
+    colorIndicator.style.background = color || '#111827';
+    colorIndicator.style.border = color === '#ffffff' ? '1px solid #9ca3af' : '1px solid rgba(255,255,255,0.8)';
+  }
+
+  function renderFontFamilyPopover(currentFamily) {
+    fontFamilyPopover.innerHTML = '';
+    fontFamilyPopover.appendChild(createPopoverTitle('Font family'));
+    fontFamilyOptions.forEach((option) => {
+      const isActive = option.value === currentFamily;
+      const item = createOptionButton(option.label, option.value, isActive);
+      item.addEventListener('click', () => applyFontFamily(option.value));
+      fontFamilyPopover.appendChild(item);
+    });
+  }
+
+  function renderFontSizePopover(currentSize) {
+    fontSizePopover.innerHTML = '';
+    fontSizePopover.appendChild(createPopoverTitle('Font size'));
+    fontSizeOptions.forEach((value) => {
+      const isActive = value === currentSize;
+      const item = createOptionButton(value, '', isActive);
+      item.addEventListener('click', () => applyFontSize(value));
+      fontSizePopover.appendChild(item);
+    });
+  }
+
+  function renderFontColorPopover(currentColor) {
+    fontColorPopover.innerHTML = '';
+    fontColorPopover.appendChild(createPopoverTitle('Text color'));
+    const currentRow = document.createElement('div');
+    currentRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px;';
+    const currentLabel = document.createElement('div');
+    currentLabel.textContent = 'Current';
+    currentLabel.style.cssText = 'font-size:12px;color:#6b7280;';
+    const currentSwatch = document.createElement('div');
+    currentSwatch.style.cssText = 'width:28px;height:28px;border-radius:9999px;background:' + currentColor + ';border:' + (currentColor === '#ffffff' ? '1px solid #d1d5db' : '1px solid transparent') + ';box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);';
+    currentRow.appendChild(currentLabel);
+    currentRow.appendChild(currentSwatch);
+    fontColorPopover.appendChild(currentRow);
+
+    const paletteRow = document.createElement('div');
+    paletteRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;';
+    colorPalette.forEach((color) => {
+      const swatch = createColorSwatch(color, color === currentColor);
+      swatch.addEventListener('click', () => {
+        applyFontColor(color);
+        renderFontColorPopover(color);
+      });
+      paletteRow.appendChild(swatch);
+    });
+    fontColorPopover.appendChild(paletteRow);
+
+    const inputRow = document.createElement('div');
+    inputRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const colorPicker = document.createElement('input');
+    colorPicker.type = 'color';
+    colorPicker.value = currentColor || '#111827';
+    colorPicker.style.cssText = 'width:36px;height:36px;border:none;padding:0;background:transparent;cursor:pointer;';
+    const hexInput = document.createElement('input');
+    hexInput.type = 'text';
+    hexInput.value = currentColor || '#111827';
+    hexInput.style.cssText = 'flex:1;min-width:80px;height:36px;padding:0 10px;border:1px solid #d1d5db;border-radius:10px;background:#f9fafb;color:#111827;font:13px/1.4 system-ui;';
+    hexInput.setAttribute('aria-label', 'Hex color');
+    colorPicker.addEventListener('input', () => {
+      const next = String(colorPicker.value || '#111827');
+      hexInput.value = next;
+      applyFontColor(next);
+      renderFontColorPopover(next);
+    });
+    hexInput.addEventListener('change', () => {
+      const next = String(hexInput.value || '#111827');
+      colorPicker.value = next;
+      applyFontColor(next);
+      renderFontColorPopover(next);
+    });
+    inputRow.appendChild(colorPicker);
+    inputRow.appendChild(hexInput);
+    fontColorPopover.appendChild(inputRow);
+  }
+
+  function openPopover(button, popover, currentValue) {
+    hideAllPopovers();
+    button.style.background = 'rgba(255,255,255,0.16)';
+    if (popover === fontFamilyPopover) renderFontFamilyPopover(currentValue || '');
+    if (popover === fontSizePopover) renderFontSizePopover(currentValue || '');
+    if (popover === fontColorPopover) renderFontColorPopover(currentValue || '#111827');
+    if (popover === gridColumnsPopover) renderGridColumnsPopover(currentValue || 2);
+    positionPopover(button, popover);
+  }
+
+  function normalizeColor(value) {
+    if (!value) return '#111827';
+    if (value.startsWith('#')) return value;
+    const rgb = /^rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)\)/i.exec(value);
+    if (rgb) {
+      const r = Number(rgb[1]).toString(16).padStart(2, '0');
+      const g = Number(rgb[2]).toString(16).padStart(2, '0');
+      const b = Number(rgb[3]).toString(16).padStart(2, '0');
+      return '#' + r + g + b;
+    }
+    return '#111827';
+  }
+
+  function setStyleControlValues(style) {
+    if (!style) return;
+    const family = String(style.fontFamily || '');
+    const size = String(style.fontSize || '');
+    const color = normalizeColor(String(style.color || '#111827'));
+    fontFamilyButton.dataset.currentValue = family;
+    fontSizeButton.dataset.currentValue = size;
+    fontColorButton.dataset.currentValue = color;
+    updateColorIndicator(color);
+  }
+
+  function renderGridColumnsPopover(currentCount) {
+    gridColumnsPopover.innerHTML = '';
+    const title = createPopoverTitle('Columns');
+    title.style.marginBottom = '6px';
+    gridColumnsPopover.appendChild(title);
+    const options = [
+      { label: '1 Column', value: 1, preview: '▌' },
+      { label: '2 Columns', value: 2, preview: '▌▌' },
+      { label: '3 Columns', value: 3, preview: '▌▌▌' },
+      { label: '4 Columns', value: 4, preview: '▌▌▌▌' },
+      { label: '5 Columns', value: 5, preview: '▌▌▌▌▌' },
+      { label: '6 Columns', value: 6, preview: '▌▌▌▌▌▌' },
+    ];
+    options.forEach((option) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.style.cssText = 'all:unset;display:flex;align-items:center;justify-content:space-between;width:100%;padding:8px 10px;border-radius:8px;text-align:left;color:#111827;cursor:pointer;background:' + (Number(currentCount) === option.value ? 'rgba(59,130,246,0.12)' : 'transparent') + ';font:13px/1.3 system-ui;';
+      button.onmouseover = () => button.style.background = Number(currentCount) === option.value ? 'rgba(59,130,246,0.16)' : 'rgba(15,23,42,0.04)';
+      button.onmouseout = () => button.style.background = Number(currentCount) === option.value ? 'rgba(59,130,246,0.12)' : 'transparent';
+      const label = document.createElement('span');
+      label.textContent = option.label;
+      const preview = document.createElement('span');
+      preview.textContent = option.preview;
+      preview.style.cssText = 'font-size:12px;letter-spacing:1px;color:#64748b;';
+      button.appendChild(label);
+      button.appendChild(preview);
+      button.addEventListener('click', () => {
+        if (!currentSelection || !currentSelection.widgetId) return;
+        send('grid-columns', {
+          sectionId: currentSelection.sectionId,
+          widgetId: currentSelection.widgetId,
+          count: option.value,
+        });
+        hideAllPopovers();
+      });
+      gridColumnsPopover.appendChild(button);
+    });
+  }
+
+  fontFamilyButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const currentFamily = fontFamilyButton.dataset.currentValue || '';
+    openPopover(fontFamilyButton, fontFamilyPopover, currentFamily);
+  });
+
+  fontSizeButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const currentSize = fontSizeButton.dataset.currentValue || '';
+    openPopover(fontSizeButton, fontSizePopover, currentSize);
+  });
+
+  fontColorButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const currentColor = fontColorButton.dataset.currentValue || '#111827';
+    openPopover(fontColorButton, fontColorPopover, currentColor);
+  });
+
+  gridColumnsButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const gridRoot = currentSelection?.widgetId ? document.querySelector('[data-widget-id="' + currentSelection.widgetId + '"]') : null;
+    const currentCount = Number(gridRoot?.getAttribute('data-grid-columns-count') || gridRoot?.querySelectorAll('[data-grid-column-id]').length || 2);
+    openPopover(gridColumnsButton, gridColumnsPopover, currentCount);
+  });
+
+  document.body.appendChild(fontFamilyPopover);
+  document.body.appendChild(fontSizePopover);
+  document.body.appendChild(fontColorPopover);
+  document.body.appendChild(gridColumnsPopover);
+
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!target) return;
+    if ((target instanceof Element) && (target.closest('.__wto-popup') || target.closest('[data-act="font-family"]') || target.closest('[data-act="font-size"]') || target.closest('[data-act="font-color"]') || target.closest('[data-act="grid-columns"]') || target.closest('[data-act="add"]'))) {
+      return;
+    }
+    hideAllPopovers();
+    hideAddElementMenu();
+  });
+
+  function sendElementStyleUpdate(patch) {
+    if (!currentSelection || !currentSelection.widgetId) return;
+    const selectedChildId = currentSelection.childId || currentSelection.elementKey || null;
+    const stylePatch = { ...patch };
+    if (typeof stylePatch.color === 'string') {
+      if (currentSelection.elementType === 'text') {
+        stylePatch.textColor = stylePatch.color;
+      }
+      if (currentSelection.elementType === 'button') {
+        stylePatch.customColor = stylePatch.color;
+      }
+    }
+    send('element-style', {
+      sectionId: currentSelection.sectionId,
+      widgetId: currentSelection.widgetId,
+      parentWidgetId: currentSelection.parentWidgetId || currentSelection.widgetId,
+      childId: selectedChildId,
+      elementKey: currentSelection.elementKey,
+      elementType: currentSelection.elementType,
+      columnId: currentSelection.columnId || null,
+      stylePatch,
+    });
+  }
+
+  let currentSelection = null;
   let currentSection = null;
-  function positionToolbar(sec) {
-    if (!sec) { tb.style.display = 'none'; return; }
-    const r = sec.getBoundingClientRect();
+  let currentSelectedElementWrapper = null;
+  let currentDragSource = null;
+  let currentDropTarget = null;
+  const addElementMenu = document.createElement('div');
+  addElementMenu.style.cssText = 'position:fixed;display:none;z-index:10005;flex-direction:column;gap:4px;padding:6px;border-radius:12px;background:rgba(15,23,42,0.97);box-shadow:0 14px 40px rgba(15,23,42,0.28);border:1px solid rgba(148,163,184,0.2);';
+  addElementMenu.innerHTML = [
+    ['heading','Heading'],
+    ['text','Paragraph'],
+    ['button','Button'],
+    ['image','Image'],
+  ].map(([type, label]) => '<button type="button" data-add-child-type="'+type+'" style="all:unset;display:flex;align-items:center;justify-content:flex-start;padding:8px 10px;border-radius:8px;color:#f8fafc;cursor:pointer;background:transparent;white-space:nowrap;">'+label+'</button>').join('');
+  document.body.appendChild(addElementMenu);
+  const childCapableWidgetTypes = new Set(['container', 'hero', 'grid']);
+  function hideAddElementMenu() {
+    addElementMenu.style.display = 'none';
+  }
+  function showAddElementMenu(buttonEl) {
+    if (!buttonEl || !currentSelection || !currentSelection.widgetType || !childCapableWidgetTypes.has(currentSelection.widgetType)) {
+      hideAddElementMenu();
+      return;
+    }
+    const rect = buttonEl.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const menuWidth = addElementMenu.offsetWidth || 160;
+    const menuHeight = addElementMenu.scrollHeight || 220;
+    const availableBelow = viewportHeight - rect.bottom - 8;
+    const availableAbove = rect.top - 8;
+    const shouldOpenAbove = availableBelow < menuHeight + 8 && availableAbove > availableBelow;
+    const left = Math.max(8, Math.min(viewportWidth - menuWidth - 8, rect.left));
+    const top = shouldOpenAbove
+      ? Math.max(8, rect.top - Math.min(menuHeight, viewportHeight - 24) - 8)
+      : Math.min(viewportHeight - Math.min(menuHeight, viewportHeight - 24) - 8, rect.bottom + 6);
+    addElementMenu.style.display = 'flex';
+    addElementMenu.style.flexDirection = 'column';
+    addElementMenu.style.left = left + 'px';
+    addElementMenu.style.top = top + 'px';
+    addElementMenu.style.maxHeight = Math.max(180, Math.min(320, viewportHeight - 24)) + 'px';
+    addElementMenu.style.overflowY = 'auto';
+    addElementMenu.style.overflowX = 'hidden';
+  }
+  function isGridWidgetRootSelection(selection) {
+    return !!selection && selection.widgetType === 'grid' && !selection.childId && !selection.elementKey && !selection.columnId && ['widget', 'container'].includes(selection.elementKind || '');
+  }
+
+  function updateToolbarForSelection(selection) {
+    currentSelection = selection;
+    const addBtn = tb.querySelector('[data-act="add"]');
+    if (addBtn) {
+      const isVisible = !!selection && !!selection.widgetType && childCapableWidgetTypes.has(selection.widgetType);
+      addBtn.style.display = isVisible ? 'inline-flex' : 'none';
+    }
+    const enabledStyleSelection = selection && selection.elementKind === 'widget' && selection.elementType && ['text','button'].includes(selection.elementType);
+    if (enabledStyleSelection) {
+      styleControlWrapper.style.display = 'inline-flex';
+      setStyleControlValues(selection.style || {});
+    } else {
+      styleControlWrapper.style.display = 'none';
+    }
+    if (isGridWidgetRootSelection(selection)) {
+      gridColumnsButton.style.display = 'inline-flex';
+    } else {
+      gridColumnsButton.style.display = 'none';
+    }
+    if (!selection || !selection.widgetType || !childCapableWidgetTypes.has(selection.widgetType)) {
+      hideAddElementMenu();
+    }
+  }
+  function positionToolbar(element) {
+    if (!element) { tb.style.display = 'none'; return; }
+    const r = element.getBoundingClientRect();
     tb.style.display = 'flex';
     const tbw = tb.offsetWidth || 220;
     const tbh = tb.offsetHeight || 40;
@@ -756,8 +1497,109 @@ export const RUNTIME_SCRIPT = `
     const btn = e.target.closest('button');
     if (!btn || !currentSection) return;
     e.preventDefault(); e.stopPropagation();
-    send('section-action', { sectionId: currentSection.dataset.wtoSection, action: btn.dataset.act });
+    const action = btn.dataset.act;
+    if (!action) return;
+    if (action === 'add') {
+      showAddElementMenu(btn);
+      return;
+    }
+    const isChildSelection = currentSelection && currentSelection.widgetId && (currentSelection.childId || currentSelection.elementKey);
+    console.log('toolbar click', { action, currentSelection, isChildSelection, widgetId: currentSelection?.widgetId, childId: currentSelection?.childId, elementKey: currentSelection?.elementKey });
+    if (isChildSelection && ['move','move-up','move-down','dup','del'].includes(action)) {
+      const selectedChildId = currentSelection.childId || currentSelection.elementKey || null;
+      console.log('sending element-action', { action: action === 'dup' ? 'duplicate' : action === 'del' ? 'delete' : action, childId: selectedChildId });
+      send('element-action', {
+        sectionId: currentSelection.sectionId || currentSection.dataset.wtoSection,
+        widgetId: currentSelection.widgetId,
+        parentWidgetId: currentSelection.parentWidgetId || currentSelection.widgetId,
+        childId: selectedChildId,
+        selectedChildId,
+        elementKey: currentSelection.elementKey,
+        elementType: currentSelection.elementType,
+        childContainerId: currentSelection.columnId || null,
+        columnId: currentSelection.columnId || null,
+        action: action === 'dup' ? 'duplicate' : action === 'del' ? 'delete' : action,
+      });
+      return;
+    }
+    console.log('falling back to section-action', { action });
+    send('section-action', { sectionId: currentSection.dataset.wtoSection, action });
   });
+  addElementMenu.addEventListener('click', e => {
+    const item = e.target.closest('button[data-add-child-type]');
+    if (!item || !currentSelection) return;
+    e.preventDefault(); e.stopPropagation();
+    send('widget-add-child', {
+      sectionId: currentSelection.sectionId,
+      widgetId: currentSelection.widgetId,
+      parentWidgetId: currentSelection.parentWidgetId || currentSelection.widgetId,
+      widgetType: currentSelection.widgetType,
+      childType: item.getAttribute('data-add-child-type'),
+      columnId: currentSelection.columnId || null,
+    });
+    hideAddElementMenu();
+  });
+  document.addEventListener('click', (event) => {
+    const target = getEventTarget(event);
+    const columnAddButton = target && target.closest ? target.closest('[data-grid-add-child="1"]') : null;
+    if (columnAddButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const section = columnAddButton.closest('[data-wto-section]');
+      const columnId = columnAddButton.getAttribute('data-grid-column-id');
+      const widgetRoot = columnAddButton.closest('[data-widget-id], [data-wto-widget-root]');
+      const widgetId = widgetRoot?.getAttribute('data-widget-id') || null;
+      const widgetType = widgetRoot?.getAttribute('data-widget') || null;
+      const selection = {
+        sectionId: section ? section.dataset.wtoSection : null,
+        elementKind: 'widget',
+        index: null,
+        tag: 'button',
+        widgetId,
+        widgetType,
+        parentWidgetId: widgetId,
+        childId: null,
+        elementKey: null,
+        elementType: null,
+        columnId,
+      };
+      currentSelection = selection;
+      hideAddElementMenu();
+      send('select', {
+        sectionId: selection.sectionId,
+        elementKind: selection.elementKind,
+        index: selection.index,
+        tag: selection.tag,
+        widgetId: selection.widgetId,
+        widgetType: selection.widgetType,
+        parentWidgetId: selection.parentWidgetId,
+        childId: selection.childId,
+        elementKey: selection.elementKey,
+        elementType: selection.elementType,
+        childContainerId: selection.columnId,
+        columnId: selection.columnId,
+      });
+      showAddElementMenu(columnAddButton);
+      return;
+    }
+    hideAddElementMenu();
+  });
+
+  function getElementWrapper(target) {
+    if (!target) return null;
+    const wrapper = target.closest('[data-container-child-wrapper], [data-wto-widget-element-key]');
+    return wrapper;
+  }
+
+  function setElementDragState(element) {
+    if (currentSelectedElementWrapper && currentSelectedElementWrapper !== element) {
+      currentSelectedElementWrapper.removeAttribute('draggable');
+    }
+    currentSelectedElementWrapper = element;
+    if (element) {
+      element.setAttribute('draggable', 'true');
+    }
+  }
 
   const uploadIcon = document.createElement('button');
   uploadIcon.id = '__wto_image_upload';
@@ -859,8 +1701,8 @@ export const RUNTIME_SCRIPT = `
     if (!target || !target.closest('#__wto_image_upload')) hideUploadIcon();
   });
 
-  addEventListener('scroll', () => positionToolbar(currentSection), true);
-  addEventListener('resize', () => positionToolbar(currentSection));
+  addEventListener('scroll', () => positionToolbar(currentSelectedElementWrapper || currentSection), true);
+  addEventListener('resize', () => positionToolbar(currentSelectedElementWrapper || currentSection));
 
   // Drag reorder
   document.querySelectorAll('[data-wto-section]').forEach(sec => sec.setAttribute('draggable','true'));
@@ -868,31 +1710,64 @@ export const RUNTIME_SCRIPT = `
   let dragId = null;
   document.addEventListener('dragstart', e => {
     try {
-      const sec = e.target.closest && e.target.closest('[data-wto-section]');
+      const target = getEventTarget(e);
+      const wrapper = target && target.closest ? target.closest('[data-container-child-wrapper], [data-wto-widget-element-key]') : null;
+      if (wrapper && currentSelection && currentSelection.sectionId && currentSelection.widgetId && (currentSelection.childId || currentSelection.elementKey)) {
+        currentDragSource = {
+          sectionId: currentSelection.sectionId,
+          widgetId: currentSelection.widgetId,
+          parentWidgetId: currentSelection.parentWidgetId,
+          childId: currentSelection.childId,
+          elementKey: currentSelection.elementKey,
+          elementType: currentSelection.elementType,
+          wrapper,
+        };
+        try { e.dataTransfer.setData('text/plain', String(currentSelection.childId || currentSelection.elementKey || '')); } catch (_){ }
+        e.dataTransfer.effectAllowed = 'move';
+        wrapper.style.opacity = '0.6';
+        return;
+      }
+      const sec = target && target.closest && target.closest('[data-wto-section]');
       if (!sec) return;
       dragId = sec.dataset.wtoSection;
       try { e.dataTransfer.setData('text/plain', dragId); } catch(_){ }
       e.dataTransfer.effectAllowed = 'move';
       sec.style.opacity = '0.4';
     } catch (err) {
-      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
+      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){ }
       console.error('wto-runtime dragstart error', err);
     }
   });
   document.addEventListener('dragend', e => {
     try {
+      if (currentDragSource?.wrapper) currentDragSource.wrapper.style.opacity = '';
       const sec = e.target.closest && e.target.closest('[data-wto-section]');
       if (sec) sec.style.opacity = '';
       e.preventDefault();
       const l = document.getElementById('__wto_line'); if (l) l.remove();
+      currentDragSource = null;
+      currentDropTarget = null;
     } catch (err) {
-      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
+      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){ }
       console.error('wto-runtime dragend error', err);
     }
   });
   document.addEventListener('dragover', e => {
     try {
-      const sec = e.target.closest && e.target.closest('[data-wto-section]');
+      const target = getEventTarget(e);
+      const candidate = target && target.closest ? target.closest('[data-container-child-wrapper], [data-wto-widget-element-key]') : null;
+      if (currentDragSource && candidate && currentDragSource.wrapper && candidate !== currentDragSource.wrapper && currentDragSource.wrapper.closest('[data-container-parent-widget-id], [data-wto-parent-widget-id]') && candidate.closest('[data-container-parent-widget-id], [data-wto-parent-widget-id]')) {
+        const r = candidate.getBoundingClientRect();
+        e.preventDefault();
+        let line = document.getElementById('__wto_line');
+        if (!line) { line = document.createElement('div'); line.id='__wto_line'; line.style.cssText='position:absolute;left:0;right:0;height:3px;background:#6366f1;z-index:9999;pointer-events:none;'; document.body.appendChild(line); }
+        const before = e.clientY < r.top + r.height / 2;
+        const top = before ? candidate.offsetTop : candidate.offsetTop + candidate.offsetHeight;
+        line.style.top = top + 'px';
+        currentDropTarget = { candidate, before };
+        return;
+      }
+      const sec = target && target.closest && target.closest('[data-wto-section]');
       if (!sec || !dragId) return;
       e.preventDefault();
       const r = sec.getBoundingClientRect();
@@ -903,13 +1778,39 @@ export const RUNTIME_SCRIPT = `
       line.style.top = top + 'px';
       sec.dataset.wtoDropBefore = before ? '1' : '0';
     } catch (err) {
-      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
+      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){ }
       console.error('wto-runtime dragover error', err);
     }
   });
   document.addEventListener('drop', e => {
     try {
-      const sec = e.target.closest && e.target.closest('[data-wto-section]');
+      const target = getEventTarget(e);
+      if (currentDragSource && currentDropTarget) {
+        const candidate = currentDropTarget.candidate;
+        const before = currentDropTarget.before;
+        const parent = candidate.closest('[data-container-parent-widget-id], [data-wto-parent-widget-id]');
+        const childId = candidate.getAttribute('data-container-child-id') || candidate.getAttribute('data-wto-child-id') || candidate.getAttribute('data-wto-widget-element-key');
+        const parentWidgetId = parent ? parent.getAttribute('data-container-parent-widget-id') || parent.getAttribute('data-wto-parent-widget-id') : null;
+        if (childId && currentDragSource.sectionId && currentDragSource.widgetId && parentWidgetId === currentDragSource.parentWidgetId) {
+          send('element-action', {
+            sectionId: currentDragSource.sectionId,
+            widgetId: currentDragSource.widgetId,
+            parentWidgetId: currentDragSource.parentWidgetId,
+            childId: currentDragSource.childId,
+            elementKey: currentDragSource.elementKey,
+            elementType: currentDragSource.elementType,
+            action: 'move',
+            targetChildId: childId,
+            before,
+          });
+          const l = document.getElementById('__wto_line'); if (l) l.remove();
+          currentDragSource.wrapper.style.opacity = '';
+          currentDragSource = null;
+          currentDropTarget = null;
+          return;
+        }
+      }
+      const sec = target && target.closest && target.closest('[data-wto-section]');
       if (!sec || !dragId) return;
       e.preventDefault();
       const before = sec.dataset.wtoDropBefore === '1';
@@ -917,7 +1818,7 @@ export const RUNTIME_SCRIPT = `
       const l = document.getElementById('__wto_line'); if (l) l.remove();
       dragId = null;
     } catch (err) {
-      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
+      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){ }
       console.error('wto-runtime drop error', err);
     }
   });
@@ -929,53 +1830,81 @@ export const RUNTIME_SCRIPT = `
       if (target.closest('#__wto_tb')) return;
       const nav = target.closest('[data-wto-nav]');
       if (nav) {
-        const anchor = target.closest('a');
-
+        const anchor = target.closest("a");
         if (anchor) {
-          const href = anchor.getAttribute('href') || "";
-          const normalized = href
-            .replace(/^[./]+/, "")
-            .replace(/\.html(?:[?#].*)?$/, "");
-
+          const href = anchor.getAttribute("href") || "";
+          const normalized = href.replace(/^[.\/]+/, "").replace(/\\.html(?:[?#].*)?$/, "");
           if (!href || href === "#") {
-            // placeholder nav/menu links should not block section selection.
             e.preventDefault();
           }
-
           if (href && href !== "#" && scrollToHash(href, e)) {
             return;
           }
-
-          if (/^(?!https?:|mailto:).+\.html(?:[?#].*)?$/.test(href)) {
+          if (/^(?!https?:|mailto:).+\\.html(?:[?#].*)?$/.test(href)) {
             e.preventDefault();
             send("navigate-page", { slug: normalized });
             return;
           }
         }
       }
-      if (target.closest('[data-carousel-prev], [data-carousel-next], [data-carousel-dot], [data-carousel-items-prev], [data-carousel-items-next], [data-carousel-indicator]')) return;
-      const section = target.closest('[data-wto-section]');
+      if (target.closest("[data-carousel-prev], [data-carousel-next], [data-carousel-dot], [data-carousel-items-prev], [data-carousel-items-next], [data-carousel-indicator]")) return;
+      if (target.closest('[data-grid-add-child="1"]')) return;
+      const section = target.closest("[data-wto-section]");
       if (!section) return;
-      const anchor = target.closest('a');
-      
       currentSection = section;
-      positionToolbar(section);
       const selection = resolveElementSelection(target);
-      if (selection.elementKind === 'section') clearElementSelectionHighlight();
-      else applyElementSelectionHighlight(target);
+      clearDuplicateControls();
       const selectedEl = getSelectionTargetElement(target);
-      const style = (selection.elementKind !== 'section' && selectedEl) ? getTypographyStyle(selectedEl) : null;
-      send('select', { sectionId: selection.sectionId || section.dataset.wtoSection, elementKind: selection.elementKind, index: selection.index, tag: selection.tag, style });
+      const elementWrapper = getElementWrapper(target) || selectedEl;
+      const selectionTarget = elementWrapper || selectedEl || section;
+      const style = (selection.elementKind !== "section" && selectedEl) ? getTypographyStyle(selectedEl) : null;
+
+      if (selection.elementKind === "widget" && selection.elementType === "container" && selectedEl) {
+        const tag = (selectedEl.tagName || "").toLowerCase();
+        if (tag === "a" || tag === "button") {
+          selection.elementType = "button";
+        } else if (/^h[1-6]$/.test(tag) || tag === "p" || tag === "span" || tag === "strong" || tag === "em" || tag === "b" || tag === "i" || tag === "small" || tag === "blockquote" || tag === "cite" || tag === "label" || tag === "div") {
+          selection.elementType = "text";
+        }
+      }
+      if (style) {
+        selection.style = style;
+      }
+
+      if (selection.elementKind === "section") {
+        clearElementSelectionHighlight();
+        setElementDragState(null);
+      } else {
+        applyElementSelectionHighlight(selectionTarget);
+        applyDuplicateControl(selectionTarget);
+        setElementDragState(selectionTarget);
+      }
+      updateToolbarForSelection(selection);
+      positionToolbar(selectionTarget);
+      send("select", {
+        sectionId: selection.sectionId || section.dataset.wtoSection,
+        elementKind: selection.elementKind,
+        index: selection.index,
+        tag: selection.tag,
+        style,
+        widgetId: selection.widgetId,
+        widgetType: selection.widgetType,
+        parentWidgetId: selection.parentWidgetId,
+        childId: selection.childId || selection.elementKey,
+        elementKey: selection.elementKey,
+        elementType: selection.elementType,
+      });
       try {
-        const candidate = target.closest && target.closest('[data-wto-idx]') || target;
+        const candidate = (target.closest && target.closest("[data-wto-idx]")) || target;
         const upload = isUploadCandidate(candidate);
         if (upload) showUploadIcon(upload.el, upload.kind);
       } catch (_) {}
     } catch (err) {
-      try { send('console', { level: 'error', args: [String(err && err.stack ? err.stack : err)] }); } catch(_){}
-      console.error('wto-runtime onClick error', err);
+      try { send("console", { level: "error", args: [String(err && err.stack ? err.stack : err)] }); } catch (_){ }
+      console.error("wto-runtime onClick error", err);
     }
   }
+
 
   function isEditableTextNode(el) {
     if (!el || !el.textContent || !el.textContent.trim()) return false;
@@ -992,21 +1921,67 @@ export const RUNTIME_SCRIPT = `
     return findEditableTextTarget(target);
   }
 
+  function getEditableTextValue(el) {
+    if (!el) return "";
+    return String(el.textContent ?? "").replace(/\s+/g, " ").trim();
+  }
+
+  function sendElementContentUpdate(sectionId, selection, value) {
+    if (!sectionId || !selection || !selection.widgetId) return;
+    const selectedChildId = selection.childId || selection.elementKey || null;
+    send('element-content', {
+      sectionId,
+      widgetId: selection.widgetId,
+      parentWidgetId: selection.parentWidgetId || selection.widgetId,
+      childId: selectedChildId,
+      elementKey: selection.elementKey,
+      elementType: selection.elementType,
+      columnId: selection.columnId || null,
+      contentPatch: { text: value },
+    });
+  }
+
   function startTextEdit(e) {
     const target = e.target;
     const el = findEditableTarget(target);
     const section = target.closest('[data-wto-section]');
     if (!el || !section) return;
     e.preventDefault(); e.stopPropagation();
+    const initialText = getEditableTextValue(el);
+    const selection = resolveElementSelection(el);
+    let cancelled = false;
     el.setAttribute('contenteditable', 'true');
     el.setAttribute('spellcheck', 'false');
     el.setAttribute('data-wto-editable', 'true');
     el.focus();
     try { const range = document.createRange(); range.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(range); } catch(_) {}
-    const onKey = (ev) => { if ((ev.key==='Enter' && !ev.shiftKey) || ev.key==='Escape') { ev.preventDefault(); el.blur(); } };
+    const onKey = (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        cancelled = true;
+        el.blur();
+        return;
+      }
+      if (ev.key === 'Enter') {
+        const isParagraphLike = ['p','div','span','blockquote','cite','label'].includes(el.tagName.toLowerCase());
+        if (!isParagraphLike || ev.ctrlKey) {
+          ev.preventDefault();
+          el.blur();
+        }
+      }
+    };
     const onBlur = () => {
       el.removeAttribute('contenteditable'); el.removeAttribute('spellcheck');
       el.removeEventListener('keydown', onKey); el.removeEventListener('blur', onBlur);
+      if (cancelled) {
+        el.textContent = initialText;
+        return;
+      }
+      if (selection && selection.elementKind === 'widget' && selection.widgetId && (selection.childId || selection.elementKey)) {
+        const nextText = getEditableTextValue(el);
+        sendElementContentUpdate(section.dataset.wtoSection, selection, nextText);
+        return;
+      }
       if (el.tagName === 'SUMMARY') {
         const chevron = el.querySelector('.wto-chevron');
         if (!chevron) {
@@ -1135,8 +2110,23 @@ send('navigate-page', { slug });
 
   window.__wtoSelect = function(id){
     const sec = document.querySelector('[data-wto-section="'+id+'"]');
-    document.querySelectorAll('[data-wto-section]').forEach(s => s.classList.toggle('wto-selected', s === sec));
+    document.querySelectorAll('[data-wto-section]').forEach(s => {
+      const isSelected = s === sec;
+      s.classList.toggle('wto-selected', isSelected);
+      if (!isSelected) {
+        s.style.outline = '';
+        s.style.outlineOffset = '';
+      }
+    });
     currentSection = sec;
+    currentSelectedElementWrapper = null;
+    clearElementSelectionHighlight();
+    clearDuplicateControls();
+    hideAddElementMenu();
+    if (!sec) {
+      tb.style.display = 'none';
+      return;
+    }
     positionToolbar(sec);
   };
 })();
@@ -1410,14 +2400,20 @@ export function buildPreviewHTML(opts: {
   const htmlLang = seo?.language ?? projectSeo?.language ?? "en";
   const pageTitle = seo?.title || title || "Preview";
   const metaTags = renderSeoTags({ title: pageTitle, description, keywords, seo, projectSeo });
+  const bodyAttributes = editable ? ' data-builder-edit-mode="1"' : "";
 
   const sectionHTML = sections
     .filter((s) => editable || !s.hidden)
     .map((s) => {
       if (s.collapsed) return "";
       const styleStr = styleToString(s.style);
-      const outline = editable && selectedId === s.id ? "outline:2px solid #6366f1;outline-offset:-2px;" : "";
-      const visibleHtml = applyRootAttributes(s.html, {
+      const selectedClass = editable && selectedId === s.id ? " wto-selected" : "";
+      const rawHtml = s.widgetInstance ? getWidgetBootstrapExport(s.widgetInstance.type, s.widgetInstance) || s.html : s.html;
+      const gridColumnCount = s.widgetInstance?.type === "grid" ? getGridColumnCount(s.widgetInstance as any) : null;
+      const widgetRootHtml = s.widgetInstance
+        ? `<div data-wto-widget-root="1" data-widget-id="${escapeAttribute(s.widgetInstance.id)}" data-widget="${escapeAttribute(s.widgetInstance.type)}" data-widget-variant="${escapeAttribute(String(s.widgetInstance.variant ?? ""))}"${gridColumnCount != null ? ` data-grid-columns-count="${escapeAttribute(String(gridColumnCount))}"` : ""}>${rawHtml}</div>`
+        : rawHtml;
+      const visibleHtml = applyRootAttributes(widgetRootHtml, {
         className: s.className,
         domId: s.domId,
         style: styleStr,
@@ -1425,16 +2421,20 @@ export function buildPreviewHTML(opts: {
       const linked = pages ? resolvePageLinks(visibleHtml, pages) : visibleHtml;
       const extra = sectionAttrs(s);
       const hiddenAttr = s.hidden && editable ? ' data-wto-hidden="1"' : "";
-      return `<div data-wto-section="${s.id}" class="wto-section" style="${outline}" ${extra}${hiddenAttr}>${resolveAssetPaths(linked, assets)}</div>`;
+      return `<div data-wto-section="${s.id}" class="wto-section${selectedClass}" ${extra}${hiddenAttr}>${resolveAssetPaths(linked, assets)}</div>`;
     })
     .join("\n");
 
   const editableStyles = editable
     ? `
-    .wto-section { position: relative; }
-    .wto-section:hover { outline: 1px dashed #94a3b8; outline-offset: -1px; cursor: pointer; }
-    .wto-section.wto-selected { outline: 2px solid #6366f1 !important; outline-offset: -2px; }
-    .wto-element-selected { outline: 2px solid #2563eb !important; outline-offset: 2px !important; box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.16), 0 10px 30px rgba(37, 99, 235, 0.12) !important; }
+    .wto-section { position: relative; transition: outline .15s ease, box-shadow .15s ease; }
+    .wto-section:hover { outline: 1px solid rgba(99, 102, 241, 0.35); outline-offset: -1px; cursor: pointer; }
+    .wto-section.wto-selected { outline: 2px solid var(--accent, #7c3aed) !important; outline-offset: -2px; box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.18); }
+    .wto-element-selected { outline: 2px solid var(--accent, #2563eb) !important; outline-offset: 2px !important; box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.16), 0 10px 30px rgba(37, 99, 235, 0.12) !important; }
+    .wto-duplicate-control { opacity: 0; transform: scale(0.95); transition: opacity .15s ease, transform .15s ease; }
+    .wto-element-selected + .wto-duplicate-control,
+    .wto-duplicate-control:hover,
+    .wto-duplicate-control:focus-visible { opacity: 1; transform: scale(1); }
     .wto-section[data-wto-hidden="1"] { opacity: .35; }
     [contenteditable="true"] { outline: 2px solid #f59e0b !important; }
     `
@@ -1443,6 +2443,11 @@ export function buildPreviewHTML(opts: {
   const previewStyles = previewCss
     ? `<style>${previewCss}</style>`
     : `<link rel="stylesheet" href="${previewCssHref ?? APP_CSS_HREF}" />`;
+  const fontAwesomeStyles = editable
+    ? `<link rel="stylesheet" href="${FONT_AWESOME_HREF}" crossorigin="anonymous" referrerpolicy="no-referrer" />`
+    : "";
+  const bootstrapStyles = `<link rel="stylesheet" href="${BOOTSTRAP_CSS_HREF}" />`;
+  const bootstrapScript = `<script src="${BOOTSTRAP_JS_HREF}"></script>`;
 
   return `<!DOCTYPE html>
 <html lang="${escapeHtml(htmlLang)}">
@@ -1451,19 +2456,25 @@ export function buildPreviewHTML(opts: {
 <meta name="viewport" content="${escapeHtml(projectSeo?.viewport ?? "width=device-width, initial-scale=1")}" />
 <title>${escapeHtml(pageTitle)}</title>
 ${metaTags}
+${bootstrapStyles}
 ${previewStyles}
+${fontAwesomeStyles}
 <style>
   html, body { margin: 0; min-height: 100%; overflow-x: hidden; }
-  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0; min-height: 100%; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #fff; color: #111827; }
+  body > .wto-page-shell { min-height: 100%; }
   ${RUNTIME_CSS}
   ${editableStyles}
   ${globalCss || ""}
 </style>
 ${customHead || ""}
 </head>
-<body>
-${sectionHTML || (editable ? '<div style="padding:80px;text-align:center;color:#94a3b8;font-family:system-ui">Drag sections from the left to start building →</div>' : "")}
+<body${bodyAttributes}>
+<div class="wto-page-shell">
+${sectionHTML || (editable ? '<div style="padding:80px;text-align:center;color:#94a3b8;font-family:system-ui">Drag sections from the left to start building â†’</div>' : "")}
+</div>
 <script>window.__wtoCurrentPageSlug = ${JSON.stringify(currentPageSlug ?? "index")};</script>
+${bootstrapScript}
 <script>${editable ? RUNTIME_SCRIPT : EXPORT_RUNTIME}</script>
 <script>try{new Function(${escapeInlineScript(globalJs || "")})();}catch(e){console.error(e)}</script>
 </body>
@@ -1505,7 +2516,8 @@ export function buildExportBundle(opts: {
     .filter((s) => !s.hidden)
     .map((s) => {
       const styleStr = styleToString(s.style);
-      const raw = applyRootAttributes(s.html, {
+      const rawHtml = s.widgetInstance ? getWidgetBootstrapExport(s.widgetInstance.type, s.widgetInstance) || s.html : s.html;
+      const raw = applyRootAttributes(rawHtml, {
         className: s.className,
         domId: s.domId,
         style: styleStr,
@@ -1557,27 +2569,13 @@ ${inlineAssets ? body : resolveAssetPaths(body, assets)}
 }
 
 export async function buildSiteExport(project: Project) {
-  const pageMeta = project.pages.map((p) => ({ id: p.id, slug: p.slug }));
   const files: { path: string; content: string; base64?: string }[] = [];
-  const cssContent = `${RUNTIME_CSS}\n${project.globalCss || ""}`;
-  files.push({ path: "css/styles.css", content: cssContent });
-  files.push({ path: "js/main.js", content: `${project.globalJs || ""}\n${EXPORT_RUNTIME}` });
-  for (const page of project.pages) {
-    const bundle = buildExportBundle({
-      sections: page.sections,
-      globalCss: "",
-      globalJs: "",
-      title: `${project.name} — ${page.name}`,
-      description: page.description,
-      keywords: page.keywords,
-      seo: page.seo,
-      projectSeo: project.seo,
-      customHead: project.customHead,
-      assets: project.assets,
-      pages: pageMeta,
-    });
-    files.push({ path: `${page.slug}.html`, content: bundle.html });
+
+  const bootstrapExport = buildBootstrapExport(project);
+  for (const file of bootstrapExport.files) {
+    files.push({ path: file.path, content: file.content });
   }
+
   for (const [name, asset] of Object.entries(project.assets ?? {})) {
     const entry = typeof asset === "string" ? undefined : asset;
     const filename = entry?.filename || name;
@@ -1650,3 +2648,5 @@ function setAttr(attrs: string, name: string, value: string) {
 function escapeAttribute(s: string) {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
+
+

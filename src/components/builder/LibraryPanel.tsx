@@ -4,9 +4,10 @@ import { SECTION_LIBRARY, CATEGORIES, type SectionTemplate } from "@/lib/builder
 import { useMounted } from "@/hooks/use-mounted";
 import { ClientOnly } from "./ClientOnly";
 import { useBuilder, type Page } from "@/lib/builder/store";
-import { LayoutDashboard, Search, Plus, Copy, ChevronDown, ChevronRight, ChevronLeft, FileText, Layers, FolderOpen, LayoutGrid, Grid2x2, ImageIcon, SlidersHorizontal, Settings, LogOut, BookOpen, Menu, ChevronUp, UserCircle, Bell, Sparkles, X, Eye, EyeOff, Mail, Lock, User, Heart, Trash2, Server, Globe, Users } from "lucide-react";
+import { LayoutDashboard, Search, Copy, ChevronDown, ChevronRight, ChevronLeft, FileText, Layers, FolderOpen, LayoutGrid, Grid2x2, ImageIcon, SlidersHorizontal, Settings, LogOut, BookOpen, Menu, ChevronUp, UserCircle, Bell, Sparkles, X, Eye, EyeOff, Mail, Lock, User, Heart, Trash2, Server, Globe, Users, Plus } from "lucide-react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { toast } from "sonner";
-import { TEMPLATE_CATEGORIES, TEMPLATE_LIBRARY, type TemplateDefinition } from "@/lib/builder/templates";
+import { TEMPLATE_LIBRARY, type TemplateDefinition } from "@/lib/builder/templates";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { SeoDialog } from "./SeoDialog";
 import { PageActionsMenu } from "./PageActionsMenu";
 import { SidebarBadge } from "./SidebarBadge";
 import { useCloudProjects } from "@/lib/builder/useCloudProjects";
+import { createWidgetSectionTemplate, getAllWidgetRegistrations, getWidgetBootstrapExport, createWidgetInstance, type WidgetRegistration } from "@/components/builder/widgets/widgetRegistry";
 
 function GoogleLogo(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -54,7 +56,7 @@ type PanelViewKey = CanvasMenuKey | DashboardMenuKey | ExtraPanelKey;
 export function LibraryPanel() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
-  const [templateCategory, setTemplateCategory] = useState<string>("All");
+  const [openWidgetId, setOpenWidgetId] = useState<string | null>(null);
   const [openCats, setOpenCats] = useState<Record<string, boolean>>(() => ({ Hero: true, Navigation: true, Features: true, Carousel: true }));
   const [seoModalPageId, setSeoModalPageId] = useState<string | null>(null);
   const mounted = useMounted();
@@ -170,6 +172,66 @@ const activePanelKey = showProjectDashboard
     label: string;
     Icon: React.ComponentType<{ className?: string }>;
   }> = [];
+  const widgetRegistryEntries = useMemo(() => getAllWidgetRegistrations(), []);
+  const insertWidgetIntoPage = (widget: WidgetRegistration) => {
+    const sectionTemplate = createWidgetSectionTemplate(widget.id);
+    const sectionId = addSection(sectionTemplate as any);
+    if (!sectionId) return;
+
+    useBuilder.getState().selectSection(sectionId);
+
+    window.setTimeout(() => {
+      const iframe = document.querySelector("iframe[title='preview']") as HTMLIFrameElement | null;
+      const doc = iframe?.contentDocument;
+      const section = doc?.querySelector(`[data-wto-section="${sectionId}"]`) as HTMLElement | null;
+      section?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 80);
+  };
+
+  const visibleWidgets = useMemo(() => {
+    const normalized = q.trim().toLowerCase();
+    const hiddenElementTypes = new Set(["heading", "text", "button", "image"]);
+    return widgetRegistryEntries.filter((widget) => {
+      if (hiddenElementTypes.has(widget.type)) return false;
+      if (!normalized) return true;
+      const values = [
+        widget.displayName,
+        widget.type,
+        widget.category,
+        widget.description,
+        widget.preview,
+        widget.defaultVariant,
+        ...(widget.supportedVariants ?? []),
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase());
+      return values.some((value) => value.includes(normalized));
+    });
+  }, [q, widgetRegistryEntries]);
+
+  const addWidgetVariant = (widget: WidgetRegistration, variant: string) => {
+    const widgetInstance = createWidgetInstance(widget.id, { variant });
+    const html = getWidgetBootstrapExport(widget.type, widgetInstance);
+    const sectionTemplate: SectionTemplate = {
+      id: `${widget.id}-${widgetInstance.id}`,
+      name: widget.displayName,
+      category: widget.category,
+      html,
+      widgetInstance,
+      thumbBg: "linear-gradient(135deg, rgba(148,163,184,0.16), rgba(59,130,246,0.08))",
+    };
+    const sectionId = addSection(sectionTemplate as any);
+    if (!sectionId) return;
+
+    useBuilder.getState().selectSection(sectionId);
+
+    window.setTimeout(() => {
+      const iframe = document.querySelector("iframe[title='preview']") as HTMLIFrameElement | null;
+      const doc = iframe?.contentDocument;
+      const section = doc?.querySelector(`[data-wto-section="${sectionId}"]`) as HTMLElement | null;
+      section?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 80);
+  };
   const showEditorMenuSection = Boolean(currentProjectId) && !showProjectDashboard;
   const currentViewLabel = [...primaryMenuItems, ...editorMenuItems].find((item) => item.key === activePanelKey)?.label ?? activePanelKey;
   const [overlayView, setOverlayView] = useState<PanelViewKey | null>(null);
@@ -290,15 +352,6 @@ const handleLogout = async () => {
     }
     return CATEGORIES.filter((c) => map.has(c)).map((c) => [c, map.get(c)!] as const);
   }, [filteredSections]);
-
-  const filteredTemplates = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    return TEMPLATE_LIBRARY.filter((tpl) => {
-      const matchesCategory = templateCategory === "All" || tpl.category === templateCategory;
-      const matchesSearch = !t || [tpl.name, tpl.description, tpl.category].join(" ").toLowerCase().includes(t);
-      return matchesCategory && matchesSearch;
-    });
-  }, [q, templateCategory]);
 
   if (!mounted) {
     return (
@@ -525,7 +578,7 @@ const handleLogout = async () => {
                 </button>
                 <div className="text-sm font-semibold text-foreground">{overlayLabel}</div>
               </div>
-              <div className="flex-1 overflow-y-auto p-2" style={{ scrollbarGutter: "stable" }}>
+              <div className="flex-1 overflow-y-auto" style={{ scrollbarGutter: "stable" }}>
                 {overlayView ? (
                   showProjectDashboard ? (
                     <DashboardPanel view={overlayView as DashboardPanelView} setLeftPanelOpen={setLeftPanelOpen} setLeftPanelView={setLeftPanelView} />
@@ -533,7 +586,7 @@ const handleLogout = async () => {
                     <>
                       {overlayView === "pages" ? (
                         <section className="space-y-3">
-                          <div className="rounded border border-border/70 bg-slate-50 p-2">
+                          <div className="bg-slate-50 p-2">
                             <div className="flex items-center justify-between gap-2">
                               <div>
                                 <div className="text-[9px] uppercase tracking-[0.3em] text-black">Pages</div>
@@ -659,49 +712,80 @@ const handleLogout = async () => {
                       ) : null}
 
                       {overlayView === "widgets" ? (
-                        <section className="space-y-3">
-                          <div className="rounded bg-slate-50 p-1">
-                            <div className="relative">
-                              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                              <input
-                                value={q}
-                                onChange={(e) => setQ(e.target.value)}
-                                placeholder="Search widgets…"
-                                className="w-full  border-input/80 bg-white py-3 pl-11 pr-4 text-sm shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
-                              />
+                        <section className="flex h-full flex-col overflow-hidden bg-slate-50">
+                          <div className="sticky top-0 z-10 border-b border-slate-200/70 bg-slate-50 px-3 py-3">
+                            <div className="space-y-3"> 
+                              <div className="relative">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                <input
+                                  value={q}
+                                  onChange={(e) => setQ(e.target.value)}
+                                  placeholder="Search widgets..."
+                                  className="h-9 w-full rounded-[7px] border border-slate-300 bg-white pl-10 pr-3 text-[13px] text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+                                />
+                              </div>
                             </div>
                           </div>
 
-                          <div className="space-y-3">
-                            {groupedSections.length === 0 ? (
-                              <div className="rounded-3xl border border-dashed border-border/70 bg-slate-50 p-4 text-center text-xs text-muted-foreground">No widgets match.</div>
+                          <div className="flex-1 overflow-y-auto px-2 py-2">
+                            {visibleWidgets.length === 0 ? (
+                              <div className="rounded-[12px] border border-dashed border-slate-300 bg-white p-3 text-center text-xs text-slate-500">No widgets match.</div>
                             ) : (
-                              groupedSections.map(([cat, items]) => {
-                                const open = q.trim() ? true : openCats[cat] ?? false;
-                                return (
-                                  <div key={cat} className="overflow-hidden rounded-3xl border border-border/70 bg-slate-50">
-                                    <button
-                                      onClick={() => setOpenCats((s) => ({ ...s, [cat]: !open }))}
-                                      className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground transition hover:bg-muted/50"
-                                    >
-                                      {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                                      <span>{cat}</span>
-                                      <span className="ml-auto text-[9px] font-normal text-slate-500">{items.length}</span>
-                                    </button>
-                                    {open ? (
-                                      <div className="space-y-2 border-t border-border/70 px-3 py-3">
-                                        {items.map((tpl) => (
-                                          <SectionCard key={tpl.id} tpl={tpl} onAdd={() => addSection(tpl)} />
-                                        ))}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                );
-                              })
+                              <div className="space-y-1">
+                                {visibleWidgets.map((widget, index) => {
+                                  const open = q.trim() ? true : openWidgetId === widget.id;
+                                  return (
+                                    <div key={widget.id} className={`overflow-hidden ${index < visibleWidgets.length - 1 ? "border-b border-slate-200/70" : ""} bg-white`}>
+                                      <button
+                                        type="button"
+                                        className="flex h-[52px] w-full items-center gap-3 px-3 text-left text-sm text-slate-800 transition hover:bg-slate-50"
+                                        onClick={() => {
+                                          if (q.trim()) return;
+                                          setOpenWidgetId((prev) => (prev === widget.id ? null : widget.id));
+                                        }}
+                                      >
+                                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-[9px] bg-sky-100 text-sky-700">
+                                          <FontAwesomeIcon icon={widget.icon as any} className="h-4 w-4" />
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center gap-2">
+                                            <span className="truncate text-[13px] font-medium text-slate-900">{widget.displayName}</span>
+                                            <span className="truncate text-[11px] text-slate-500">{widget.supportedVariants.length} styles</span>
+                                          </div>
+                                        </div>
+                                        <span className="text-slate-400">
+                                          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                        </span>
+                                      </button>
+                                      {open ? (
+                                        <div className="border-t border-slate-200/80 px-3 pb-3 pt-2">
+                                          <div className="flex flex-wrap gap-2">
+                                            {widget.supportedVariants.map((variant) => {
+                                              const variantKey = `${widget.id}-${variant}`;
+                                              return (
+                                                <button
+                                                  key={variantKey}
+                                                  type="button"
+                                                  onClick={() => addWidgetVariant(widget, variant)}
+                                                  className="min-h-[28px] rounded-[7px] border border-slate-300 bg-slate-100 px-3 text-[11px] font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-200"
+                                                >
+                                                  {variant}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             )}
                           </div>
                         </section>
-                      ) : null}
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Select a menu item to open a panel.</div>
+                      )}
                     </>
                   )
                 ) : (

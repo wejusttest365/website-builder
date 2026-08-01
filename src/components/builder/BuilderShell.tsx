@@ -134,7 +134,7 @@ export function BuilderShell() {
             <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,_rgba(248,250,252,0.65),_rgba(255,255,255,0.98))]">
               <Canvas />
             </div>
-            <div className="border-l border-border/70 flex-shrink-0 w-[250px] min-h-0 flex-col overflow-hidden bg-card/35">
+            <div className="flex w-[280px] flex-shrink-0 flex-col overflow-hidden border-l border-slate-200/80 bg-[linear-gradient(180deg,_rgba(248,250,252,0.92),_rgba(255,255,255,0.98))]">
               <PropertiesPanel />
             </div>
           </div>

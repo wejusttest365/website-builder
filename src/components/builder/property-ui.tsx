@@ -11,11 +11,11 @@ export function PropertyCard({
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="mb-3 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_-20px_rgba(15,23,42,0.3)]">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold hover:bg-slate-50"
+        className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
       >
         <span>{title}</span>
 
@@ -27,7 +27,7 @@ export function PropertyCard({
       </button>
 
       {open && (
-        <div className="border-t border-slate-200 p-4 space-y-3">
+        <div className="space-y-3 border-t border-slate-200/80 bg-slate-50/60 p-4">
           {children}
         </div>
       )}
@@ -43,8 +43,8 @@ export function PropertyField({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-1">
-      <label className="text-xs font-medium text-slate-500">
+    <div className="space-y-1.5">
+      <label className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
         {label}
       </label>
 

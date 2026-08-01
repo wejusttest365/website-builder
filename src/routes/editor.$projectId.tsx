@@ -65,14 +65,14 @@ function EditorRoute() {
         }
       }
 
-      console.log("EditorRoute loadProject", {
-        projectId,
-        hydrated: builderState.hydrated,
-        localProject: Boolean(localProject),
-        currentProjectId: builderState.currentProjectId,
-        projectIds: Object.keys(builderState.projects),
-        showProjectDashboard: builderState.showProjectDashboard,
-      });
+      // console.log("EditorRoute loadProject", {
+      //   projectId,
+      //   hydrated: builderState.hydrated,
+      //   localProject: Boolean(localProject),
+      //   currentProjectId: builderState.currentProjectId,
+      //   projectIds: Object.keys(builderState.projects),
+      //   showProjectDashboard: builderState.showProjectDashboard,
+      // });
 
       if (localProject) {
         builderState.loadProject(projectId);

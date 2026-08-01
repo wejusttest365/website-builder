@@ -53,7 +53,7 @@ export async function createProject(project: ProjectMetadata) {
 export async function getProjects(ownerId: string): Promise<Project[]> {
   const snapshot = await getDocs(getProjectCollectionRef(ownerId));
 
-  console.log("Firestore returned", snapshot.size, "projects");
+  // console.log("Firestore returned", snapshot.size, "projects");
 
   return snapshot.docs.map((doc) => ({
     ...(doc.data() as Omit<Project, "id">),

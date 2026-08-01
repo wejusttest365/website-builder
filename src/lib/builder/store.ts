@@ -5,14 +5,19 @@ import type { ProjectMetadata } from "@/services/project";
 import { create } from "zustand";
 import { nanoid } from "nanoid"; 
 import type { SectionTemplate } from "./sections";
+import type { WidgetInstance } from "@/components/builder/widgets/widgetRegistry";
+import { createWidgetElementDuplicateEntry } from "@/components/builder/widgets/elementDuplication";
+import { getWidgetChildItems, setWidgetChildItems, type WidgetChildLocation } from "@/components/builder/widgets/childWidgetUtils";
 import type { TemplateDefinition } from "./templates";
 import { createImageAssetReference, normalizeAssetMap, saveImageBlob, type BuilderAssetEntry } from "./image-storage";
+import { createGridColumn, getGridVariantForCount } from "@/components/builder/widgets/Grid/GridTypes";
 
 export interface PageSection {
   id: string;
   templateId: string;
   name: string;
   html: string;
+  widgetInstance?: WidgetInstance;
   collapsed?: boolean;
   style?: Record<string, string>;
   className?: string;
@@ -77,6 +82,7 @@ export interface Page {
   name: string;
   slug: string; // filename without extension, e.g. "index", "about-us"
   sections: PageSection[];
+  widgetInstances?: WidgetInstance[];
   hidden?: boolean;
   description?: string; // SEO meta description
   keywords?: string; // SEO meta keywords
@@ -105,19 +111,29 @@ export interface Project {
 interface HistoryEntry {
   pageId: string;
   sections: PageSection[];
+  widgetInstances?: WidgetInstance[];
   globalCss: string;
   globalJs: string;
 }
 
 interface SelectedElementInfo {
-  kind: "section" | "text" | "image" | "link" | "container";
+  kind: "section" | "widget" | "text" | "image" | "link" | "container";
   index: number | null;
   tag?: string;
+  sectionId?: string | null;
+  widgetId?: string | null;
+  parentWidgetId?: string | null;
+  childId?: string | null;
+  elementKey?: string | null;
+  elementType?: string | null;
+  columnId?: string | null;
+  childContainerId?: string | null;
 }
 
 interface BuilderState {
   projects: Record<string, Project>;
   currentProjectId: string | null;
+  selectedWidgetId: string | null;
   selectedSectionId: string | null;
   selectedElement: SelectedElementInfo | null;
   selectedElementStyle: Record<string, string> | null;
@@ -125,6 +141,8 @@ interface BuilderState {
   dark: boolean;
   history: HistoryEntry[];
   historyIndex: number;
+  future: HistoryEntry[];
+  clipboard: { items: WidgetInstance[]; type: "copy" | "cut"; sourceSectionId?: string } | null;
   hydrated: boolean;
   leftPanelOpen: boolean;
   leftPanelView:
@@ -160,6 +178,8 @@ interface BuilderState {
   setSaveErrorMessage: (message: string | null) => void;
   persistWithStatus: () => boolean;
   saveProjectToCloud: () => Promise<boolean>;
+  setSelectedWidgetId: (id: string | null) => void;
+  setClipboard: (clipboard: { items: WidgetInstance[]; type: "copy" | "cut"; sourceSectionId?: string } | null) => void;
   setSelectedElementStyle: (style: Record<string, string> | null) => void;
 
   hydrate: () => void;
@@ -186,6 +206,7 @@ interface BuilderState {
   addSection: (tpl: SectionTemplate, index?: number) => string;
   applyTemplate: (tpl: TemplateDefinition) => void;
   updateSection: (id: string, patch: Partial<PageSection>) => void;
+  updateWidgetInstance: (id: string, patch: Partial<WidgetInstance>) => void;
   removeSection: (id: string) => void;
   duplicateSection: (id: string) => void;
   moveSection: (fromIndex: number, toIndex: number) => void;
@@ -193,6 +214,13 @@ interface BuilderState {
   toggleHidden: (id: string) => void;
   selectSection: (id: string | null) => void;
   selectElement: (value: SelectedElementInfo | null) => void;
+  duplicateElement: (value: SelectedElementInfo | null) => void;
+  moveChildUp: (sectionId: string, parentWidgetId: string, childContainerId: string | null, childWidgetId: string) => void;
+  moveChildDown: (sectionId: string, parentWidgetId: string, childContainerId: string | null, childWidgetId: string) => void;
+  duplicateChild: (sectionId: string, parentWidgetId: string, childContainerId: string | null, childWidgetId: string) => void;
+  deleteChild: (sectionId: string, parentWidgetId: string, childContainerId: string | null, childWidgetId: string) => void;
+  updateWidgetElementStyle: (sectionId: string, widgetId: string, childId: string | null, elementKey: string | null, patch: Record<string, unknown>, location?: WidgetChildLocation) => void;
+  updateWidgetElementContent: (sectionId: string, widgetId: string, childId: string | null, elementKey: string | null, patch: Record<string, unknown>, location?: WidgetChildLocation) => void;
 
   setGlobalCss: (v: string) => void;
   setGlobalJs: (v: string) => void;
@@ -402,6 +430,39 @@ function getCurrentPage(project: Project | null): Page | null {
   return project.pages.find((p) => p.id === project.currentPageId) ?? project.pages[0] ?? null;
 }
 
+function getPageWidgetInstances(page: Page | null): WidgetInstance[] {
+  if (!page) return [];
+  return page.widgetInstances ?? page.sections.map((section) => section.widgetInstance).filter((item): item is WidgetInstance => !!item);
+}
+
+function updatePageWidgetInstances(
+  set: (fn: (s: BuilderState) => Partial<BuilderState>) => void,
+  get: () => BuilderState,
+  widgetInstances: WidgetInstance[],
+) {
+  set((s) => {
+    if (!s.currentProjectId) return s;
+    const cur = s.projects[s.currentProjectId];
+    if (!cur) return s;
+    const pages = cur.pages.map((pg) =>
+      pg.id === cur.currentPageId ? { ...pg, widgetInstances } : pg,
+    );
+    return {
+      projects: {
+        ...s.projects,
+        [s.currentProjectId]: { ...cur, pages, updatedAt: Date.now() },
+      },
+    };
+  });
+  get().persist();
+  const currentProject = get().currentProject();
+  if (currentProject) {
+    void persistProjectToCloud(currentProject).catch((error) => {
+      console.error("Failed to sync current project to Firestore", error);
+    });
+  }
+}
+
 function mapBuilderProjectToMetadata(project: Project): ProjectMetadata {
   return {
     id: project.id,
@@ -419,9 +480,9 @@ function mapBuilderProjectToMetadata(project: Project): ProjectMetadata {
 }
 
 async function persistProjectToCloud(project: Project): Promise<boolean> {
-  console.log("persistProjectToCloud()");
-  console.log("Current user:", auth.currentUser);
-  console.log("Project:", project);
+  // console.log("persistProjectToCloud()");
+  // console.log("Current user:", auth.currentUser);
+  // console.log("Project:", project);
 
   const firebaseUser = auth.currentUser;
   if (!firebaseUser) {
@@ -432,7 +493,7 @@ async function persistProjectToCloud(project: Project): Promise<boolean> {
   try {
     await saveBuilderProjectState(project);
     await saveProjectMetadata(mapBuilderProjectToMetadata(project));
-    console.log("Project saved successfully");
+    //console.log("Project saved successfully");
     return true;
   } catch (error) {
     console.error("Failed to sync project to Firestore", error);
@@ -456,6 +517,7 @@ if (typeof window !== "undefined") {
 export const useBuilder = create<BuilderState>((set, get) => ({
   projects: {},
   currentProjectId: null,
+  selectedWidgetId: null,
   selectedSectionId: null,
   selectedElement: null,
   selectedElementStyle: null,
@@ -463,6 +525,8 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   dark: false,
   history: [],
   historyIndex: -1,
+  future: [],
+  clipboard: null,
   hydrated: false,
   showProjectDashboard: false,
   saveStatus: "idle",
@@ -477,13 +541,13 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   hydrate: () => {
     if (get().hydrated) return;
     const loaded = loadFromStorage();
-    console.log("hydrate() loaded from storage", {
-      loadedProjectIds: Object.keys(loaded.projects),
-      currentProjectId: loaded.currentProjectId,
-      showProjectDashboard: loaded.showProjectDashboard,
-      leftPanelView: loaded.leftPanelView,
-      leftPanelOpen: loaded.leftPanelOpen,
-    });
+    // console.log("hydrate() loaded from storage", {
+    //   loadedProjectIds: Object.keys(loaded.projects),
+    //   currentProjectId: loaded.currentProjectId,
+    //   showProjectDashboard: loaded.showProjectDashboard,
+    //   leftPanelView: loaded.leftPanelView,
+    //   leftPanelOpen: loaded.leftPanelOpen,
+    // });
     const { projects, currentProjectId, leftPanelOpen, leftPanelView, showProjectDashboard } = loaded;
     let pid = currentProjectId;
     let projs = projects;
@@ -498,30 +562,30 @@ export const useBuilder = create<BuilderState>((set, get) => ({
         leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages",
         showProjectDashboard: showProjectDashboard ?? false,
       });
-      console.log("hydrate() after set (no current project)", {
-        hydrated: get().hydrated,
-        projectIds: Object.keys(get().projects),
-        currentProjectId: get().currentProjectId,
-      });
+      //  console.log("hydrate() after set (no current project)", {
+      //   hydrated: get().hydrated,
+      //   projectIds: Object.keys(get().projects),
+      //   currentProjectId: get().currentProjectId,
+      // });
       return;
     }
     set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: leftPanelOpen ?? true, leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages", showProjectDashboard: showProjectDashboard ?? false });
-    console.log("hydrate() after set (with current project)", {
-      hydrated: get().hydrated,
-      projectIds: Object.keys(get().projects),
-      currentProjectId: get().currentProjectId,
-    });
+    // console.log("hydrate() after set (with current project)", {
+    //   hydrated: get().hydrated,
+    //   projectIds: Object.keys(get().projects),
+    //   currentProjectId: get().currentProjectId,
+    // });
     const p = projs[pid];
     const page = getCurrentPage(p)!;
     set({
       history: [{ pageId: page.id, sections: page.sections, globalCss: p.globalCss, globalJs: p.globalJs }],
       historyIndex: 0,
     });
-    console.log("hydrate() after history set", {
-      hydrated: get().hydrated,
-      projectIds: Object.keys(get().projects),
-      currentProjectId: get().currentProjectId,
-    });
+    // console.log("hydrate() after history set", {
+    //   hydrated: get().hydrated,
+    //   projectIds: Object.keys(get().projects),
+    //   currentProjectId: get().currentProjectId,
+    // });
   },
 
   persist: () => {
@@ -586,6 +650,8 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
   setLeftPanelView: (view) => set({ leftPanelView: view }),
   setSelectedElementStyle: (style) => set({ selectedElementStyle: style }),
+  setSelectedWidgetId: (id) => set({ selectedWidgetId: id }),
+  setClipboard: (clipboard) => set({ clipboard }),
 
   currentProject: () => {
     const { projects, currentProjectId } = get();
@@ -800,7 +866,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const p = get().currentProject();
     if (!p || !p.pages.some((pg) => pg.id === id)) return;
     updateCurrent(set, get, { currentPageId: id });
-    set({ selectedSectionId: null });
+    set({ selectedSectionId: null, selectedWidgetId: null, selectedElement: null, selectedElementStyle: null });
   },
 
   pushHistory: () => {
@@ -810,13 +876,14 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const snap: HistoryEntry = {
       pageId: page.id,
       sections: JSON.parse(JSON.stringify(page.sections)),
+      widgetInstances: JSON.parse(JSON.stringify(getPageWidgetInstances(page))),
       globalCss: p.globalCss,
       globalJs: p.globalJs,
     };
     set((s) => {
       const trimmed = s.history.slice(0, s.historyIndex + 1);
       const next = [...trimmed, snap].slice(-100);
-      return { history: next, historyIndex: next.length - 1 };
+      return { history: next, historyIndex: next.length - 1, future: [] };
     });
   },
 
@@ -826,11 +893,15 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const page = getCurrentPage(project);
     if (!page) return "";
     const sectionId: string = nanoid(8);
+    const widgetInstance = (tpl as any).widgetInstance
+      ? { ...JSON.parse(JSON.stringify((tpl as any).widgetInstance)), id: sectionId }
+      : undefined;
     const section: PageSection = {
       id: sectionId,
       templateId: tpl.id,
       name: tpl.name,
       html: tpl.html,
+      widgetInstance,
       animation: { type: "fade-up", duration: 700, delay: 0 },
     };
     const sections = [...page.sections];
@@ -838,7 +909,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     sections.splice(at, 0, section);
     updatePageSections(set, get, sections);
     get().pushHistory();
-    set({ selectedSectionId: sectionId });
+    set({ selectedSectionId: sectionId, selectedWidgetId: widgetInstance?.id ?? null });
     return sectionId;
   },
 
@@ -946,7 +1017,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     }
   },
 
-  updateSection: (id, patch) => {
+  updateSection: (id: string, patch: Partial<PageSection>) => {
     const cur = get().currentProject();
     if (!cur) return;
     // find original section and its sharedKey (if any)
@@ -978,7 +1049,13 @@ export const useBuilder = create<BuilderState>((set, get) => ({
           sections = [...sections, copy];
         }
       }
-      return { ...pg, sections };
+      return {
+        ...pg,
+        sections,
+        widgetInstances: sections
+          .map((section) => section.widgetInstance)
+          .filter((item): item is WidgetInstance => !!item),
+      };
     });
     updateCurrent(set, get, { pages });
   },
@@ -1002,14 +1079,20 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     }
     if (!original) return;
     const sharedKey = (original as any).sharedKey as string | undefined;
-    const pages = cur.pages.map((pg) => ({
-      ...pg,
-      sections: pg.sections.filter((s) => {
+    const pages = cur.pages.map((pg) => {
+      const sections = pg.sections.filter((s) => {
         if (s.id === id) return false;
         if (sharedKey && (s as any).sharedKey === sharedKey) return false;
         return true;
-      }),
-    }));
+      });
+      return {
+        ...pg,
+        sections,
+        widgetInstances: sections
+          .map((section) => section.widgetInstance)
+          .filter((item): item is WidgetInstance => !!item),
+      };
+    });
     updateCurrent(set, get, { pages });
     get().pushHistory();
 
@@ -1061,8 +1144,289 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     updatePageSections(set, get, sections);
   },
 
-  selectSection: (id) => set({ selectedSectionId: id, selectedElement: null, selectedElementStyle: null }),
-  selectElement: (value) => set({ selectedElement: value, selectedElementStyle: null }),
+  selectSection: (id) => {
+    const project = get().currentProject();
+    const page = getCurrentPage(project);
+    const section = page?.sections.find((s) => s.id === id) ?? null;
+    const widgetInstanceId = section?.widgetInstance?.id ?? null;
+    set({ selectedSectionId: id, selectedWidgetId: widgetInstanceId, selectedElement: null, selectedElementStyle: null });
+  },
+  selectElement: (value) => {
+    const nextWidgetId = value ? (value.parentWidgetId ?? value.widgetId ?? get().selectedWidgetId) : null;
+    set({ selectedElement: value, selectedElementStyle: null, selectedWidgetId: nextWidgetId ?? null });
+  },
+  duplicateElement: (value) => {
+    const project = get().currentProject();
+    const page = getCurrentPage(project);
+    if (!page || !value?.sectionId || !value.widgetId) return;
+
+    const sourceSection = page.sections.find((section) => section.id === value.sectionId);
+    if (!sourceSection?.widgetInstance) return;
+
+    const elementEntry = createWidgetElementDuplicateEntry(sourceSection.widgetInstance, value.elementKey ?? null, value.elementType ?? null);
+    if (!elementEntry) return;
+
+    const existingDuplicatedElements = Array.isArray((sourceSection.widgetInstance.advanced as Record<string, unknown> | undefined)?.duplicatedElements)
+      ? ((sourceSection.widgetInstance.advanced as Record<string, unknown> | undefined)?.duplicatedElements as Array<Record<string, unknown>>)
+      : [];
+
+    const duplicatedWidgetInstance = {
+      ...JSON.parse(JSON.stringify(sourceSection.widgetInstance)),
+      advanced: {
+        ...(sourceSection.widgetInstance.advanced ?? {}),
+        duplicatedElements: [
+          ...existingDuplicatedElements,
+          { ...elementEntry, id: `${elementEntry.key}-${nanoid(8)}` },
+        ],
+      },
+    } as WidgetInstance;
+
+    get().updateWidgetInstance(sourceSection.widgetInstance.id, duplicatedWidgetInstance);
+    get().pushHistory();
+    set({
+      selectedSectionId: sourceSection.id,
+      selectedWidgetId: duplicatedWidgetInstance.id,
+      selectedElement: {
+        ...value,
+        sectionId: sourceSection.id,
+        widgetId: duplicatedWidgetInstance.id,
+        elementKey: value.elementKey ?? elementEntry.key,
+        elementType: value.elementType ?? "container",
+        kind: value.kind === "section" ? "widget" : value.kind,
+      },
+      selectedElementStyle: null,
+    });
+  },
+
+  moveChildUp: (sectionId, parentWidgetId, childContainerId, childWidgetId) => {
+    const project = get().currentProject();
+    const page = getCurrentPage(project);
+    if (!page) return;
+    const sourceSection = page.sections.find((section) => section.id === sectionId);
+    if (!sourceSection?.widgetInstance || sourceSection.widgetInstance.id !== parentWidgetId) return;
+    const location = childContainerId ? { childContainerId } : undefined;
+    const children = getWidgetChildItems(sourceSection.widgetInstance, location);
+    const index = children.findIndex((child) => child?.id === childWidgetId);
+    if (index <= 0) return;
+    const nextIndex = index - 1;
+    const [item] = children.splice(index, 1);
+    if (!item) return;
+    children.splice(nextIndex, 0, item);
+    get().updateWidgetInstance(parentWidgetId, setWidgetChildItems(sourceSection.widgetInstance, children, location) as any);
+    get().pushHistory();
+    const currentSelected = get().selectedElement;
+    set({
+      selectedElement: currentSelected
+        ? { ...currentSelected, sectionId, widgetId: parentWidgetId, parentWidgetId, childId: childWidgetId, elementKey: childWidgetId, elementType: item?.type ?? null, kind: "widget" as const, index: null, columnId: childContainerId ?? currentSelected.columnId ?? null, childContainerId: childContainerId ?? currentSelected.childContainerId ?? null }
+        : null,
+      selectedElementStyle: null,
+    });
+  },
+
+  moveChildDown: (sectionId, parentWidgetId, childContainerId, childWidgetId) => {
+    const project = get().currentProject();
+    const page = getCurrentPage(project);
+    if (!page) return;
+    const sourceSection = page.sections.find((section) => section.id === sectionId);
+    if (!sourceSection?.widgetInstance || sourceSection.widgetInstance.id !== parentWidgetId) return;
+    const location = childContainerId ? { childContainerId } : undefined;
+    const children = getWidgetChildItems(sourceSection.widgetInstance, location);
+    const index = children.findIndex((child) => child?.id === childWidgetId);
+    if (index < 0 || index >= children.length - 1) return;
+    const [item] = children.splice(index, 1);
+    if (!item) return;
+    children.splice(index + 1, 0, item);
+    get().updateWidgetInstance(parentWidgetId, setWidgetChildItems(sourceSection.widgetInstance, children, location) as any);
+    get().pushHistory();
+    const currentSelected = get().selectedElement;
+    set({
+      selectedElement: currentSelected
+        ? { ...currentSelected, sectionId, widgetId: parentWidgetId, parentWidgetId, childId: childWidgetId, elementKey: childWidgetId, elementType: item?.type ?? null, kind: "widget" as const, index: null, columnId: childContainerId ?? currentSelected.columnId ?? null, childContainerId: childContainerId ?? currentSelected.childContainerId ?? null }
+        : null,
+      selectedElementStyle: null,
+    });
+  },
+
+  duplicateChild: (sectionId, parentWidgetId, childContainerId, childWidgetId) => {
+    const project = get().currentProject();
+    const page = getCurrentPage(project);
+    if (!page) return;
+    const sourceSection = page.sections.find((section) => section.id === sectionId);
+    if (!sourceSection?.widgetInstance || sourceSection.widgetInstance.id !== parentWidgetId) return;
+    const location = childContainerId ? { childContainerId } : undefined;
+    const children = getWidgetChildItems(sourceSection.widgetInstance, location);
+    const index = children.findIndex((child) => child?.id === childWidgetId);
+    if (index < 0) return;
+    const sourceChild = children[index];
+    const copy = JSON.parse(JSON.stringify(sourceChild));
+    copy.id = nanoid(8);
+    children.splice(index + 1, 0, copy);
+    get().updateWidgetInstance(parentWidgetId, setWidgetChildItems(sourceSection.widgetInstance, children, location) as any);
+    get().pushHistory();
+    set({
+      selectedElement: {
+        kind: "widget" as const,
+        sectionId,
+        widgetId: parentWidgetId,
+        parentWidgetId,
+        childId: copy.id,
+        elementKey: copy.id,
+        elementType: copy.type ?? null,
+        index: null,
+        columnId: childContainerId ?? null,
+        childContainerId: childContainerId ?? null,
+      },
+      selectedElementStyle: null,
+    });
+  },
+
+  deleteChild: (sectionId, parentWidgetId, childContainerId, childWidgetId) => {
+    const project = get().currentProject();
+    const page = getCurrentPage(project);
+    if (!page) return;
+    const sourceSection = page.sections.find((section) => section.id === sectionId);
+    if (!sourceSection?.widgetInstance || sourceSection.widgetInstance.id !== parentWidgetId) return;
+    const location = childContainerId ? { childContainerId } : undefined;
+    const children = getWidgetChildItems(sourceSection.widgetInstance, location);
+    const nextChildren = children.filter((child) => child?.id !== childWidgetId);
+    if (nextChildren.length === children.length) return;
+    get().updateWidgetInstance(parentWidgetId, setWidgetChildItems(sourceSection.widgetInstance, nextChildren, location) as any);
+    get().pushHistory();
+    const currentSelected = get().selectedElement;
+    if (currentSelected?.childId === childWidgetId && currentSelected.sectionId === sectionId && currentSelected.widgetId === parentWidgetId) {
+      const nextChild = nextChildren[Math.min(nextChildren.length - 1, children.findIndex((child) => child?.id === childWidgetId))] ?? null;
+      set({
+        selectedElement: nextChild
+          ? {
+              ...currentSelected,
+              childId: nextChild.id,
+              elementKey: nextChild.id,
+              elementType: nextChild.type ?? null,
+              columnId: childContainerId ?? currentSelected.columnId ?? null,
+              childContainerId: childContainerId ?? currentSelected.childContainerId ?? null,
+            }
+          : null,
+        selectedElementStyle: null,
+      });
+    }
+  },
+
+  updateGridColumns: (widgetId, count) => {
+    const project = get().currentProject();
+    const page = getCurrentPage(project);
+    if (!page) return;
+    const sourceSection = page.sections.find((section) => section.widgetInstance?.id === widgetId);
+    if (!sourceSection?.widgetInstance || sourceSection.widgetInstance.id !== widgetId) return;
+    const currentWidget = sourceSection.widgetInstance as any;
+    const currentColumns = Array.isArray(currentWidget.content?.columns) ? [...currentWidget.content.columns] : [];
+    const resolvedCount = Math.max(1, Math.min(6, Number(count) || 1));
+    const shouldConfirm = resolvedCount < currentColumns.length && currentColumns.slice(resolvedCount).some((column: any) => Array.isArray(column.children) && column.children.length > 0);
+    if (shouldConfirm && typeof window !== "undefined" && typeof window.confirm === "function" && !window.confirm("Remove the extra columns and their contents?")) {
+      return;
+    }
+
+    const nextColumns = Array.from({ length: resolvedCount }, (_, index) => {
+      const sourceColumn = currentColumns[index];
+      const span = resolvedCount <= 1 ? 12 : resolvedCount === 2 ? 6 : resolvedCount === 3 ? 4 : resolvedCount === 4 ? 3 : 12;
+      if (sourceColumn) {
+        return {
+          ...sourceColumn,
+          id: sourceColumn.id ?? `column-${Math.random().toString(36).slice(2, 8)}`,
+          span: sourceColumn.span ?? span,
+          children: Array.isArray(sourceColumn.children) ? [...sourceColumn.children] : [],
+        };
+      }
+      return createGridColumn(span);
+    });
+
+    get().updateWidgetInstance(widgetId, {
+      ...currentWidget,
+      variant: getGridVariantForCount(resolvedCount),
+      layout: {
+        ...currentWidget.layout,
+        columns: resolvedCount,
+      },
+      content: {
+        ...currentWidget.content,
+        columns: nextColumns,
+      },
+      responsive: {
+        ...currentWidget.responsive,
+      },
+    } as any);
+    get().pushHistory();
+  },
+
+  updateWidgetElementStyle: (sectionId, widgetId, childId, elementKey, patch, location) => {
+    const project = get().currentProject();
+    const page = getCurrentPage(project);
+    if (!page) return;
+    const sourceSection = page.sections.find((section) => section.id === sectionId);
+    if (!sourceSection?.widgetInstance || sourceSection.widgetInstance.id !== widgetId) return;
+    const children = getWidgetChildItems(sourceSection.widgetInstance, location);
+    let childPatched = false;
+    const nextChildren = children.map((child) => {
+      if (!child || (child.id !== childId && child.id !== elementKey)) return child;
+      childPatched = true;
+      const currentData = (child.data ?? {}) as Record<string, unknown>;
+      const currentStyle = (currentData.style ?? {}) as Record<string, unknown>;
+      return {
+        ...child,
+        data: {
+          ...currentData,
+          style: {
+            ...currentStyle,
+            ...patch,
+          },
+        },
+      };
+    });
+    if (childPatched) {
+      get().updateWidgetInstance(widgetId, setWidgetChildItems(sourceSection.widgetInstance, nextChildren, location) as any);
+    } else {
+      get().updateWidgetInstance(widgetId, {
+        ...sourceSection.widgetInstance,
+        style: {
+          ...sourceSection.widgetInstance.style,
+          ...patch,
+        },
+      } as any);
+    }
+    get().pushHistory();
+    const currentSelected = get().selectedElement;
+    if (currentSelected?.sectionId === sectionId && currentSelected?.widgetId === widgetId && currentSelected?.childId === childId) {
+      set({ selectedElementStyle: { ...(get().selectedElementStyle ?? {}), ...(patch as Record<string, string>) } });
+    }
+  },
+
+  updateWidgetElementContent: (sectionId, widgetId, childId, elementKey, patch, location) => {
+    const project = get().currentProject();
+    const page = getCurrentPage(project);
+    if (!page) return;
+    const sourceSection = page.sections.find((section) => section.id === sectionId);
+    if (!sourceSection?.widgetInstance || sourceSection.widgetInstance.id !== widgetId) return;
+    const children = getWidgetChildItems(sourceSection.widgetInstance, location);
+    let childPatched = false;
+    const nextChildren = children.map((child) => {
+      if (!child || (child.id !== childId && child.id !== elementKey)) return child;
+      childPatched = true;
+      const currentData = (child.data ?? {}) as Record<string, unknown>;
+      const currentContent = (currentData.content ?? {}) as Record<string, unknown>;
+      return {
+        ...child,
+        data: {
+          ...currentData,
+          content: {
+            ...currentContent,
+            ...patch,
+          },
+        },
+      };
+    });
+    if (!childPatched) return;
+    get().updateWidgetInstance(widgetId, setWidgetChildItems(sourceSection.widgetInstance, nextChildren, location) as any);
+    get().pushHistory();
+  },
 
   addAsset: (dataUrl, filenameHint) => {
     try {
@@ -1142,6 +1506,24 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const sections = page.sections.map((s) => (s.id === id ? { ...s, html } : s));
     updatePageSections(set, get, sections);
   },
+  updateWidgetInstance: (id: string, patch: Partial<WidgetInstance>) => {
+    const project = get().currentProject();
+    if (!project) return;
+    const page = getCurrentPage(project);
+    if (!page) return;
+
+    const sections = page.sections.map((s) => {
+      if (!s.widgetInstance || s.widgetInstance.id !== id) return s;
+      return { ...s, widgetInstance: { ...s.widgetInstance, ...patch } };
+    });
+
+    const widgetInstances = sections
+      .map((section) => section.widgetInstance)
+      .filter((item): item is WidgetInstance => !!item);
+
+    updatePageWidgetInstances(set, get, widgetInstances);
+    updatePageSections(set, get, sections);
+  },
   setPageHtml: (html) => {
     const page = getCurrentPage(get().currentProject());
     if (!page) return;
@@ -1156,18 +1538,19 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   toggleDark: () => set((s) => ({ dark: !s.dark })),
 
   undo: () => {
-    const { history, historyIndex } = get();
+    const { history, historyIndex, future } = get();
     if (historyIndex <= 0) return;
+    const current = history[historyIndex];
     const entry = history[historyIndex - 1];
     applyHistoryEntry(set, get, entry);
-    set({ historyIndex: historyIndex - 1 });
+    set({ historyIndex: historyIndex - 1, future: [current, ...future] });
   },
   redo: () => {
-    const { history, historyIndex } = get();
-    if (historyIndex >= history.length - 1) return;
-    const entry = history[historyIndex + 1];
-    applyHistoryEntry(set, get, entry);
-    set({ historyIndex: historyIndex + 1 });
+    const { future } = get();
+    if (!future.length) return;
+    const [next, ...remaining] = future;
+    applyHistoryEntry(set, get, next);
+    set((s) => ({ historyIndex: Math.min(s.historyIndex + 1, s.history.length), future: remaining }));
   },
 }));
 
@@ -1204,8 +1587,11 @@ function updatePageSections(
     if (!s.currentProjectId) return s;
     const cur = s.projects[s.currentProjectId];
     if (!cur) return s;
+    const widgetInstances = sections
+      .map((section) => section.widgetInstance)
+      .filter((item): item is WidgetInstance => !!item);
     const pages = cur.pages.map((pg) =>
-      pg.id === cur.currentPageId ? { ...pg, sections } : pg,
+      pg.id === cur.currentPageId ? { ...pg, sections, widgetInstances } : pg,
     );
     return {
       projects: {
@@ -1233,7 +1619,13 @@ function applyHistoryEntry(
     const cur = s.projects[s.currentProjectId];
     if (!cur) return s;
     const pages = cur.pages.map((pg) =>
-      pg.id === entry.pageId ? { ...pg, sections: entry.sections } : pg,
+      pg.id === entry.pageId
+        ? {
+            ...pg,
+            sections: entry.sections,
+            widgetInstances: entry.widgetInstances ?? entry.sections.map((section) => section.widgetInstance).filter((item): item is WidgetInstance => !!item),
+          }
+        : pg,
     );
     return {
       projects: {

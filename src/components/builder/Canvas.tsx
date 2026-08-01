@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMounted } from "@/hooks/use-mounted";
 import { APP_CSS_HREF, buildPreviewHTML, resolveAssetPaths } from "@/lib/builder/preview";
 import { getImageObjectUrl } from "@/lib/builder/image-storage";
+import { createWidgetInstance, createWidgetSectionTemplate, getWidgetRegistration } from "@/components/builder/widgets/widgetRegistry";
+import { buildContainerChildData, createContainerChildItem } from "@/components/builder/widgets/Container/ContainerTypes";
+import { nanoid } from "nanoid";
 import { UploadCloud } from "lucide-react";
 
 interface Props {
@@ -45,6 +48,7 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
   } | null>(null);
   const [srcDoc, setSrcDoc] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState<number | null>(null);
+  const [containerDropTarget, setContainerDropTarget] = useState<{ containerId: string; insertIndex: number } | null>(null);
   const [previewCycle, setPreviewCycle] = useState(0);
   const skipRebuildRef = useRef(false);
   const innerIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -167,24 +171,48 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
     iframeWindow.postMessage({ __wto: true, type, payload }, "*");
   };
 
+  const scrollSectionIntoView = (sectionId: string) => {
+    window.setTimeout(() => {
+      const iframe = iframeRefToUse.current;
+      const doc = iframe?.contentDocument;
+      const section = doc?.querySelector(`[data-wto-section="${sectionId}"]`) as HTMLElement | null;
+      if (!section) return;
+      section.scrollIntoView({ block: "center", behavior: "smooth" });
+      const view = doc?.defaultView;
+      if (view) {
+        const top = view.scrollY + section.getBoundingClientRect().top - 120;
+        view.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      }
+    }, 80);
+  };
+
   useEffect(() => {
-    // When selection changes in the React UI (e.g., PropertiesPanel), notify the iframe
+    if (!mounted) return;
     const iframeWindow = iframeRefToUse.current?.contentWindow;
     if (!iframeWindow) return;
     try {
-      if (selectedId && selectedElement) {
+      iframeWindow.postMessage({ __wto: true, type: 'set-selected-section', payload: { sectionId: selectedId } }, '*');
+    } catch (_) {}
+  }, [mounted, selectedId]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const iframeWindow = iframeRefToUse.current?.contentWindow;
+    if (!iframeWindow) return;
+    try {
+      if (selectedId && selectedElement && selectedElement.kind === "image") {
         iframeWindow.postMessage({ __wto: true, type: 'show-upload-target', payload: { sectionId: selectedId, elementKind: selectedElement.kind, index: selectedElement.index, tag: selectedElement.tag } }, '*');
       } else {
         iframeWindow.postMessage({ __wto: true, type: 'hide-upload-target' }, '*');
       }
     } catch (_) {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, selectedElement]);
+  }, [mounted, selectedId, selectedElement]);
   
   useEffect(() => {
     if (!draggingLibrarySection) {
       sendIframeMessage("hide-drop-target");
       setPlaceholderIndex(null);
+      setContainerDropTarget(null);
     }
   }, [draggingLibrarySection]);
 
@@ -268,7 +296,12 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
     const doc = iframeRefToUse.current?.contentDocument;
     if (!doc) return;
     doc.querySelectorAll("[data-wto-section]").forEach((el) => {
-      el.classList.toggle("wto-selected", el.getAttribute("data-wto-section") === selectedId);
+      const isSelected = el.getAttribute("data-wto-section") === selectedId;
+      el.classList.toggle("wto-selected", isSelected);
+      if (!isSelected) {
+        el.style.outline = "";
+        el.style.outlineOffset = "";
+      }
     });
   }, [selectedId, srcDoc]);
 
@@ -285,7 +318,27 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         const index = data.payload?.index != null ? Number(data.payload.index) : null;
         const tag = data.payload?.tag ? String(data.payload.tag) : undefined;
         const style = data.payload?.style && typeof data.payload.style === 'object' ? (data.payload.style as Record<string, string>) : null;
-        selectElement(elementKind === "section" ? null : { kind: elementKind as any, index: Number.isFinite(index) ? index : null, tag });
+        const widgetId = data.payload?.widgetId ? String(data.payload.widgetId) : null;
+        const parentWidgetId = data.payload?.parentWidgetId ? String(data.payload.parentWidgetId) : null;
+        const childId = data.payload?.childId ? String(data.payload.childId) : null;
+        const elementKey = data.payload?.elementKey ? String(data.payload.elementKey) : null;
+        const elementType = data.payload?.elementType ? String(data.payload.elementType) : null;
+        const columnId = data.payload?.columnId ? String(data.payload.columnId) : null;
+        const nextSelection = elementKind === "section"
+          ? null
+          : {
+              kind: elementKind as any,
+              index: Number.isFinite(index) ? index : null,
+              tag,
+              sectionId: sectionId || null,
+              widgetId,
+              parentWidgetId,
+              childId,
+              elementKey,
+              elementType,
+              columnId,
+            };
+        selectElement(nextSelection);
         setSelectedElementStyle(style);
       }
       if (data.type === 'open-preview-link') {
@@ -327,6 +380,102 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
           kind: (data.payload?.kind as "img" | "box") ?? "img",
         });
       }
+      if (data.type === "element-duplicate") {
+        const nextSelection = {
+          sectionId: data.payload?.sectionId ? String(data.payload.sectionId) : null,
+          widgetId: data.payload?.widgetId ? String(data.payload.widgetId) : null,
+          elementKey: data.payload?.elementKey ? String(data.payload.elementKey) : null,
+          elementType: data.payload?.elementType ? String(data.payload.elementType) : null,
+          kind: data.payload?.kind ? String(data.payload.kind) : "widget",
+          index: data.payload?.index != null ? Number(data.payload.index) : null,
+          tag: data.payload?.tag ? String(data.payload.tag) : null,
+        } as any;
+        if (nextSelection.sectionId && nextSelection.widgetId) {
+          useBuilder.getState().duplicateElement(nextSelection);
+        }
+      }
+      if (data.type === "widget-add-child") {
+        const sectionId = String(data.payload?.sectionId ?? "");
+        const widgetId = data.payload?.widgetId ? String(data.payload.widgetId) : null;
+        const parentWidgetId = data.payload?.parentWidgetId ? String(data.payload.parentWidgetId) : widgetId;
+        const childType = data.payload?.childType ? String(data.payload.childType) : null;
+        const widgetType = data.payload?.widgetType ? String(data.payload.widgetType) : null;
+        const columnId = data.payload?.columnId ? String(data.payload.columnId) : null;
+        if (!sectionId || !widgetId || !childType || !widgetType) return;
+        const state = useBuilder.getState();
+        const cur = state.currentProject();
+        const page = cur ? pageOf(cur) : null;
+        const targetSection = page?.sections.find((section: any) => section.id === sectionId);
+        const containerWidget = targetSection?.widgetInstance;
+        if (!containerWidget || containerWidget.id !== parentWidgetId) return;
+        const registration = getWidgetRegistration(widgetType);
+        const supportedTypes = registration?.childElementTypes ?? [];
+        if (!supportedTypes.includes(childType)) return;
+        const childInstance = createWidgetInstance(childType);
+        const childItem = createContainerChildItem(childType as any, {
+          id: nanoid(8),
+          data: buildContainerChildData({
+            content: childInstance.content,
+            style: childInstance.style,
+            layout: childInstance.layout,
+            responsive: childInstance.responsive,
+            animation: childInstance.animation,
+            advanced: childInstance.advanced,
+            variant: childInstance.variant,
+          }),
+        });
+
+        if (containerWidget.type === "grid") {
+          const columns = Array.isArray(containerWidget.content?.columns) ? [...containerWidget.content.columns] : [];
+          const nextColumns = columns.map((column: any) => {
+            if (String(column.id ?? "") !== String(columnId ?? "")) return column;
+            const existingChildren = Array.isArray(column.children) ? [...column.children] : [];
+            return { ...column, children: [...existingChildren, childItem] };
+          });
+          state.updateWidgetInstance(containerWidget.id, {
+            ...containerWidget,
+            content: {
+              ...containerWidget.content,
+              columns: nextColumns,
+            },
+          } as any);
+          state.pushHistory();
+          state.selectSection(targetSection.id);
+          state.selectElement({
+            kind: "widget",
+            sectionId: targetSection.id,
+            widgetId: containerWidget.id,
+            parentWidgetId: containerWidget.id,
+            childId: childItem.id,
+            elementKey: childItem.id,
+            elementType: "container",
+            columnId,
+          } as any);
+          return;
+        }
+
+        const nextChildren = [...(Array.isArray(containerWidget.content?.children) ? containerWidget.content.children : [])];
+        nextChildren.push(childItem);
+        state.updateWidgetInstance(containerWidget.id, {
+          ...containerWidget,
+          content: {
+            ...containerWidget.content,
+            children: nextChildren,
+          },
+        } as any);
+        state.pushHistory();
+        state.selectSection(targetSection.id);
+        state.selectElement({
+          kind: "widget",
+          sectionId: targetSection.id,
+          widgetId: containerWidget.id,
+          parentWidgetId: containerWidget.id,
+          childId: childItem.id,
+          elementKey: childItem.id,
+          elementType: "container",
+        } as any);
+        return;
+      }
       if (data.type === "section-action") {
         const sid = String(data.payload?.sectionId ?? "");
         const act = String(data.payload?.action ?? "");
@@ -335,6 +484,9 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         const cur = state.currentProject();
         const secs = cur ? pageOf(cur)?.sections ?? [] : [];
         const fromIdx = secs.findIndex((s: any) => s.id === sid);
+        if (act === "move") {
+          state.selectSection(sid);
+        }
         if (act === "up" && fromIdx > 0) state.moveSection(fromIdx, fromIdx - 1);
         if (act === "down" && fromIdx >= 0 && fromIdx < secs.length - 1) state.moveSection(fromIdx, fromIdx + 1);
         if (act === "top" && fromIdx > 0) state.moveSection(fromIdx, 0);
@@ -342,6 +494,53 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         if (act === "dup") state.duplicateSection(sid);
         if (act === "hide") state.toggleHidden(sid);
         if (act === "del") state.removeSection(sid);
+        if (act === "template") {
+          state.setLeftPanelView("templates");
+          state.setLeftPanelOpen(true);
+        }
+      }
+      if (data.type === "element-action") {
+        const sectionId = String(data.payload?.sectionId ?? "");
+        const parentWidgetId = data.payload?.parentWidgetId ? String(data.payload.parentWidgetId) : null;
+        const childId = data.payload?.selectedChildId ? String(data.payload.selectedChildId) : (data.payload?.childId ? String(data.payload.childId) : (data.payload?.elementKey ? String(data.payload.elementKey) : null));
+        const childContainerId = data.payload?.childContainerId ? String(data.payload.childContainerId) : (data.payload?.columnId ? String(data.payload.columnId) : null);
+        const action = String(data.payload?.action ?? "");
+        if (!sectionId || !parentWidgetId || !childId) return;
+        const state = useBuilder.getState();
+        if (action === "move-up") state.moveChildUp(sectionId, parentWidgetId, childContainerId, childId);
+        if (action === "move-down") state.moveChildDown(sectionId, parentWidgetId, childContainerId, childId);
+        if (action === "duplicate") state.duplicateChild(sectionId, parentWidgetId, childContainerId, childId);
+        if (action === "delete") state.deleteChild(sectionId, parentWidgetId, childContainerId, childId);
+      }
+      if (data.type === "grid-columns") {
+        const sectionId = String(data.payload?.sectionId ?? "");
+        const widgetId = data.payload?.widgetId ? String(data.payload.widgetId) : null;
+        const count = data.payload?.count != null ? Number(data.payload.count) : null;
+        if (!sectionId || !widgetId || count == null) return;
+        const state = useBuilder.getState();
+        state.updateGridColumns(widgetId, count);
+      }
+      if (data.type === "element-style") {
+        const sectionId = String(data.payload?.sectionId ?? "");
+        const widgetId = data.payload?.widgetId ? String(data.payload.widgetId) : null;
+        const parentWidgetId = data.payload?.parentWidgetId ? String(data.payload.parentWidgetId) : widgetId;
+        const childId = data.payload?.childId ? String(data.payload.childId) : (data.payload?.elementKey ? String(data.payload.elementKey) : null);
+        const elementKey = data.payload?.elementKey ? String(data.payload.elementKey) : null;
+        const columnId = data.payload?.columnId ? String(data.payload.columnId) : null;
+        const patch = data.payload?.stylePatch && typeof data.payload.stylePatch === "object" ? (data.payload.stylePatch as Record<string, unknown>) : null;
+        if (!sectionId || !parentWidgetId || !childId || !patch) return;
+        useBuilder.getState().updateWidgetElementStyle(sectionId, parentWidgetId, childId, elementKey, patch, columnId ? { columnId } : undefined);
+      }
+      if (data.type === "element-content") {
+        const sectionId = String(data.payload?.sectionId ?? "");
+        const widgetId = data.payload?.widgetId ? String(data.payload.widgetId) : null;
+        const parentWidgetId = data.payload?.parentWidgetId ? String(data.payload.parentWidgetId) : widgetId;
+        const childId = data.payload?.childId ? String(data.payload.childId) : (data.payload?.elementKey ? String(data.payload.elementKey) : null);
+        const elementKey = data.payload?.elementKey ? String(data.payload.elementKey) : null;
+        const columnId = data.payload?.columnId ? String(data.payload.columnId) : null;
+        const patch = data.payload?.contentPatch && typeof data.payload.contentPatch === "object" ? (data.payload.contentPatch as Record<string, unknown>) : null;
+        if (!sectionId || !parentWidgetId || !childId || !patch) return;
+        useBuilder.getState().updateWidgetElementContent(sectionId, parentWidgetId, childId, elementKey, patch, columnId ? { columnId } : undefined);
       }
       if (data.type === "section-move") {
         const fromId = String(data.payload?.fromId ?? "");
@@ -361,6 +560,15 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         const idx = data.payload?.insertIndex;
         if (idx == null) setPlaceholderIndex(null);
         else setPlaceholderIndex(Number(idx));
+      }
+      if (data.type === 'container-drop-target') {
+        const containerId = data.payload?.containerId ? String(data.payload.containerId) : null;
+        const insertIndex = data.payload?.insertIndex != null ? Number(data.payload.insertIndex) : null;
+        if (containerId && insertIndex != null) {
+          setContainerDropTarget({ containerId, insertIndex });
+        } else {
+          setContainerDropTarget(null);
+        }
       }
       if (data.type === "console") {
         window.dispatchEvent(new CustomEvent("wto-console", { detail: data.payload }));
@@ -398,6 +606,7 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDraggingLibrarySection(false);
+    setContainerDropTarget(null);
     const elementHtml = e.dataTransfer.getData("application/x-wto-element");
     if (elementHtml && project) {
       const page = pageOf(project);
@@ -459,6 +668,79 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
       return;
     }
 
+    const widgetId = e.dataTransfer.getData("application/x-wto-widget");
+    if (widgetId && project) {
+      const registration = getWidgetRegistration(widgetId);
+      const childType = registration?.type;
+      const supportedChildTypes = new Set(["heading", "text", "button", "image"]);
+
+      if (containerDropTarget && childType && supportedChildTypes.has(childType)) {
+        const page = pageOf(project);
+        const targetSection = page?.sections.find((section: any) => section.widgetInstance?.id === containerDropTarget.containerId);
+        const containerWidget = targetSection?.widgetInstance;
+        if (containerWidget && Array.isArray(containerWidget.content?.children)) {
+          const nextChildren = [...containerWidget.content.children];
+          const childInstance = createWidgetInstance(childType);
+          const childItem = createContainerChildItem(childType as any, {
+            id: nanoid(8),
+            data: buildContainerChildData({
+              content: childInstance.content,
+              style: childInstance.style,
+              layout: childInstance.layout,
+              responsive: childInstance.responsive,
+              animation: childInstance.animation,
+              advanced: childInstance.advanced,
+              variant: childInstance.variant,
+            }),
+          });
+          nextChildren.splice(containerDropTarget.insertIndex, 0, childItem);
+          useBuilder.getState().updateWidgetInstance(containerWidget.id, {
+            ...containerWidget,
+            content: {
+              ...containerWidget.content,
+              children: nextChildren,
+            },
+          } as any);
+          useBuilder.getState().pushHistory();
+          useBuilder.getState().selectSection(targetSection.id);
+          useBuilder.getState().selectElement({
+            kind: "widget",
+            sectionId: targetSection.id,
+            widgetId: containerWidget.id,
+            parentWidgetId: containerWidget.id,
+            childId: childItem.id,
+            elementKey: childItem.id,
+            elementType: "container",
+          } as any);
+          return;
+        }
+      }
+
+      const page = pageOf(project);
+      const sectionCount = page?.sections.length ?? 0;
+      let insertIndex = sectionCount;
+
+      const frame = iframeRefToUse.current;
+      const frameRect = frame?.getBoundingClientRect();
+      if (frameRect) {
+        if (placeholderIndex == null) {
+          const dropY = Math.max(frameRect.top, Math.min(e.clientY, frameRect.bottom));
+          const ratio = (dropY - frameRect.top) / frameRect.height;
+          insertIndex = Math.floor(ratio * (sectionCount + 1));
+        } else {
+          insertIndex = placeholderIndex;
+        }
+      }
+
+      const sectionTemplate = createWidgetSectionTemplate(widgetId);
+      const sectionId = addSection(sectionTemplate as any, insertIndex ?? sectionCount);
+      if (sectionId) {
+        useBuilder.getState().selectSection(sectionId);
+        scrollSectionIntoView(sectionId);
+      }
+      return;
+    }
+
     const tplId = e.dataTransfer.getData("application/x-wto-section") || e.dataTransfer.getData("text/plain");
     if (!tplId) return;
     const tpl = SECTION_LIBRARY.find((s) => s.id === tplId);
@@ -508,7 +790,8 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
           const frame = iframeRefToUse.current;
           const frameRect = frame?.getBoundingClientRect();
           if (frameRect) {
-            sendIframeMessage("show-drop-target", { y: e.clientY - frameRect.top });
+            const widgetId = e.dataTransfer.getData("application/x-wto-widget");
+            sendIframeMessage("show-drop-target", { y: e.clientY - frameRect.top, widgetId });
           }
         }}
         onDragLeave={(e) => {
@@ -537,16 +820,16 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
               />
             ) : null}
             {mounted && project && pageOf(project)?.sections.length === 0 ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4  border border-dashed border-border/70 bg-slate-50/90 text-center px-6 py-10 text-sm text-slate-600">
-                <div className="inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-primary/10 text-primary">
-                  <UploadCloud className="w-7 h-7" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 border border-dashed border-slate-300/80 bg-[radial-gradient(circle_at_top,_rgba(124,58,237,0.10),_transparent_55%),rgba(255,255,255,0.96)] px-6 py-10 text-center text-sm text-slate-600">
+                <div className="inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-violet-600/10 text-violet-600 shadow-sm">
+                  <UploadCloud className="h-8 w-8" />
                 </div>
-                <div className="space-y-2">
-                  <div className="text-sm font-semibold text-foreground">Start building your website.</div>
-                  <div className="text-xs text-muted-foreground">Drag widgets from the left panel.</div>
+                <div className="max-w-[280px] space-y-2">
+                  <div className="text-base font-semibold text-slate-900">Start building your website.</div>
+                  <div className="text-sm leading-6 text-slate-500">Open the widget library and drop in a hero, navbar, or content block to begin.</div>
                 </div>
                 <button
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
+                  className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
                   onClick={() => {
                     setLeftPanelView("widgets");
                     setLeftPanelOpen(true);

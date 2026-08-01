@@ -16,7 +16,7 @@ export function AppSidebar({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex overflow-hidden bg-slate-50 text-slate-950">
-      <aside className={`flex-shrink-0 sticky top-0 h-screen overflow-hidden bg-white transition-all duration-300 ease-in-out ${leftPanelOpen ? "w-[250px]" : "w-[78px]"}`}>
+      <aside className={`flex-shrink-0 sticky top-0 h-screen overflow-hidden bg-white transition-all duration-300 ease-in-out ${leftPanelOpen ? "w-[280px]" : "w-[78px]"}`}>
         <LibraryPanel />
       </aside>
       <div className="flex-1 min-h-screen overflow-auto bg-slate-50">

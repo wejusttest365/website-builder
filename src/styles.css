@@ -134,6 +134,20 @@
  main.mainWrapper > div {
     height: 100%;
   }
+/* Bootstrap collapse compatibility for the navbar builder preview */
+.collapse {
+  visibility: visible !important;
+}
+.collapse:not(.show) {
+  display: none;
+}
+.collapse.show {
+  display: block;
+}
+.navbar-collapse.collapse.show {
+  display: flex;
+}
+
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;

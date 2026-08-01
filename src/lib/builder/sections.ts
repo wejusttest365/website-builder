@@ -1,8 +1,11 @@
+import type { WidgetInstance } from "@/components/builder/widgets/widgetRegistry";
+
 export interface SectionTemplate {
   id: string;
   name: string;
   category: string;
   html: string;
+  widgetInstance?: WidgetInstance;
   css?: string;
   js?: string;
   thumbBg: string; // gradient for placeholder thumbnail

@@ -1,14 +1,20 @@
 import { nanoid } from "nanoid";
 
 export interface BuilderImageReference {
-  imageId: string;
+  imageId?: string;
+  sourceType: "upload" | "remote" | "stock" | "builderAsset";
   src: string;
+  url?: string;
   filename: string;
-  mimeType: string;
+  mimeType?: string;
+  provider?: string;
+  attribution?: string;
   previewSrc?: string;
+  isPreview?: boolean;
+  isWatermarked?: boolean;
 }
 
-export type BuilderAssetEntry = BuilderImageReference;
+export type BuilderAssetEntry = BuilderImageReference | string;
 
 const DB_NAME = "wto-builder-db";
 const DB_STORE = "images";
@@ -71,6 +77,45 @@ function createFilename(ext: string, hint?: string, seed = nanoid(6)) {
   return `${base}.${ext}`;
 }
 
+function getFilenameFromUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const raw = parsed.pathname.split("/").filter(Boolean).pop() || "image.png";
+    const ext = getExtension(raw);
+    return createFilename(ext, raw);
+  } catch {
+    const fallback = url.split("?")[0].split("#")[0].split("/").filter(Boolean).pop() || "image.png";
+    const ext = getExtension(fallback);
+    return createFilename(ext, fallback);
+  }
+}
+
+export function createRemoteImageReference(url: string): BuilderImageReference {
+  return {
+    sourceType: "remote",
+    src: url,
+    url,
+    filename: getFilenameFromUrl(url),
+    provider: "Remote image",
+    attribution: "",
+    isPreview: false,
+    isWatermarked: false,
+  };
+}
+
+export function createStockImageReference(url: string): BuilderImageReference {
+  return {
+    sourceType: "stock",
+    src: url,
+    url,
+    filename: getFilenameFromUrl(url),
+    provider: "Builder stock preview",
+    attribution: "",
+    isPreview: true,
+    isWatermarked: true,
+  };
+}
+
 function openImageDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof window === "undefined" || !window.indexedDB) {
@@ -102,6 +147,7 @@ export function createImageAssetReference(dataUrl: string, filenameHint?: string
   const blob = dataUrlToBlob(dataUrl);
   const ref: BuilderImageReference = {
     imageId,
+    sourceType: "upload",
     src: `builder://images/${filename}`,
     filename,
     mimeType,
@@ -156,11 +202,35 @@ export async function getImageObjectUrl(imageId: string): Promise<string | null>
   return url;
 }
 
-export async function resolveAssetUrls(assets?: Record<string, BuilderImageReference>): Promise<Record<string, string>> {
+export function getAssetValue(entry?: BuilderAssetEntry): string | undefined {
+  if (!entry) return undefined;
+  if (typeof entry === "string") return entry;
+  if (typeof entry.url === "string" && /^(data:|https?:|blob:)/i.test(entry.url)) return entry.url;
+  if (typeof entry.previewSrc === "string" && /^(data:|https?:|blob:)/i.test(entry.previewSrc)) return entry.previewSrc;
+  if (typeof entry.src === "string") {
+    if (/^(data:|https?:|blob:)/i.test(entry.src)) return entry.src;
+    if (/^builder:\/\/images\//.test(entry.src) && entry.filename) return `images/${entry.filename}`;
+    if (entry.sourceType === "upload" && entry.filename) return `images/${entry.filename}`;
+    return entry.src;
+  }
+  return undefined;
+}
+
+export async function resolveAssetValue(entry?: BuilderAssetEntry): Promise<string | undefined> {
+  const value = getAssetValue(entry);
+  if (!value) return undefined;
+  if (/^builder:\/\/images\//.test(value) && typeof entry !== "string" && entry.imageId) {
+    const objectUrl = await getImageObjectUrl(entry.imageId);
+    return objectUrl ?? value;
+  }
+  return value;
+}
+
+export async function resolveAssetUrls(assets?: Record<string, BuilderAssetEntry>): Promise<Record<string, string>> {
   const urls: Record<string, string> = {};
   if (!assets) return urls;
-  for (const [name, ref] of Object.entries(assets)) {
-    const resolved = await getImageObjectUrl(ref?.imageId ?? "");
+  for (const [name, entry] of Object.entries(assets)) {
+    const resolved = await resolveAssetValue(entry);
     if (resolved) urls[name] = resolved;
   }
   return urls;
@@ -174,12 +244,17 @@ export function revokeAllObjectUrls() {
 }
 
 function isBuilderImageReference(value: unknown): value is BuilderImageReference {
-  return !!value && typeof value === "object" && "imageId" in value && "src" in value && "filename" in value && "mimeType" in value;
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as any).src === "string" &&
+    typeof (value as any).filename === "string"
+  );
 }
 
-export function normalizeAssetMap(assets?: Record<string, unknown>): Record<string, BuilderImageReference> | undefined {
+export function normalizeAssetMap(assets?: Record<string, unknown>): Record<string, BuilderAssetEntry> | undefined {
   if (!assets || typeof assets !== "object") return undefined;
-  const normalized: Record<string, BuilderImageReference> = {};
+  const normalized: Record<string, BuilderAssetEntry> = {};
   for (const [name, value] of Object.entries(assets)) {
     if (isBuilderImageReference(value)) {
       normalized[name] = value;
@@ -189,6 +264,10 @@ export function normalizeAssetMap(assets?: Record<string, unknown>): Record<stri
       const { ref, blob } = createImageAssetReference(value, name);
       void saveImageBlob(ref.imageId, ref.filename, blob, ref.mimeType);
       normalized[name] = ref;
+      continue;
+    }
+    if (typeof value === "string") {
+      normalized[name] = value;
     }
   }
   return Object.keys(normalized).length ? normalized : undefined;

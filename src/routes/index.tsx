@@ -41,7 +41,7 @@ function Index() {
   }
 
   return (
-    <MainLayout>
+    <MainLayout hideHeader>
       {user ? (
         // authenticated users are redirected to /dashboard; show a placeholder while navigating
         <div className="h-[calc(100vh-100px)] flex items-center justify-center text-sm text-muted-foreground">Redirecting to dashboard…</div>

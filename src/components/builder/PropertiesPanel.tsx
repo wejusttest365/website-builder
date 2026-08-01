@@ -3,6 +3,10 @@ import {
   PropertyCard as Section,
   PropertyField as Field,
 } from "@/components/builder/property-ui";
+import { defaultHeroWidgetData } from "@/components/builder/widgets/Hero/HeroTypes";
+import { createWidgetInstance, getWidgetPropertiesComponent } from "@/components/builder/widgets/widgetRegistry";
+import { getWidgetChildItems, setWidgetChildItems } from "@/components/builder/widgets/childWidgetUtils";
+import { PropertyPanel as TabbedPropertyPanel } from "@/components/builder/property-panel/PropertyPanel";
 
 import { useBuilder, pageOf } from "@/lib/builder/store";
 import { nanoid } from "nanoid";
@@ -458,23 +462,105 @@ export function PropertiesPanel() {
   const selectedElement = useBuilder((s) => s.selectedElement);
   const selectedElementStyle = useBuilder((s) => s.selectedElementStyle);
   const updateSection = useBuilder((s) => s.updateSection);
+  const updateWidgetInstance = useBuilder((s) => s.updateWidgetInstance);
   const pushHistory = useBuilder((s) => s.pushHistory);
   const addAsset = useBuilder((s) => s.addAsset);
 
-  // Hooks must run unconditionally — define local React hooks here
+  // Hooks must run unconditionally â€” define local React hooks here
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const draggedIndexRef = useRef<number | null>(null);
 
   const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === selectedId) ?? null;
+  const widgetInstance = section?.widgetInstance;
+  if (widgetInstance?.type === "hero") {
+    console.log("HERO INSTANCE", widgetInstance);
+  }
+  const WidgetPropertiesComponent = widgetInstance ? getWidgetPropertiesComponent(widgetInstance.type) : null;
+  const selectedChildWidget = (() => {
+    const selectedChildId = selectedElement?.childId || selectedElement?.elementKey;
+    const selectedParentWidgetId = selectedElement?.parentWidgetId || selectedElement?.widgetId;
+    if (!selectedChildId || !selectedParentWidgetId || !section?.widgetInstance) {
+      return null;
+    }
+    if (section.widgetInstance.id !== selectedParentWidgetId) {
+      return null;
+    }
+    const children = getWidgetChildItems(section.widgetInstance, selectedElement?.columnId ? { columnId: selectedElement.columnId } : undefined);
+    const child = children.find((candidate) => candidate.id === selectedChildId);
+    if (!child) {
+      return null;
+    }
+    const childWidgetInstance = createWidgetInstance(child.type, {
+      id: `${section.widgetInstance.id}-${child.id}`,
+      content: (child.data as Record<string, unknown> | undefined)?.content ?? (child.data ?? {}),
+      style: (child.data as Record<string, unknown> | undefined)?.style ?? {},
+      layout: (child.data as Record<string, unknown> | undefined)?.layout ?? {},
+      responsive: (child.data as Record<string, unknown> | undefined)?.responsive ?? {},
+      animation: (child.data as Record<string, unknown> | undefined)?.animation ?? {},
+      advanced: (child.data as Record<string, unknown> | undefined)?.advanced ?? {},
+      variant: (child.data as Record<string, unknown> | undefined)?.variant ?? (child.type === "button" ? "Filled" : undefined),
+    } as any);
+    return { child, childWidgetInstance };
+  })();
+  const SelectedChildPropertiesComponent = selectedChildWidget ? getWidgetPropertiesComponent(selectedChildWidget.childWidgetInstance.type) : null;
 
   if (!section) {
     return (
-      <div className="h-full bg-card p-6 text-sm text-muted-foreground">
+      <div className="h-full bg-card p-1 text-sm text-muted-foreground">
         <div className="font-semibold text-foreground text-base mb-2">Properties</div>
         Select a section on the canvas to edit its properties.
       </div>
     );
   }
+
+  if (selectedChildWidget && SelectedChildPropertiesComponent) {
+    return (
+      <div className="h-full overflow-hidden bg-card p-1">
+        <div className="mb-2 px-2 text-xs uppercase tracking-[0.24em] text-muted-foreground">Child Properties</div>
+        <SelectedChildPropertiesComponent
+          value={selectedChildWidget.childWidgetInstance}
+          onChange={(nextValue) => {
+            const selectedChildId = selectedElement?.childId || selectedElement?.elementKey;
+            const selectedParentWidgetId = selectedElement?.parentWidgetId || selectedElement?.widgetId;
+            if (!section?.widgetInstance || section.widgetInstance.id !== selectedParentWidgetId || !selectedChildId) return;
+            const children = getWidgetChildItems(section.widgetInstance, selectedElement?.childContainerId || selectedElement?.columnId ? { childContainerId: selectedElement?.childContainerId ?? selectedElement?.columnId ?? null } : undefined);
+            const nextChildren = children.map((child) => child.id === selectedChildId
+              ? {
+                  ...child,
+                  data: {
+                    content: (nextValue.content as Record<string, unknown> | undefined) ?? {},
+                    style: (nextValue.style as Record<string, unknown> | undefined) ?? {},
+                    layout: (nextValue.layout as Record<string, unknown> | undefined) ?? {},
+                    responsive: (nextValue.responsive as Record<string, unknown> | undefined) ?? {},
+                    animation: (nextValue.animation as Record<string, unknown> | undefined) ?? {},
+                    advanced: (nextValue.advanced as Record<string, unknown> | undefined) ?? {},
+                    variant: (nextValue.variant as string | undefined),
+                  },
+                }
+              : child);
+            updateWidgetInstance(section.widgetInstance.id, setWidgetChildItems(section.widgetInstance, nextChildren, selectedElement?.childContainerId || selectedElement?.columnId ? { childContainerId: selectedElement?.childContainerId ?? selectedElement?.columnId ?? null } : undefined) as any);
+            pushHistory();
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (widgetInstance && WidgetPropertiesComponent) {
+    return (
+      <div className="h-full overflow-hidden bg-card p-1">
+        <WidgetPropertiesComponent
+          value={widgetInstance}
+          onChange={(nextValue) => {
+            updateWidgetInstance(widgetInstance.id, nextValue);
+            pushHistory();
+          }}
+        />
+      </div>
+    );
+  }
+
+  // For non-widget sections, render the legacy section editor shell.
 
   const style = section.style ?? {};
   const isFooter = /^\s*<footer\b/i.test(section.html);
@@ -652,6 +738,391 @@ export function PropertiesPanel() {
     set(key, value);
   }
 
+  const contentTabContent = (
+    <div className="space-y-4">
+      {widgetInstance && WidgetPropertiesComponent ? (
+        <div className="rounded-md border border-input bg-background p-2">
+          <div className="font-semibold text-foreground text-sm mb-2">Widget Properties</div>
+          <WidgetPropertiesComponent
+            value={widgetInstance}
+            onChange={(nextValue) => {
+              updateWidgetInstance(widgetInstance.id, nextValue);
+              pushHistory();
+            }}
+          />
+        </div>
+      ) : null}
+
+      {showHeaderMenuControls && (() => {
+        const brand = findBrandAnchor(section.html);
+        if (!brand) return null;
+        const brandMode = brand.mode || (brand.src ? "logo" : brand.text ? "text" : "hidden");
+        return (
+          <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">Brand / Logo</div>
+            <div className="mt-2 space-y-3">
+              <Field label="Display">
+                <select
+                  className={inputCls}
+                  value={brandMode}
+                  onChange={(e) => {
+                    const mode = e.target.value as "logo" | "text" | "hidden";
+                    if (mode === "text") {
+                      updateHtml(setBrandMode(section.html, "text", brand.text || "Brand"));
+                    } else if (mode === "logo") {
+                      updateHtml(setBrandMode(section.html, "logo", brand.text || "Brand"));
+                    } else {
+                      updateHtml(setBrandMode(section.html, "hidden", brand.text || "Brand"));
+                    }
+                    pushHistory();
+                  }}
+                  onBlur={pushHistory}
+                >
+                  <option value="logo">Logo</option>
+                  <option value="text">Text</option>
+                  <option value="hidden">Hidden</option>
+                </select>
+              </Field>
+
+              <Field label="Brand text">
+                <input
+                  className={inputCls}
+                  value={brand.text}
+                  placeholder="Brand name"
+                  onChange={(e) => updateHtml(setBrandText(section.html, e.target.value))}
+                  onBlur={pushHistory}
+                />
+              </Field>
+
+              {brandMode === "logo" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="h-12 w-32 overflow-hidden rounded-md border border-input bg-background flex items-center justify-center">
+                      {brand.src ? (
+                        <img src={resolveAssetSrc(brand.src)} alt="logo" className="max-h-full max-w-full object-contain" />
+                      ) : brand.hasPlaceholder ? (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 21h18" />
+                            <path d="M7 17V8" />
+                            <path d="M17 17V5" />
+                            <path d="M12 17V11" />
+                          </svg>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No logo</span>
+                      )}
+                    </div>
+                    {brand.src && /^images\//.test(normalizeAssetPath(brand.src)) && (
+                      <button className="px-2 py-1 rounded-md border border-input text-xs" onClick={() => downloadAssetByPath(brand.src)}>
+                        Download
+                      </button>
+                    )}
+                  </div>
+                  <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+                    <UploadCloud className="h-4 w-4" />
+                    Upload logo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        const r = new FileReader();
+                        r.onload = () => {
+                          try {
+                            const dataUrl = String(r.result);
+                            const assetPath = addAsset(dataUrl, f.name);
+                            updateHtml(setBrandImage(section.html, assetPath));
+                            pushHistory();
+                          } catch (err) {
+                            console.error("brand upload failed", err);
+                          }
+                        };
+                        r.readAsDataURL(f);
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      })()}
+
+      {sectionLinkItems.length > 0 ? (
+        <Section title="Section CTAs">
+          <div className="space-y-3">
+            {sectionLinkItems.map((link, index) => (
+              <div key={`${link.text || "action"}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition-all duration-200 hover:border-violet-300 hover:bg-white hover:shadow-sm">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="min-w-0">
+                    <h4 className="truncate text-sm font-semibold text-slate-800">{link.text || `CTA ${index + 1}`}</h4>
+                    <p className="truncate text-xs text-slate-500">{link.href || "#"}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-600" title={link.hidden ? "Show CTA" : "Hide CTA"} onClick={() => { updateHtml(toggleLinkVisibility(section.html, index)); pushHistory(); }}>
+                      {link.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                    <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600" title="Delete CTA" onClick={() => { updateHtml(removeLinkItem(section.html, index)); pushHistory(); }}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <Field label="Href">
+                    <input className={inputCls} value={link.href} placeholder="# or https://..." onChange={(e) => updateHtml(updateLinkItem(section.html, index, { href: e.target.value }))} onBlur={pushHistory} />
+                  </Field>
+                  <Field label="Label">
+                    <input className={inputCls} value={link.text} placeholder="Button label" onChange={(e) => updateHtml(updateLinkItem(section.html, index, { text: e.target.value }))} onBlur={pushHistory} />
+                  </Field>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
+      {showHeaderMenuControls && (
+        <Section title="Menu Items">
+          <div className="space-y-2">
+            {menuItems.length > 0 ? (
+              menuItems.map((item, index) => (
+                <div key={`${item.text}-${index}`} className="grid grid-cols-[1fr_74px_28px] gap-1.5">
+                  <input className={inputCls} value={item.text} aria-label={`Menu item ${index + 1} label`} onChange={(e) => updateHtml(updateMenuItem(section.html, index, { text: e.target.value }))} onBlur={pushHistory} />
+                  <input className={inputCls} value={item.href} aria-label={`Menu item ${index + 1} link`} onChange={(e) => updateHtml(updateMenuItem(section.html, index, { href: e.target.value }))} onBlur={pushHistory} />
+                  <button type="button" className="inline-flex h-8 items-center justify-center rounded-md border border-input text-destructive hover:bg-destructive/10" title="Remove menu item" onClick={() => { updateHtml(removeMenuItem(section.html, index)); pushHistory(); }}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground">No menu items detected in this header. Add one below to edit it here.</div>
+            )}
+            <button type="button" className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-xs font-medium hover:bg-accent" onClick={() => { updateHtml(addMenuItem(section.html)); pushHistory(); }}>
+              <Plus className="h-3.5 w-3.5" /> Add menu item
+            </button>
+          </div>
+        </Section>
+      )}
+
+      {showSectionControls && linkItems.length > 0 && (
+        <Section title="Links & Buttons">
+          <div className="space-y-2">
+            {linkItems.map((item, index) => (
+              <div key={index} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-1.5">
+                <input className={inputCls} value={item.text} aria-label={`Link ${index + 1} label`} onChange={(e) => updateHtml(updateLinkItem(section.html, index, { text: e.target.value }))} onBlur={pushHistory} />
+                <input className={inputCls} value={item.href} aria-label={`Link ${index + 1} URL`} placeholder="https://â€¦" onChange={(e) => updateHtml(updateLinkItem(section.html, index, { href: e.target.value }))} onBlur={pushHistory} />
+                <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent" title={item.hidden ? "Show element" : "Hide element"} onClick={() => { updateHtml(toggleLinkVisibility(section.html, index)); pushHistory(); }}>
+                  {item.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+                <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent" title="Remove button" onClick={() => { updateHtml(removeLinkItem(section.html, index)); pushHistory(); }}>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {selectedElement?.kind === "text" && selectedTextItem && (
+        <Section title="Text">
+          <div className="space-y-2 rounded-md border border-input bg-background p-2">
+            <Field label={selectedTextItem.label}>
+              <input className={inputCls} value={selectedTextItem.text} aria-label={`${selectedTextItem.label} text`} onChange={(e) => updateHtml(updateTextItem(section.html, selectedElement.index ?? 0, e.target.value))} onBlur={pushHistory} />
+            </Field>
+          </div>
+        </Section>
+      )}
+
+      {selectedElement?.kind === "image" && selectedImageItem ? (
+        <Section title="Image">
+          <div className="space-y-2 rounded-md border border-input bg-background p-2">
+            <div className="text-xs font-semibold text-muted-foreground">{selectedImageItem.label}</div>
+            <Field label="ALT">
+              <input className={inputCls} value={selectedImageItem.alt} placeholder="ALT" onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { alt: e.target.value }))} onBlur={pushHistory} />
+            </Field>
+          </div>
+        </Section>
+      ) : !isElementSelected && imageItems.length > 0 && (
+        <Section title="Images">
+          {imageItems.map((item, index) => (
+            <div key={`${item.label}-${index}`} className="space-y-2 rounded-md border border-input bg-background p-2">
+              <div className="text-xs font-semibold text-muted-foreground">{item.label}</div>
+              <Field label="ALT">
+                <input className={inputCls} value={item.alt} placeholder="ALT" onChange={(e) => updateHtml(updateImageItem(section.html, index, { alt: e.target.value }))} onBlur={pushHistory} />
+              </Field>
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {selectedElement && (selectedElement.kind === "link" || selectedElement.tag === "a" || selectedElement.tag === "button") ? (
+        (() => {
+          const idx = selectedElement.index ?? -1;
+          const linkList = getLinkItems(section.html);
+          const curHref = idx >= 0 && linkList[idx] ? linkList[idx].href : "";
+          if (idx < 0) return null;
+          return (
+            <Section title="Link">
+              <div className="space-y-2 rounded-md border border-input bg-background p-2">
+                <Field label="Href">
+                  <input className={inputCls} value={curHref} placeholder="#" onChange={(e) => updateHtml(updateLinkItem(section.html, idx, { href: e.target.value }))} onBlur={pushHistory} />
+                </Field>
+              </div>
+            </Section>
+          );
+        })()
+      ) : null}
+
+    </div>
+  );
+
+  const styleTabContent = (
+    <div className="space-y-4">
+      {!isFooter && (
+        <Section title={`Typography Â· ${typographyTargetLabel}`}>
+          <Field label="Font family">
+            {(() => {
+              const families = [
+                "ui-sans-serif, system-ui, sans-serif",
+                "Georgia, serif",
+                "ui-monospace, monospace",
+                '"Inter", sans-serif',
+                '"Poppins", sans-serif',
+                '"Montserrat", sans-serif',
+              ];
+              const cur = selectedTypographyState.fontFamily || "";
+              const opts = cur && cur.trim() ? (families.includes(cur) ? families : [cur, ...families]) : families;
+              return (
+                <select className={selectCls} value={cur} onChange={(e) => applyTypographyChange('fontFamily', e.target.value)} onBlur={pushHistory}>
+                  {opts.map((f) => (<option key={f} value={f}>{f}</option>))}
+                </select>
+              );
+            })()}
+          </Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Font size">
+              {(() => {
+                const sizes = ["12px", "13px", "14px", "15px", "16px", "18px", "20px", "24px", "28px", "32px", "36px", "40px", "48px"];
+                const cur = selectedTypographyState.fontSize || "";
+                const opts = cur && cur.trim() ? (sizes.includes(cur) ? sizes : [cur, ...sizes]) : sizes;
+                return (
+                  <select className={selectCls} value={cur} onChange={(e) => applyTypographyChange('fontSize', e.target.value)} onBlur={pushHistory}>
+                    {opts.map((s) => (<option key={s} value={s}>{s}</option>))}
+                  </select>
+                );
+              })()}
+            </Field>
+            <Field label="Weight">
+              <select className={selectCls} value={selectedTypographyState.fontWeight || ""} onChange={(e) => applyTypographyChange('fontWeight', e.target.value)} onBlur={pushHistory}>
+                <option value="">{selectedTypographyState.fontWeight || "Default"}</option>
+                <option value="400">Regular</option>
+                <option value="500">Medium</option>
+                <option value="600">Semibold</option>
+                <option value="700">Bold</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Line height">
+            <select className={selectCls} value={selectedTypographyState.lineHeight || ""} onChange={(e) => applyTypographyChange('lineHeight', e.target.value)} onBlur={pushHistory}>
+              <option value="">{selectedTypographyState.lineHeight || "Line height"}</option>
+              <option value="1">1</option>
+              <option value="1.15">1.15</option>
+              <option value="1.25">1.25</option>
+              <option value="1.5">1.5</option>
+              <option value="1.75">1.75</option>
+              <option value="2">2</option>
+            </select>
+          </Field>
+          <Field label="Text color">
+            <ColorInput value={selectedTypographyState.color || ""} onChange={(v) => applyTypographyChange('color', v)} onBlur={pushHistory} />
+          </Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Align">
+              <select className={selectCls} value={selectedTypographyState.textAlign || ""} onChange={(e) => applyTypographyChange('textAlign', e.target.value)} onBlur={pushHistory}>
+                <option value="">{selectedTypographyState.textAlign || "Default"}</option>
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+                <option value="justify">Justify</option>
+              </select>
+            </Field>
+            <Field label="Case">
+              <select className={selectCls} value={selectedTypographyState.textTransform || ""} onChange={(e) => applyTypographyChange('textTransform', e.target.value)} onBlur={pushHistory}>
+                <option value="">{selectedTypographyState.textTransform || "Default"}</option>
+                <option value="none">None</option>
+                <option value="uppercase">Uppercase</option>
+                <option value="lowercase">Lowercase</option>
+                <option value="capitalize">Capitalize</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Spacing">
+            <input className={inputCls} value={selectedTypographyState.letterSpacing || ""} placeholder="0.5px" onChange={(e) => applyTypographyChange('letterSpacing', e.target.value)} onBlur={pushHistory} />
+          </Field>
+        </Section>
+      )}
+
+      {showSectionControls && (() => {
+        const backgroundFields: PropertyFieldConfig[] = [
+          colorField("Color", style["background-color"] ?? "", (v) => set("background-color", v), pushHistory),
+          textField("Image URL", (style["background-image"] ?? "").replace(/^url\(|\)$/g, "").replace(/^['\"]|['\"]$/g, ""), (v) => set("background-image", v ? `url("${v}")` : ""), pushHistory, "https://â€¦"),
+        ];
+        return (
+          <Section title="Background">
+            {renderPropertyFieldConfigs(backgroundFields)}
+          </Section>
+        );
+      })()}
+
+      {showSectionControls && (() => {
+        const animationFields: PropertyFieldConfig[] = [
+          selectField("Type", section.animation?.type ?? "", [
+            { label: "None", value: "" },
+            { label: "Fade in", value: "fade-in" },
+            { label: "Fade up", value: "fade-up" },
+            { label: "Fade down", value: "fade-down" },
+            { label: "Slide left", value: "slide-left" },
+            { label: "Slide right", value: "slide-right" },
+            { label: "Zoom in", value: "zoom-in" },
+            { label: "Zoom out", value: "zoom-out" },
+            { label: "Flip", value: "flip" },
+            { label: "Bounce", value: "bounce" },
+          ], (value) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: value } }), pushHistory),
+          textField("Duration", String(section.animation?.duration ?? ""), (value) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", duration: Number(value) || undefined } }), pushHistory, "ms"),
+          textField("Delay", String(section.animation?.delay ?? ""), (value) => updateSection(section.id, { animation: { ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", delay: Number(value) || undefined } }), pushHistory, "ms"),
+        ];
+        return (
+          <Section title="Animation">
+            {renderPropertyFieldConfigs(animationFields)}
+          </Section>
+        );
+      })()}
+    </div>
+  );
+
+  const advancedTabContent = (
+    <div className="space-y-4">
+      {showSectionControls && (
+        <Section title="Advanced">
+          <Field label="HTML ID">
+            <input className={inputCls} value={section.id} readOnly />
+          </Field>
+          <Field label="Visibility">
+            <div className="space-y-2">
+              <PropertyCheckbox label="Hide on mobile" checked={Boolean((section as any).hiddenOnMobile)} onChange={(value) => updateSection(section.id, { hiddenOnMobile: value } as any)} onBlur={pushHistory} />
+              <PropertyCheckbox label="Hide on tablet" checked={Boolean((section as any).hiddenOnTablet)} onChange={(value) => updateSection(section.id, { hiddenOnTablet: value } as any)} onBlur={pushHistory} />
+              <PropertyCheckbox label="Hide on desktop" checked={Boolean((section as any).hiddenOnDesktop)} onChange={(value) => updateSection(section.id, { hiddenOnDesktop: value } as any)} onBlur={pushHistory} />
+              <PropertyCheckbox label="Sticky" checked={Boolean((section as any).sticky)} onChange={(value) => updateSection(section.id, { sticky: value } as any)} onBlur={pushHistory} />
+            </div>
+          </Field>
+        </Section>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-transparent">
       <div className="p-3 border-b border-border/70 bg-card/55 backdrop-blur">
@@ -666,1382 +1137,15 @@ export function PropertiesPanel() {
           className="mt-1 w-full text-base font-semibold bg-transparent focus:outline-none"
         />
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-3 pb-4 space-y-4 text-sm" style={{ scrollbarGutter: "stable" }}>
-        {/* Removed helper box per UX request: element controls now appear inline */}
-
-        {sectionLinkItems.length > 0 ? (
-          <Section title="Section CTAs">
-  <div className="space-y-3">
-    {sectionLinkItems.map((link, index) => (
-      <div
-        key={`${link.text || "action"}-${index}`}
-        className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition-all duration-200 hover:border-violet-300 hover:bg-white hover:shadow-sm"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <div className="min-w-0">
-            <h4 className="truncate text-sm font-semibold text-slate-800">
-              {link.text || `CTA ${index + 1}`}
-            </h4>
-
-            <p className="truncate text-xs text-slate-500">
-              {link.href || "#"}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-600"
-              title={link.hidden ? "Show CTA" : "Hide CTA"}
-              onClick={() => {
-                updateHtml(toggleLinkVisibility(section.html, index));
-                pushHistory();
-              }}
-            >
-              {link.hidden ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600"
-              title="Delete CTA"
-              onClick={() => {
-                updateHtml(removeLinkItem(section.html, index));
-                pushHistory();
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <Field label="Href">
-            <input
-              className={inputCls}
-              value={link.href}
-              placeholder="# or https://..."
-              onChange={(e) =>
-                updateHtml(
-                  updateLinkItem(section.html, index, {
-                    href: e.target.value,
-                  })
-                )
-              }
-              onBlur={pushHistory}
-            />
-          </Field>
-
-          <Field label="Label">
-            <input
-              className={inputCls}
-              value={link.text}
-              placeholder="Button label"
-              onChange={(e) =>
-                updateHtml(
-                  updateLinkItem(section.html, index, {
-                    text: e.target.value,
-                  })
-                )
-              }
-              onBlur={pushHistory}
-            />
-          </Field>
-        </div>
-      </div>
-    ))}
-  </div>
-</Section>
-        ) : null}
-
-        {/* Typography - unified controls (font family, size, weight, line-height, color, alignment) */}
-        {!isFooter && (
-          <Section title={`Typography · ${typographyTargetLabel}`}>
-            <Field label="Font family">
-              {(() => {
-                const families = [
-                  "ui-sans-serif, system-ui, sans-serif",
-                  "Georgia, serif",
-                  "ui-monospace, monospace",
-                  '"Inter", sans-serif',
-                  '"Poppins", sans-serif',
-                  '"Montserrat", sans-serif',
-                ];
-                const cur = selectedTypographyState.fontFamily || "";
-                const opts = cur && cur.trim() ? (families.includes(cur) ? families : [cur, ...families]) : families;
-                return (
-                  <select
-                    className={selectCls}
-                    value={cur}
-                    onChange={(e) => applyTypographyChange('fontFamily', e.target.value)}
-                    onBlur={pushHistory}
-                  >
-                    {opts.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                );
-              })()}
-            </Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Font size">
-                {(() => {
-                  const sizes = ["12px", "13px", "14px", "15px", "16px", "18px", "20px", "24px", "28px", "32px", "36px", "40px", "48px"];
-                  const cur = selectedTypographyState.fontSize || "";
-                  const opts = cur && cur.trim() ? (sizes.includes(cur) ? sizes : [cur, ...sizes]) : sizes;
-                  return (
-                    <select
-                      className={selectCls}
-                      value={cur}
-                      onChange={(e) => applyTypographyChange('fontSize', e.target.value)}
-                      onBlur={pushHistory}
-                    >
-                      {opts.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  );
-                })()}
-              </Field>
-              <Field label="Weight">
-                <select
-                  className={selectCls}
-                  value={selectedTypographyState.fontWeight || ""}
-                  onChange={(e) => applyTypographyChange('fontWeight', e.target.value)}
-                  onBlur={pushHistory}
-                >
-                  <option value="">{selectedTypographyState.fontWeight || "Default"}</option>
-                  <option value="400">Regular</option>
-                  <option value="500">Medium</option>
-                  <option value="600">Semibold</option>
-                  <option value="700">Bold</option>
-                </select>
-              </Field>
-            </div>
-            <Field label="Line height">
-              <select
-                className={selectCls}
-                value={selectedTypographyState.lineHeight || ""}
-                onChange={(e) => applyTypographyChange('lineHeight', e.target.value)}
-                onBlur={pushHistory}
-              >
-                <option value="">{selectedTypographyState.lineHeight || "Line height"}</option>
-                <option value="1">1</option>
-                <option value="1.15">1.15</option>
-                <option value="1.25">1.25</option>
-                <option value="1.5">1.5</option>
-                <option value="1.75">1.75</option>
-                <option value="2">2</option>
-              </select>
-            </Field>
-            <Field label="Text color">
-              <ColorInput
-                value={selectedTypographyState.color || ""}
-                onChange={(v) => applyTypographyChange('color', v)}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Align">
-                <select
-                  className={selectCls}
-                  value={selectedTypographyState.textAlign || ""}
-                  onChange={(e) => applyTypographyChange('textAlign', e.target.value)}
-                  onBlur={pushHistory}
-                >
-                  <option value="">{selectedTypographyState.textAlign || "Default"}</option>
-                  <option value="left">Left</option>
-                  <option value="center">Center</option>
-                  <option value="right">Right</option>
-                  <option value="justify">Justify</option>
-                </select>
-              </Field>
-              <Field label="Case">
-                <select
-                  className={selectCls}
-                  value={selectedTypographyState.textTransform || ""}
-                  onChange={(e) => applyTypographyChange('textTransform', e.target.value)}
-                  onBlur={pushHistory}
-                >
-                  <option value="">{selectedTypographyState.textTransform || "Default"}</option>
-                  <option value="none">None</option>
-                  <option value="uppercase">Uppercase</option>
-                  <option value="lowercase">Lowercase</option>
-                  <option value="capitalize">Capitalize</option>
-                </select>
-              </Field>
-            </div>
-            <Field label="Spacing">
-              <input
-                className={inputCls}
-                value={selectedTypographyState.letterSpacing || ""}
-                placeholder="0.5px"
-                onChange={(e) => applyTypographyChange('letterSpacing', e.target.value)}
-                onBlur={pushHistory}
-              />
-            </Field>
-          </Section>
-        )}
-
-        {/* Brand / Logo controls moved into scrollable area so it scrolls with the panel */}
-        {showSectionControls && isHeaderLike && (() => {
-          const brand = findBrandAnchor(section.html);
-          if (!brand) return null;
-          const brandMode = brand.mode || (brand.src ? "logo" : brand.text ? "text" : "hidden");
-          return (
-            <div className="mt-0">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">Brand / Logo</div>
-              <div className="mt-2 space-y-3">
-                <Field label="Display">
-                  <select
-                    className={inputCls}
-                    value={brandMode}
-                    onChange={(e) => {
-                      const mode = e.target.value as "logo" | "text" | "hidden";
-                      if (mode === "text") {
-                        updateHtml(setBrandMode(section.html, "text", brand.text || "Brand"));
-                      } else if (mode === "logo") {
-                        updateHtml(setBrandMode(section.html, "logo", brand.text || "Brand"));
-                      } else {
-                        updateHtml(setBrandMode(section.html, "hidden", brand.text || "Brand"));
-                      }
-                      pushHistory();
-                    }}
-                    onBlur={pushHistory}
-                  >
-                    <option value="logo">Logo</option>
-                    <option value="text">Text</option>
-                    <option value="hidden">Hidden</option>
-                  </select>
-                </Field>
-
-                <Field label="Brand text">
-                  <input
-                    className={inputCls}
-                    value={brand.text}
-                    placeholder="Brand name"
-                    onChange={(e) => updateHtml(setBrandText(section.html, e.target.value))}
-                    onBlur={pushHistory}
-                  />
-                </Field>
-
-                {brandMode === "logo" ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="h-12 w-32 overflow-hidden rounded-md border border-input bg-background flex items-center justify-center">
-                        {brand.src ? (
-                          <img src={resolveAssetSrc(brand.src)} alt="logo" className="max-h-full max-w-full object-contain" />
-                        ) : brand.hasPlaceholder ? (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M3 21h18" />
-                              <path d="M7 17V8" />
-                              <path d="M17 17V5" />
-                              <path d="M12 17V11" />
-                            </svg>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">No logo</span>
-                        )}
-                      </div>
-                      {brand.src && /^images\//.test(normalizeAssetPath(brand.src)) && (
-                        <button className="px-2 py-1 rounded-md border border-input text-xs" onClick={() => downloadAssetByPath(brand.src)}>
-                          Download
-                        </button>
-                      )}
-                    </div>
-                    <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
-                      <UploadCloud className="h-4 w-4" />
-                      Upload logo
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="sr-only"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (!f) return;
-                          const r = new FileReader();
-                          r.onload = () => {
-                            try {
-                              const dataUrl = String(r.result);
-                              const assetPath = addAsset(dataUrl, f.name);
-                              updateHtml(setBrandImage(section.html, assetPath));
-                              pushHistory();
-                            } catch (err) {
-                              console.error("brand upload failed", err);
-                            }
-                          };
-                          r.readAsDataURL(f);
-                        }}
-                      />
-                    </label>
-                  </div>
-                ) : null}
-
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className={inputCls}
-                    placeholder="Width (e.g. 120px)"
-                    defaultValue={brand.width}
-                    onBlur={(e) => { updateHtml(setBrandSize(section.html, e.target.value, brand.height)); pushHistory(); }}
-                  />
-                  <input
-                    className={inputCls}
-                    placeholder="Height (e.g. 40px)"
-                    defaultValue={brand.height}
-                    onBlur={(e) => { updateHtml(setBrandSize(section.html, brand.width, e.target.value)); pushHistory(); }}
-                  />
-                </div>
-                {(() => {
-                  const ctas = findHeaderCTAs(section.html);
-                  const cta = ctas[0] ?? null;
-                  if (!cta) return null;
-                  return (
-                    <div className="mt-2 space-y-2">
-                      <div className="grid grid-cols-[1fr_auto] gap-2">
-                        <Field label="CTA text">
-                          <input
-                            className={inputCls}
-                            value={cta.text}
-                            onChange={(e) => updateHtml(setHeaderCTAHref(section.html, cta.href || "#", e.target.value))}
-                            onBlur={pushHistory}
-                          />
-                        </Field>
-                        <button
-                          type="button"
-                          className="mt-6 inline-flex h-10 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
-                          title={cta.hidden ? "Show CTA button" : "Hide CTA button"}
-                          onClick={() => {
-                            updateHtml(toggleHeaderCTAVisibility(section.html));
-                            pushHistory();
-                          }}
-                        >
-                          {cta.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                      <Field label="CTA link">
-                        <input
-                          className={inputCls}
-                          value={cta.href}
-                          placeholder="#"
-                          onChange={(e) => updateHtml(setHeaderCTAHref(section.html, e.target.value, cta.text))}
-                          onBlur={pushHistory}
-                        />
-                      </Field>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          );
-        })()}
-
-        {isFooter && (
-        <Section title="Typography">
-            <div className="space-y-3">
-              {/* Font Family - Full Width */}
-              <div>
-                <select className={selectCls} value={getFooterFontFamily(section.html)} onChange={(e) => updateHtml(setFooterTextStyle(section.html, { fontFamily: e.target.value }))} onBlur={pushHistory}>
-                  <option value="">{getFooterFontFamily(section.html) || "Default"}</option>
-                  <option value="ui-sans-serif, system-ui, sans-serif">Sans (system)</option>
-                  <option value="Georgia, serif">Serif</option>
-                  <option value="ui-monospace, monospace">Mono</option>
-                  <option value='"Inter", sans-serif'>Inter</option>
-                  <option value='"Poppins", sans-serif'>Poppins</option>
-                  <option value='"Montserrat", sans-serif'>Montserrat</option>
-                </select>
-              </div>
-
-              {/* Weight & Size - Two Columns */}
-              <div className="grid grid-cols-2 gap-2">
-                <select className={selectCls} value={getFooterFontWeight(section.html)} onChange={(e) => updateHtml(setFooterTextStyle(section.html, { fontWeight: e.target.value }))} onBlur={pushHistory}>
-                  <option value="">{getFooterFontWeight(section.html) || "Default"}</option>
-                  <option value="400">Regular</option>
-                  <option value="500">Medium</option>
-                  <option value="600">Semibold</option>
-                  <option value="700">Bold</option>
-                </select>
-                <select className={selectCls} value={getFooterTextSize(section.html)} onChange={(e) => updateHtml(setFooterTextStyle(section.html, { fontSize: e.target.value }))} onBlur={pushHistory}>
-                  <option value="">{getFooterTextSize(section.html) || "Default"}</option>
-                  <option value="12px">12</option>
-                  <option value="14px">14</option>
-                  <option value="16px">16</option>
-                  <option value="18px">18</option>
-                  <option value="20px">20</option>
-                  <option value="24px">24</option>
-                </select>
-              </div>
-
-              {/* Line Height - Dropdown */}
-                <select className={selectCls} value={getFooterLineHeight(section.html)} onChange={(e) => updateHtml(setFooterTextStyle(section.html, { lineHeight: e.target.value }))} onBlur={pushHistory}>
-                <option value="">{getFooterLineHeight(section.html) || "Line height"}</option>
-                <option value="1">1</option>
-                <option value="1.15">1.15</option>
-                <option value="1.5">1.5</option>
-                <option value="1.75">1.75</option>
-                <option value="2">2</option>
-              </select>
-            </div>
-          </Section>
-        )}
-
-        {isFooter && (
-          <Section title="Alignment">
-            <div className="flex gap-1">
-              {[
-                { value: 'left', icon: '☰', title: 'Left' },
-                { value: 'center', icon: '≡', title: 'Center' },
-                { value: 'right', icon: '☰', title: 'Right' },
-              ].map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  title={opt.title}
-                  className={`flex-1 h-8 flex items-center justify-center rounded text-sm transition border ${getFooterTextAlign(section.html) === opt.value ? 'bg-foreground text-background border-foreground' : 'border-input hover:bg-accent'}`}
-                  onClick={() => {
-                    updateHtml(setFooterTextStyle(section.html, { textAlign: opt.value }));
-                    pushHistory();
-                  }}
-                >
-                  {opt.icon}
-                </button>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {isFooter && (
-          <Section title="Color">
-            <ColorInput
-              value={getFooterTextColor(section.html) || ""}
-              onChange={(v) => updateHtml(setFooterTextStyle(section.html, { color: v }))}
-              onBlur={pushHistory}
-            />
-          </Section>
-        )}
-        {isFooter && (
-          <Section title="Contact Info">
-            <Field label="Phone">
-              <input
-                className={inputCls}
-                value={getFooterPhone(section.html)}
-                placeholder="+1 (555) 123-4567"
-                onChange={(e) => updateHtml(setFooterPhone(section.html, e.target.value))}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <Field label="Email">
-              <input
-                className={inputCls}
-                value={getFooterEmail(section.html)}
-                placeholder="info@example.com"
-                onChange={(e) => updateHtml(setFooterEmail(section.html, e.target.value))}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <Field label="Address">
-              <input
-                className={inputCls}
-                value={getFooterAddress(section.html)}
-                placeholder="123 Main St, City, State"
-                onChange={(e) => updateHtml(setFooterAddress(section.html, e.target.value))}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <div className="mt-3">
-              <div className="text-xs text-muted-foreground mb-2 font-medium">Social Links</div>
-              <div className="space-y-2">
-                {[
-                  { key: 'facebook', icon: Facebook, placeholder: 'https://facebook.com/yourpage' },
-                  { key: 'twitter', icon: Twitter, placeholder: 'https://twitter.com/yourhandle' },
-                  { key: 'instagram', icon: Instagram, placeholder: 'https://instagram.com/yourprofile' },
-                  { key: 'linkedin', icon: Linkedin, placeholder: 'https://linkedin.com/company/yourcompany' },
-                ].map(({ key, icon: IconComponent, placeholder }) => (
-                  <div key={key} className="flex items-center gap-2">
-                    <div className="w-8 h-8 flex items-center justify-center text-muted-foreground flex-shrink-0">
-                      <IconComponent className="w-4 h-4" />
-                    </div>
-                    <input
-                      className={inputCls}
-                      value={getFooterSocialLink(section.html, key)}
-                      placeholder={placeholder}
-                      onChange={(e) => updateHtml(setFooterSocialLink(section.html, key, e.target.value))}
-                      onBlur={pushHistory}
-                    />
-                    <button
-                      type="button"
-                      title={getFooterSocialVisibility(section.html, key) ? 'Hide' : 'Show'}
-                      className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded flex-shrink-0"
-                      onClick={() => {
-                        updateHtml(setFooterSocialVisibility(section.html, key, !getFooterSocialVisibility(section.html, key)));
-                        pushHistory();
-                      }}
-                    >
-                      {getFooterSocialVisibility(section.html, key) ? (
-                        <Eye className="w-4 h-4" />
-                      ) : (
-                        <EyeOff className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Section>
-        )}
-
-        {isTopBar && (
-          <Section title="Information Bar">
-            <Field label="Phone">
-              <input
-                className={inputCls}
-                value={getTopBarPhone(section.html)}
-                placeholder="+1 (800) 555-1234"
-                onChange={(e) => updateHtml(setTopBarPhone(section.html, e.target.value))}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <Field label="Email">
-              <input
-                className={inputCls}
-                value={getTopBarEmail(section.html)}
-                placeholder="hello@drivewell.com"
-                onChange={(e) => updateHtml(setTopBarEmail(section.html, e.target.value))}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <Field label="Address">
-              <input
-                className={inputCls}
-                value={getTopBarAddress(section.html)}
-                placeholder="123 Main St, City"
-                onChange={(e) => updateHtml(setTopBarAddress(section.html, e.target.value))}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <Field label="Hours">
-              <input
-                className={inputCls}
-                value={getTopBarHours(section.html)}
-                placeholder="Mon–Fri 9am–6pm"
-                onChange={(e) => updateHtml(setTopBarHours(section.html, e.target.value))}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <Field label="Announcement">
-              <input
-                className={inputCls}
-                value={getTopBarNote(section.html)}
-                placeholder="Free lesson available this month"
-                onChange={(e) => updateHtml(setTopBarNote(section.html, e.target.value))}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <Field label="Button label">
-              <input
-                className={inputCls}
-                value={getTopBarButtonText(section.html)}
-                placeholder="Book now"
-                onChange={(e) => updateHtml(setTopBarButtonText(section.html, e.target.value))}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <Field label="Button link">
-              <input
-                className={inputCls}
-                value={getTopBarButtonHref(section.html)}
-                placeholder="#"
-                onChange={(e) => updateHtml(setTopBarButtonHref(section.html, e.target.value))}
-                onBlur={pushHistory}
-              />
-            </Field>
-            <div className="mt-3">
-              <div className="text-xs text-muted-foreground mb-2 font-medium">Social Links</div>
-              <div className="space-y-2">
-                {[
-                  { key: 'facebook', icon: Facebook, placeholder: 'https://facebook.com/yourpage' },
-                  { key: 'twitter', icon: Twitter, placeholder: 'https://twitter.com/yourhandle' },
-                  { key: 'instagram', icon: Instagram, placeholder: 'https://instagram.com/yourprofile' },
-                  { key: 'linkedin', icon: Linkedin, placeholder: 'https://linkedin.com/company/yourcompany' },
-                ].map(({ key, icon: IconComponent, placeholder }) => (
-                  <div key={key} className="flex items-center gap-2">
-                    <div className="w-8 h-8 flex items-center justify-center text-muted-foreground flex-shrink-0">
-                      <IconComponent className="w-4 h-4" />
-                    </div>
-                    <input
-                      className={inputCls}
-                      value={getTopBarSocialLink(section.html, key)}
-                      placeholder={placeholder}
-                      onChange={(e) => updateHtml(setTopBarSocialLink(section.html, key, e.target.value))}
-                      onBlur={pushHistory}
-                    />
-                    <button
-                      type="button"
-                      title={getTopBarSocialVisibility(section.html, key) ? 'Hide' : 'Show'}
-                      className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded flex-shrink-0"
-                      onClick={() => {
-                        updateHtml(setTopBarSocialVisibility(section.html, key, !getTopBarSocialVisibility(section.html, key)));
-                        pushHistory();
-                      }}
-                    >
-                      {getTopBarSocialVisibility(section.html, key) ? (
-                        <Eye className="w-4 h-4" />
-                      ) : (
-                        <EyeOff className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Section>
-        )}
-
-        {showHeaderMenuControls && (
-          <Section title="Menu Items">
-            <div className="space-y-2">
-              {menuItems.length > 0 ? (
-                menuItems.map((item, index) => (
-                  <div key={`${item.text}-${index}`} className="grid grid-cols-[1fr_74px_28px] gap-1.5">
-                    <input
-                      className={inputCls}
-                      value={item.text}
-                      aria-label={`Menu item ${index + 1} label`}
-                      onChange={(e) => updateHtml(updateMenuItem(section.html, index, { text: e.target.value }))}
-                      onBlur={pushHistory}
-                    />
-                    <input
-                      className={inputCls}
-                      value={item.href}
-                      aria-label={`Menu item ${index + 1} link`}
-                      onChange={(e) => updateHtml(updateMenuItem(section.html, index, { href: e.target.value }))}
-                      onBlur={pushHistory}
-                    />
-                    <button
-                      type="button"
-                      className="inline-flex h-8 items-center justify-center rounded-md border border-input text-destructive hover:bg-destructive/10"
-                      title="Remove menu item"
-                      onClick={() => {
-                        updateHtml(removeMenuItem(section.html, index));
-                        pushHistory();
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground">
-                  No menu items detected in this header. Add one below to edit it here.
-                </div>
-              )}
-              <button
-                type="button"
-                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-xs font-medium hover:bg-accent"
-                onClick={() => {
-                  updateHtml(addMenuItem(section.html));
-                  pushHistory();
-                }}
-              >
-                <Plus className="h-3.5 w-3.5" /> Add menu item
-              </button>
-            </div>
-          </Section>
-        )}
-
-        {teamGridColumns != null && (
-          <Section title="Columns">
-            <div className="rounded-md border border-input bg-background p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
-                  title="Remove a column"
-                  onClick={() => {
-                    updateHtml(setTeamGridColumnCount(section.html, Math.max(1, teamGridColumns - 1)));
-                    pushHistory();
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-                <div className="text-sm font-medium">{teamGridColumns} columns</div>
-                <button
-                  type="button"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
-                  title="Add a column"
-                  onClick={() => {
-                    updateHtml(addTeamGridColumn(section.html, selectedElement?.index ?? undefined));
-                    pushHistory();
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-              <Field label="Grid columns">
-                <select
-                  className={selectCls}
-                  value={String(teamGridColumns)}
-                  onChange={(e) => {
-                    updateHtml(setTeamGridColumnCount(section.html, Number(e.target.value)));
-                    pushHistory();
-                  }}
-                  onBlur={pushHistory}
-                >
-                  {[1, 2, 3, 4, 5, 6].map((count) => (
-                    <option key={count} value={count}>{count}</option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-          </Section>
-        )}
-
-        {repeater && repeater.items.length > 0 && (
-          <Section title={`Items (${repeater.items.length})`}>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-semibold text-muted-foreground">Items ({repeater.items.length})</div>
-                <div>
-                  <button type="button" title="Add item" className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-2 py-1 text-xs" onClick={() => { updateHtml(addRepeaterItem(section.html)); pushHistory(); }}>
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              {repeater.items.map((it, i) => (
-                <div key={i} className="rounded-2xl border border-input bg-background p-4 shadow-sm">
-                  <div className="flex items-center justify-between gap-3 text-xs font-semibold text-muted-foreground mb-3">
-                    <span>Item {i + 1}</span>
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        title="Move up"
-                        disabled={i === 0}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent disabled:opacity-50"
-                        onClick={() => { updateHtml(moveRepeaterItem(section.html, i, -1)); pushHistory(); }}
-                      >
-                        <ChevronUp className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Move down"
-                        disabled={i === repeater.items.length - 1}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent disabled:opacity-50"
-                        onClick={() => { updateHtml(moveRepeaterItem(section.html, i, 1)); pushHistory(); }}
-                      >
-                        <ChevronDown className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Duplicate"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
-                        onClick={() => {
-                          updateHtml(duplicateRepeaterItem(section.html, i));
-                          pushHistory();
-                        }}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Delete"
-                        disabled={repeater.items.length <= 1}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-destructive hover:bg-destructive/10 disabled:opacity-50"
-                        onClick={() => {
-                          updateHtml(removeRepeaterItem(section.html, i));
-                          pushHistory();
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                  {!isAccordion && (
-                    <>
-                      <label className="inline-flex items-center gap-2 rounded-2xl border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
-                        <UploadCloud className="h-4 w-4" />
-                        Upload image
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="sr-only"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (!f) return;
-                            const r = new FileReader();
-                            r.onload = () => {
-                              try {
-                                const path = addAsset(String(r.result), f.name);
-                                updateHtml(setRepeaterItemImage(section.html, i, path));
-                                pushHistory();
-                              } catch (err) {
-                                console.error("repeater image upload failed", err);
-                              }
-                            };
-                            r.readAsDataURL(f);
-                          }}
-                        />
-                      </label>
-                      {it.image && /^images\//.test(it.image) && (
-                        <div className="text-right">
-                          <button className="mt-1 px-3 py-1 rounded-md border border-input text-xs" onClick={() => downloadAssetByPath(it.image)}>
-                            Download
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {it.hasTitle && (
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Question</div>
-                      <input
-                        className={inputCls}
-                        placeholder="Question"
-                        value={it.title}
-                        onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "title", e.target.value))}
-                        onBlur={pushHistory}
-                      />
-                    </div>
-                  )}
-                  {it.hasBody && (
-                    <div>
-                      <div className="text-xs text-muted-foreground mb-1">Answer</div>
-                      <textarea
-                        className={inputCls}
-                        rows={2}
-                        placeholder="Answer"
-                        value={it.body}
-                        onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "body", e.target.value))}
-                        onBlur={pushHistory}
-                      />
-                    </div>
-                  )}
-                  {it.hasLink && !isAccordion && (
-                    <input
-                      className={inputCls}
-                      placeholder="Link URL"
-                      value={it.href}
-                      onChange={(e) => updateHtml(setRepeaterItemField(section.html, i, "href", e.target.value))}
-                      onBlur={pushHistory}
-                    />
-                  )}
-                  {it.hasLink && !isAccordion && (
-                    <div className="flex items-center gap-2">
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={it.href?.length > 0 && hasRepeaterTarget(section.html, i)}
-                          onChange={(e) => updateHtml(setRepeaterItemTarget(section.html, i, e.target.checked))}
-                        />
-                        <span className="text-xs">Open in new tab</span>
-                      </label>
-                    </div>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-xs font-medium hover:bg-accent"
-                onClick={() => {
-                  updateHtml(addRepeaterItem(section.html));
-                  pushHistory();
-                }}
-              >
-                <Plus className="h-3.5 w-3.5" /> Add item
-              </button>
-            </div>
-          </Section>
-        )}
-
-        {showSectionControls && linkItems.length > 0 && (
-          <Section title="Links & Buttons">
-            <div className="space-y-2">
-              {linkItems.map((item, index) => (
-                <div key={index} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-1.5">
-                  <input
-                    className={inputCls}
-                    value={item.text}
-                    aria-label={`Link ${index + 1} label`}
-                    onChange={(e) => updateHtml(updateLinkItem(section.html, index, { text: e.target.value }))}
-                    onBlur={pushHistory}
-                  />
-                  <input
-                    className={inputCls}
-                    value={item.href}
-                    aria-label={`Link ${index + 1} URL`}
-                    placeholder="https://…"
-                    onChange={(e) => updateHtml(updateLinkItem(section.html, index, { href: e.target.value }))}
-                    onBlur={pushHistory}
-                  />
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
-                    title={item.hidden ? "Show element" : "Hide element"}
-                    onClick={() => {
-                      updateHtml(toggleLinkVisibility(section.html, index));
-                      pushHistory();
-                    }}
-                  >
-                    {item.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
-                    title="Delete link"
-                    onClick={() => {
-                      updateHtml(removeLinkItem(section.html, index));
-                      pushHistory();
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {selectedElement?.kind === "text" && selectedTextItem && (
-          <Section title="Text">
-            <div className="space-y-2 rounded-md border border-input bg-background p-2">
-              <Field label={selectedTextItem.label}>
-                <input
-                  className={inputCls}
-                  value={selectedTextItem.text}
-                  aria-label={`${selectedTextItem.label} text`}
-                  onChange={(e) => updateHtml(updateTextItem(section.html, selectedElement.index ?? 0, e.target.value))}
-                  onBlur={pushHistory}
-                />
-              </Field>
-              <Field label="Tag">
-                <select
-                  className={inputCls}
-                  value={selectedTextItem.tag || "p"}
-                  onChange={(e) => {
-                    updateHtml(setTextItemTag(section.html, selectedElement.index ?? 0, e.target.value));
-                    pushHistory();
-                  }}
-                >
-                  <option value="h1">H1</option>
-                  <option value="h2">H2</option>
-                  <option value="h3">H3</option>
-                  <option value="h4">H4</option>
-                  <option value="h5">H5</option>
-                  <option value="h6">H6</option>
-                  <option value="p">Paragraph</option>
-                  <option value="span">Span</option>
-                </select>
-              </Field>
-            </div>
-          </Section>
-        )}
-
-        {selectedElement?.kind === "image" && selectedImageItem ? (
-          <Section title="Image">
-            <div className="space-y-2 rounded-md border border-input bg-background p-2">
-              <div className="text-xs font-semibold text-muted-foreground">{selectedImageItem.label}</div>
-              <label className="text-xs font-medium text-muted-foreground">ALT</label>
-              <input
-                className={inputCls}
-                value={selectedImageItem.alt}
-                placeholder="ALT"
-                onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { alt: e.target.value }))}
-                onBlur={pushHistory}
-              />
-              <Field label="Width">
-                <input
-                  className={inputCls}
-                  value={selectedImageItem.width || ""}
-                  placeholder="100%"
-                  onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { width: e.target.value }))}
-                  onBlur={pushHistory}
-                />
-              </Field>
-              <Field label="Height">
-                <input
-                  className={inputCls}
-                  value={selectedImageItem.height || ""}
-                  placeholder="auto"
-                  onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { height: e.target.value }))}
-                  onBlur={pushHistory}
-                />
-              </Field>
-              <Field label="Fit">
-                <select
-                    className={inputCls}
-                    value={selectedImageItem.objectFit || ""}
-                    onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { objectFit: e.target.value }))}
-                    onBlur={pushHistory}
-                  >
-                    <option value="">{selectedImageItem.objectFit || "Default"}</option>
-                  <option value="cover">Cover</option>
-                  <option value="contain">Contain</option>
-                  <option value="fill">Fill</option>
-                  <option value="none">None</option>
-                  <option value="scale-down">Scale down</option>
-                </select>
-              </Field>
-              <Field label="Radius">
-                <input
-                  className={inputCls}
-                  value={selectedImageItem.borderRadius || ""}
-                  placeholder="16px"
-                  onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { borderRadius: e.target.value }))}
-                  onBlur={pushHistory}
-                />
-              </Field>
-              <Field label="Opacity">
-                <input
-                  className={inputCls}
-                  value={selectedImageItem.opacity || ""}
-                  placeholder="1"
-                  onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { opacity: e.target.value }))}
-                  onBlur={pushHistory}
-                />
-              </Field>
-              <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
-                <UploadCloud className="h-4 w-4" />
-                Upload image
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      const r = new FileReader();
-                      r.onload = () => {
-                        try {
-                          const path = addAsset(String(r.result), f.name);
-                          updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { src: path }));
-                          pushHistory();
-                        } catch (err) {
-                          console.error("selected image upload failed", err);
-                        }
-                      };
-                      r.readAsDataURL(f);
-                    }}
-                />
-              </label>
-            </div>
-          </Section>
-        ) : !isElementSelected && imageItems.length > 0 && (
-          <Section title="Images">
-            {imageItems.map((item, index) => (
-              <div key={`${item.label}-${index}`} className="space-y-2 rounded-md border border-input bg-background p-2">
-                <div className="text-xs font-semibold text-muted-foreground">{item.label}</div>
-                <label className="text-xs font-medium text-muted-foreground">ALT</label>
-                <input
-                  className={inputCls}
-                  value={item.alt}
-                  placeholder="ALT"
-                  onChange={(e) => updateHtml(updateImageItem(section.html, index, { alt: e.target.value }))}
-                  onBlur={pushHistory}
-                />
-                <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
-                  <UploadCloud className="h-4 w-4" />
-                  Upload image
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      const r = new FileReader();
-                      r.onload = () => {
-                        try {
-                          const path = addAsset(String(r.result), f.name);
-                          updateHtml(updateImageItem(section.html, index, { src: path }));
-                          pushHistory();
-                        } catch (err) {
-                          console.error("image list upload failed", err);
-                        }
-                      };
-                      r.readAsDataURL(f);
-                    }}
-                  />
-                </label>
-              </div>
-            ))}
-          </Section>
-        )}
-
-        {/* Container Section removed per user request */}
-
-        {isElementSelected && selectedElement && selectedElement.kind !== "text" ? null : null}
-
-        {/* If an individual link/button is selected, show href input */}
-        {selectedElement && (selectedElement.kind === 'link' || selectedElement.tag === 'a' || selectedElement.tag === 'button') ? (
-          (() => {
-            const idx = selectedElement.index ?? -1;
-            const linkList = getLinkItems(section.html);
-            const curHref = idx >= 0 && linkList[idx] ? linkList[idx].href : '';
-            if (idx < 0) return null;
-            return (
-              <Section title="Link">
-                <div className="space-y-2 rounded-md border border-input bg-background p-2">
-                  <Field label="Href">
-                    <input
-                      className={inputCls}
-                      value={curHref}
-                      placeholder="# or https://..."
-                      onChange={(e) => {
-                        updateHtml(updateLinkItem(section.html, idx, { href: e.target.value }));
-                      }}
-                      onBlur={pushHistory}
-                    />
-                  </Field>
-                </div>
-              </Section>
-            );
-          })()
-        ) : null}
-
-        {selectedTeamGridItem ? (
-          <Section title="Columns">
-            <div className="rounded-md border border-input bg-background p-3 space-y-3">
-              <div className="space-y-2">
-                {selectedTeamGridItem.children.map((_, index) => (
-                  <div key={index} className="flex items-center justify-between rounded-md border border-slate-200/80 bg-slate-50 px-3 py-2">
-                    <span className="text-sm font-medium text-slate-700">Column {index + 1}</span>
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent"
-                      title={`Delete column ${index + 1}`}
-                      disabled={selectedTeamGridItem.children.length <= 1}
-                      onClick={() => {
-                        updateHtml(removeTeamGridColumnByIndex(section.html, index));
-                        pushHistory();
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-sm font-medium text-muted-foreground hover:bg-accent"
-                onClick={() => {
-                  updateHtml(addTeamGridColumn(section.html, selectedElement?.index ?? 0));
-                  pushHistory();
-                }}
-              >
-                <Plus className="h-4 w-4" /> Add column
-              </button>
-              <Field label="Grid gap">
-                <input
-                  className={inputCls}
-                  value={selectedTeamGridGap}
-                  placeholder="e.g. 1.5rem"
-                  onChange={(e) => updateHtml(setTeamGridGap(section.html, e.target.value))}
-                  onBlur={pushHistory}
-                />
-              </Field>
-            </div>
-          </Section>
-        ) : null}
-
-        {showSectionControls ? (
-          <>
-            {(() => {
-              const backgroundFields: PropertyFieldConfig[] = [
-                colorField("Color", style["background-color"] ?? "", (v) => set("background-color", v), pushHistory),
-                textField(
-                  "Image URL",
-                  (style["background-image"] ?? "").replace(/^url\(|\)$/g, "").replace(/^['\"]|['\"]$/g, ""),
-                  (v) => set("background-image", v ? `url("${v}")` : ""),
-                  pushHistory,
-                  "https://…"
-                ),
-                customField(
-                  "Upload",
-                  <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
-                    <UploadCloud className="h-4 w-4" />
-                    Upload Image
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="sr-only"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (!f) return;
-                        const r = new FileReader();
-                        r.onload = () => {
-                          try {
-                            const path = addAsset(String(r.result), f.name);
-                            set("background-image", `url("${path}")`);
-                            pushHistory();
-                          } catch (err) {
-                            console.error("background upload failed", err);
-                          }
-                        };
-                        r.readAsDataURL(f);
-                      }}
-                    />
-                  </label>
-                ),
-                ...(backgroundImage && /^images\//.test(backgroundImage)
-                  ? [
-                      customField(
-                        "Download",
-                        <button
-                          type="button"
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
-                          onClick={() => downloadAssetByPath(backgroundImage)}
-                        >
-                          Download
-                        </button>
-                      ),
-                    ]
-                  : []),
-              ];
-
-              const setSectionAnimation = (nextAnimation: any) => updateSection(section.id, { animation: nextAnimation });
-
-              const animationFields: PropertyFieldConfig[] = [
-                selectField(
-                  "Type",
-                  section.animation?.type ?? "",
-                  [
-                    { label: "None", value: "" },
-                    { label: "Fade in", value: "fade-in" },
-                    { label: "Fade up", value: "fade-up" },
-                    { label: "Fade down", value: "fade-down" },
-                    { label: "Slide left", value: "slide-left" },
-                    { label: "Slide right", value: "slide-right" },
-                    { label: "Zoom in", value: "zoom-in" },
-                    { label: "Zoom out", value: "zoom-out" },
-                    { label: "Flip", value: "flip" },
-                    { label: "Bounce", value: "bounce" },
-                  ],
-                  (value) => setSectionAnimation({ ...(section.animation ?? {}), type: value }),
-                  pushHistory
-                ),
-                textField(
-                  "Duration",
-                  String(section.animation?.duration ?? ""),
-                  (value) => setSectionAnimation({ ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", duration: Number(value) || undefined }),
-                  pushHistory,
-                  "ms"
-                ),
-                textField(
-                  "Delay",
-                  String(section.animation?.delay ?? ""),
-                  (value) => setSectionAnimation({ ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", delay: Number(value) || undefined }),
-                  pushHistory,
-                  "ms"
-                ),
-                customField(
-                  "Repeat",
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={!!section.animation?.repeat}
-                      onChange={(e) => setSectionAnimation({ ...(section.animation ?? {}), type: section.animation?.type ?? "fade-up", repeat: e.target.checked })}
-                      onBlur={pushHistory}
-                      className="h-4 w-4 rounded border-input text-primary"
-                    />
-                    <span className="text-xs">Repeat animation</span>
-                  </label>
-                ),
-              ];
-
-              const visibilityFields: PropertyFieldConfig[] = [
-                customField(
-                  "Hide on mobile",
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={!!(section as any).hiddenMobile}
-                      onChange={(e) => updateSection(section.id, { ...(section as any), hiddenMobile: e.target.checked })}
-                      onBlur={pushHistory}
-                      className="h-4 w-4 rounded border-input text-primary"
-                    />
-                    <span className="text-xs">Hide on mobile</span>
-                  </label>
-                ),
-                customField(
-                  "Hide on tablet",
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={!!(section as any).hiddenTablet}
-                      onChange={(e) => updateSection(section.id, { ...(section as any), hiddenTablet: e.target.checked })}
-                      onBlur={pushHistory}
-                      className="h-4 w-4 rounded border-input text-primary"
-                    />
-                    <span className="text-xs">Hide on tablet</span>
-                  </label>
-                ),
-                customField(
-                  "Hide on desktop",
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={!!(section as any).hiddenDesktop}
-                      onChange={(e) => updateSection(section.id, { ...(section as any), hiddenDesktop: e.target.checked })}
-                      onBlur={pushHistory}
-                      className="h-4 w-4 rounded border-input text-primary"
-                    />
-                    <span className="text-xs">Hide on desktop</span>
-                  </label>
-                ),
-                customField(
-                  "Sticky",
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={!!section.sticky}
-                      onChange={(e) => updateSection(section.id, { sticky: e.target.checked })}
-                      onBlur={pushHistory}
-                      className="h-4 w-4 rounded border-input text-primary"
-                    />
-                    <span className="text-xs">Sticky navigation</span>
-                  </label>
-                ),
-              ];
-
-              const advancedFields: PropertyFieldConfig[] = [
-                textField("Section ID", section.domId ?? "", (value) => updateSection(section.id, { domId: value }), pushHistory, "my-section"),
-                textField("Custom class", section.className ?? "", (value) => updateSection(section.id, { className: value }), pushHistory, "my-class"),
-              ];
-
-              return (
-                <>
-                  {renderPropertySection("Background", backgroundFields)}
-                  {renderPropertySection("Style", [
-                    textField("Border Radius", style["border-radius"] ?? "", (v) => set("border-radius", v), pushHistory, "e.g. 16px"),
-                    selectField(
-                      "Shadow",
-                      style["box-shadow"] ?? "",
-                      [
-                        { label: "None", value: "" },
-                        { label: "Subtle", value: "0 1px 2px rgba(0,0,0,.06)" },
-                        { label: "Soft", value: "0 4px 10px rgba(0,0,0,.08)" },
-                        { label: "Medium", value: "0 10px 30px rgba(0,0,0,.15)" },
-                        { label: "Large", value: "0 25px 50px -12px rgba(0,0,0,.25)" },
-                      ],
-                      (value) => set("box-shadow", value),
-                      pushHistory
-                    ),
-                  ])}
-                  {renderPropertySection("Animation", animationFields)}
-                  {renderPropertySection("Visibility", visibilityFields)}
-                  {renderPropertySection("Advanced", advancedFields)}
-                </>
-              );
-            })()}
-          </>
-        ) : null}
+      <div className="flex-1 min-h-0 overflow-hidden px-3 py-3 pb-4 text-sm">
+        <TabbedPropertyPanel
+          title="Section"
+          subtitle={section.name}
+          badgeLabel={widgetInstance?.type ? widgetInstance.type : undefined}
+          content={contentTabContent}
+          style={styleTabContent}
+          advanced={advancedTabContent}
+        />
       </div>
     </div>
   );
@@ -3351,7 +2455,7 @@ function moveRepeaterItemTo(html: string, fromIndex: number, toIndex: number) {
   });
 }
 
-// Footer helpers omitted for brevity — keep the ones we used earlier
+// Footer helpers omitted for brevity â€” keep the ones we used earlier
 
 function findFooterColumnElements(doc: Document): Element[] {
   const footer = doc.body.querySelector('footer');
@@ -4021,7 +3125,7 @@ function setRepeaterItemTarget(html: string, index: number, openInNewTab: boolea
 function getFooterCopyright(html: string) {
   const doc = parseHtml(html);
   if (!doc) return '';
-  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => /Â©/.test(n.textContent || '')) as HTMLElement | undefined;
   return el ? (el.textContent || '').trim() : '';
 }
 
@@ -4030,7 +3134,7 @@ function setFooterCopyright(html: string, text: string) {
   if (!doc) return html;
   const footer = doc.body.querySelector('footer');
   if (!footer) return html;
-  let el = Array.from(footer.querySelectorAll('*')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  let el = Array.from(footer.querySelectorAll('*')).find((n) => /Â©/.test(n.textContent || '')) as HTMLElement | undefined;
   if (!el) {
     el = doc.createElement('div');
     el.setAttribute('class', 'border-t border-gray-800 py-6 text-center text-xs');
@@ -4043,7 +3147,7 @@ function setFooterCopyright(html: string, text: string) {
 function getFooterCopyrightColor(html: string) {
   const doc = parseHtml(html);
   if (!doc) return '#000000';
-  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => /Â©/.test(n.textContent || '')) as HTMLElement | undefined;
   if (!el) return '#000000';
   const color = el.getAttribute('style')?.match(/color:\s*([^;]+)/)?.[1];
   return color || '#000000';
@@ -4054,7 +3158,7 @@ function setFooterCopyrightColor(html: string, color: string) {
   if (!doc) return html;
   const footer = doc.body.querySelector('footer');
   if (!footer) return html;
-  let el = Array.from(footer.querySelectorAll('*')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  let el = Array.from(footer.querySelectorAll('*')).find((n) => /Â©/.test(n.textContent || '')) as HTMLElement | undefined;
   if (!el) {
     el = doc.createElement('div');
     el.setAttribute('class', 'border-t border-gray-800 py-6 text-center text-xs');
@@ -4068,7 +3172,7 @@ function setFooterCopyrightColor(html: string, color: string) {
 function getFooterCopyrightFontSize(html: string) {
   const doc = parseHtml(html);
   if (!doc) return '';
-  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  const el = Array.from(doc.body.querySelectorAll('footer *')).find((n) => /Â©/.test(n.textContent || '')) as HTMLElement | undefined;
   if (!el) return '';
   const size = el.getAttribute('style')?.match(/font-size:\s*([^;]+)/)?.[1];
   return size || '';
@@ -4079,7 +3183,7 @@ function setFooterCopyrightFontSize(html: string, size: string) {
   if (!doc) return html;
   const footer = doc.body.querySelector('footer');
   if (!footer) return html;
-  let el = Array.from(footer.querySelectorAll('*')).find((n) => /©/.test(n.textContent || '')) as HTMLElement | undefined;
+  let el = Array.from(footer.querySelectorAll('*')).find((n) => /Â©/.test(n.textContent || '')) as HTMLElement | undefined;
   if (!el) {
     el = doc.createElement('div');
     el.setAttribute('class', 'border-t border-gray-800 py-6 text-center text-xs');
