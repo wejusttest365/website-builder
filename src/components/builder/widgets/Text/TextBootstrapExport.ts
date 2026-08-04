@@ -2,6 +2,7 @@ import type { WidgetData } from "../widgetRegistry";
 import { getWidgetElementDuplicateEntries } from "../elementDuplication";
 import { defaultTextWidgetData, isTextWidgetData } from "./TextTypes";
 import { getResponsiveSpacingCss, getSpacingValueForDevice, serializeSpacingValue } from "../spacing";
+import { normalizeFontSizeToPx } from "../fontSize";
 
 function escapeHtml(value: string | undefined) {
   if (!value) return "";
@@ -25,7 +26,7 @@ export function buildTextBootstrapMarkup(data: WidgetData = defaultTextWidgetDat
     const desktopPadding = serializeSpacingValue(getSpacingValueForDevice(layout.padding, "desktop"));
     if (style.fontFamily) styleFragments.push(`font-family: ${escapeHtml(String(style.fontFamily))};`);
     if (style.textColor) styleFragments.push(`color: ${escapeHtml(String(style.textColor))};`);
-    if (style.fontSize) styleFragments.push(`font-size: ${escapeHtml(String(style.fontSize))};`);
+    if (style.fontSize) styleFragments.push(`font-size: ${escapeHtml(String(normalizeFontSizeToPx(style.fontSize) ?? style.fontSize))};`);
     if (style.fontWeight) styleFragments.push(`font-weight: ${escapeHtml(String(style.fontWeight))};`);
     if (style.lineHeight) styleFragments.push(`line-height: ${escapeHtml(String(style.lineHeight))};`);
     if (style.letterSpacing) styleFragments.push(`letter-spacing: ${escapeHtml(String(style.letterSpacing))};`);
@@ -34,7 +35,7 @@ export function buildTextBootstrapMarkup(data: WidgetData = defaultTextWidgetDat
     styleFragments.push("display: block;");
 
     if (textData.variant === "Lead Text") {
-      styleFragments.push("font-size: 1.25rem;");
+      styleFragments.push(`font-size: ${escapeHtml(String(normalizeFontSizeToPx(style.fontSize) ?? "20px"))};`);
       styleFragments.push("font-weight: 500;");
     }
 

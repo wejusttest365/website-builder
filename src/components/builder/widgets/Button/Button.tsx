@@ -5,6 +5,7 @@ import { BaseWidget } from "../BaseWidget";
 import { getWidgetElementDuplicateEntries } from "../elementDuplication";
 import { useBuilder } from "@/lib/builder/store";
 import { getSpacingStyleValue } from "../spacing";
+import { normalizeFontSizeToPx } from "../fontSize";
 
 function getThemeColor(color: string, customColor?: string) {
   if (color === "Custom") {
@@ -88,7 +89,7 @@ export function Button({ data = defaultButtonWidgetData }: ButtonProps) {
 
     const buttonStyle: React.CSSProperties = {
       fontFamily: style.fontFamily as string | undefined,
-      fontSize: style.fontSize as string | undefined,
+      fontSize: normalizeFontSizeToPx(style.fontSize) ?? (style.fontSize as string | undefined),
       display: displayMode === "block" ? "flex" : "inline-flex",
       alignItems: "center",
       justifyContent,

@@ -16,6 +16,7 @@ export function SeoSettingsPanel({ page: pageProp, project: projectProp, pageOnl
   const setCustomHead = useBuilder((s) => s.setCustomHead);
   const setPageSeo = useBuilder((s) => s.setPageSeo);
   const setProjectSeo = useBuilder((s) => s.setProjectSeo);
+  const setPageChromeSettings = useBuilder((s) => s.setPageChromeSettings);
   const project = projectProp ?? currentProject;
   const pageFromState = useMemo(() => pageOf(project), [project]);
   const page = pageProp ?? pageFromState;
@@ -36,6 +37,43 @@ export function SeoSettingsPanel({ page: pageProp, project: projectProp, pageOnl
     <div className="space-y-6 p-3">
       {!projectOnly ? (
         <>
+          <div className="space-y-2 rounded-2xl border border-border/70 bg-background/90 p-3 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">Header & Footer</div>
+            <div className="space-y-3">
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span>Use Global Header</span>
+                <input
+                  type="checkbox"
+                  checked={page?.useGlobalHeader !== false}
+                  onChange={(e) => setPageChromeSettings(page!.id, { useGlobalHeader: e.target.checked })}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span>Hide Header on this page</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(page?.hideHeader)}
+                  onChange={(e) => setPageChromeSettings(page!.id, { hideHeader: e.target.checked })}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span>Use Global Footer</span>
+                <input
+                  type="checkbox"
+                  checked={page?.useGlobalFooter !== false}
+                  onChange={(e) => setPageChromeSettings(page!.id, { useGlobalFooter: e.target.checked })}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span>Hide Footer on this page</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(page?.hideFooter)}
+                  onChange={(e) => setPageChromeSettings(page!.id, { hideFooter: e.target.checked })}
+                />
+              </label>
+            </div>
+          </div>
           <div className="space-y-2 rounded-2xl border border-border/70 bg-background/90 p-3 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">Page SEO</div>
             <div className="space-y-4">

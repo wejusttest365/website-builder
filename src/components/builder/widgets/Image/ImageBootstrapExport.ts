@@ -24,7 +24,8 @@ export function buildImageBootstrapMarkup(data: WidgetData = defaultImageWidgetD
   }
 
   const src = escapeHtml(String(isBuilderAssetEntry(imageData.content.src) ? getAssetValue(imageData.content.src) ?? "" : imageData.content.src || ""));
-  const alt = escapeHtml(String(imageData.content.alt || "Image"));
+  const isDecorative = Boolean(imageData.content.decorative);
+  const alt = escapeHtml(isDecorative ? "" : String(imageData.content.alt || "Image"));
   const caption = escapeHtml(String(imageData.content.caption || ""));
   const url = escapeHtml(String(imageData.content.url || ""));
   const target = imageData.content.openInNewTab ? ` target="_blank" rel="noopener noreferrer"` : "";

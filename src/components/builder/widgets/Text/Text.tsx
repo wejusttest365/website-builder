@@ -5,6 +5,7 @@ import { BaseWidget } from "../BaseWidget";
 import { getWidgetElementDuplicateEntries } from "../elementDuplication";
 import { useBuilder } from "@/lib/builder/store";
 import { getSpacingStyleValue } from "../spacing";
+import { normalizeFontSizeToPx } from "../fontSize";
 
 export interface TextProps {
   data: WidgetData;
@@ -31,7 +32,7 @@ export function Text({ data = defaultTextWidgetData }: TextProps) {
     const textStyle: React.CSSProperties = {
       fontFamily: style.fontFamily as string | undefined,
       color: style.textColor as string | undefined,
-      fontSize: style.fontSize as string | undefined,
+      fontSize: normalizeFontSizeToPx(style.fontSize) ?? (style.fontSize as string | undefined),
       fontWeight: style.fontWeight as string | undefined,
       lineHeight: style.lineHeight as string | undefined,
       letterSpacing: style.letterSpacing as string | undefined,
@@ -41,7 +42,7 @@ export function Text({ data = defaultTextWidgetData }: TextProps) {
     };
 
     if (textData.variant === "Lead Text") {
-      textStyle.fontSize = "1.25rem";
+      textStyle.fontSize = normalizeFontSizeToPx(style.fontSize) ?? "20px";
       textStyle.fontWeight = "500";
     }
 
@@ -78,7 +79,7 @@ export function Text({ data = defaultTextWidgetData }: TextProps) {
           const renderState = buildRenderState(item.entry ?? undefined);
           if (!renderState.visible) return null;
           return (
-            <div key={`${item.key}-${item.duplicateId || "base"}`} className={renderState.alignClass} style={{ margin: renderState.layout.margin, padding: renderState.layout.padding }}>
+            <div key={`${item.key}-${item.duplicateId || "base"}`} className={renderState.alignClass} style={{ margin: getSpacingStyleValue(renderState.layout.margin, device), padding: getSpacingStyleValue(renderState.layout.padding, device) }}>
               {textData.variant === "Quote" ? (
                 <blockquote
                   className={renderState.alignClass}

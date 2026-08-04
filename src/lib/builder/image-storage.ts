@@ -219,7 +219,12 @@ export function getAssetValue(entry?: BuilderAssetEntry): string | undefined {
 export async function resolveAssetValue(entry?: BuilderAssetEntry): Promise<string | undefined> {
   const value = getAssetValue(entry);
   if (!value) return undefined;
-  if (/^builder:\/\/images\//.test(value) && typeof entry !== "string" && entry.imageId) {
+  if (
+    /^builder:\/\/images\//.test(value) &&
+    entry &&
+    typeof entry !== "string" &&
+    entry.imageId
+  ) {
     const objectUrl = await getImageObjectUrl(entry.imageId);
     return objectUrl ?? value;
   }
@@ -262,7 +267,9 @@ export function normalizeAssetMap(assets?: Record<string, unknown>): Record<stri
     }
     if (typeof value === "string" && value.startsWith("data:")) {
       const { ref, blob } = createImageAssetReference(value, name);
-      void saveImageBlob(ref.imageId, ref.filename, blob, ref.mimeType);
+      if (ref.imageId && ref.mimeType) {
+        void saveImageBlob(ref.imageId, ref.filename, blob, ref.mimeType);
+      }
       normalized[name] = ref;
       continue;
     }
@@ -271,4 +278,98 @@ export function normalizeAssetMap(assets?: Record<string, unknown>): Record<stri
     }
   }
   return Object.keys(normalized).length ? normalized : undefined;
+}
+
+export const ACCEPTED_IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+] as const;
+
+export const ACCEPTED_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"] as const;
+
+/** OS file picker accept attribute */
+export const IMAGE_FILE_ACCEPT = "image/jpeg,image/jpg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif";
+
+/** 5MB — keeps uploads practical for browser IndexedDB + export ZIPs */
+export const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+export function getImageFilenameFromPath(value: string): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return raw.replace(/^\.?\/?images\//i, "").split(/[\\/]/).pop() || "";
+}
+
+export function isProjectAssetPath(value: string): boolean {
+  const raw = String(value || "").trim();
+  return /^\.?\/?images\//i.test(raw) || /^builder:\/\/images\//i.test(raw);
+}
+
+export function validateImageFile(file: File): string | null {
+  const mime = String(file.type || "").toLowerCase();
+  const name = String(file.name || "").toLowerCase();
+  const hasAllowedExt = ACCEPTED_IMAGE_EXTENSIONS.some((ext) => name.endsWith(ext));
+  const hasAllowedMime = ACCEPTED_IMAGE_MIME_TYPES.includes(mime as (typeof ACCEPTED_IMAGE_MIME_TYPES)[number]);
+  if (!hasAllowedMime && !hasAllowedExt) {
+    return "Unsupported file type. Please upload a JPG, PNG, WEBP, or GIF image.";
+  }
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+    const mb = Math.round(MAX_IMAGE_UPLOAD_BYTES / (1024 * 1024));
+    return `Image is too large. Please use an image under ${mb}MB.`;
+  }
+  return null;
+}
+
+export function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Failed to read image file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Normalize a picker value (upload path or remote URL) into the widget image field shape.
+ * Preserves upload asset references from the project asset map when available.
+ */
+export function normalizeImagePickerValue(
+  next: string,
+  current?: BuilderAssetEntry,
+  assets?: Record<string, BuilderAssetEntry>,
+): BuilderAssetEntry | string {
+  const value = String(next || "").trim();
+  if (!value) return "";
+
+  const filename = getImageFilenameFromPath(value);
+  if (isProjectAssetPath(value) || (filename && assets?.[filename])) {
+    const asset = (filename && assets?.[filename]) || undefined;
+    if (asset && typeof asset === "object") {
+      return { ...asset };
+    }
+    return {
+      sourceType: "upload",
+      src: `builder://images/${filename || "image.png"}`,
+      filename: filename || "image.png",
+      url: value.startsWith("images/") ? value : `images/${filename}`,
+    };
+  }
+
+  if (typeof current === "object" && current !== null) {
+    return {
+      ...current,
+      url: value,
+      src: value,
+      sourceType: "remote",
+      filename: createRemoteImageReference(value).filename,
+      provider: "Remote image",
+      attribution: "",
+      isPreview: false,
+      isWatermarked: false,
+    };
+  }
+
+  return createRemoteImageReference(value);
 }

@@ -7,6 +7,8 @@ export interface ImageContentGroup extends Record<string, unknown> {
   url?: string;
   openInNewTab?: boolean;
   alt?: string;
+  /** When true, export uses alt="" for decorative images */
+  decorative?: boolean;
   caption?: string;
 }
 

@@ -3,15 +3,19 @@ import {
   PropertyCard as Section,
   PropertyField as Field,
 } from "@/components/builder/property-ui";
-import { defaultHeroWidgetData } from "@/components/builder/widgets/Hero/HeroTypes";
+import { defaultHeroWidgetData, isHeroWidgetData, normalizeHeroChildItem } from "@/components/builder/widgets/Hero/HeroTypes";
 import { createWidgetInstance, getWidgetPropertiesComponent } from "@/components/builder/widgets/widgetRegistry";
-import { getWidgetChildItems, setWidgetChildItems } from "@/components/builder/widgets/childWidgetUtils";
+import { buildNormalizedChildData, findGridColumnIdForChild, getChildWidgetData, getWidgetChildItems, setWidgetChildItems } from "@/components/builder/widgets/childWidgetUtils";
+import { normalizeFontSizeToPx } from "@/components/builder/widgets/fontSize";
 import { PropertyPanel as TabbedPropertyPanel } from "@/components/builder/property-panel/PropertyPanel";
 
 import { useBuilder, pageOf } from "@/lib/builder/store";
+import { findSectionInProject } from "@/lib/builder/sharedChrome";
 import { nanoid } from "nanoid";
 import { Plus, Trash2, Copy, Eye, EyeOff, UploadCloud, Facebook, Twitter, Instagram, Linkedin, ChevronUp, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import type { ContainerChildItem } from "@/components/builder/widgets/Container/ContainerTypes";
 
 const inputCls =
   "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm transition-all outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100";
@@ -208,7 +212,8 @@ function PropertyTypography({
     '"Poppins", sans-serif',
     '"Montserrat", sans-serif',
   ];
-  const fontSizes = ["12px", "13px", "14px", "15px", "16px", "18px", "20px", "24px", "28px", "32px", "36px", "40px", "48px"];
+  const fontSizes = ["12px", "13px", "14px", "15px", "16px", "18px", "20px", "24px", "28px", "32px", "36px", "40px", "48px", "56px", "64px"];
+  const normalizedFontSize = normalizeFontSizeToPx(state.fontSize) ?? (state.fontSize || "");
 
   return (
     <>
@@ -223,9 +228,9 @@ function PropertyTypography({
       <div className="grid grid-cols-2 gap-2">
         <Field label="Font size">
           <PropertySelect
-            value={state.fontSize || ""}
-            options={(state.fontSize && state.fontSize.trim() ? [state.fontSize, ...fontSizes] : fontSizes).map((value) => ({ label: value, value }))}
-            onChange={(value) => onChange("fontSize", value)}
+            value={normalizedFontSize}
+            options={(normalizedFontSize && normalizedFontSize.trim() ? [normalizedFontSize, ...fontSizes] : fontSizes).map((value) => ({ label: value, value }))}
+            onChange={(value) => onChange("fontSize", normalizeFontSizeToPx(value) ?? value)}
             onBlur={onBlur}
           />
         </Field>
@@ -364,12 +369,18 @@ function customField(label: string, render: ReactNode): PropertyFieldConfig {
 
 function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: string) => void; onBlur: () => void }) {
   const [open, setOpen] = useState(false);
-  const [pickerPosition, setPickerPosition] = useState({ top: 8, left: 8 });
+  const [pickerPosition, setPickerPosition] = useState({ top: 12, left: 12 });
+  const [mounted, setMounted] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const normalizedValue = (value || "").trim();
   const swatchValue = /^#/.test(normalizedValue) ? normalizedValue : "#ffffff";
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -386,9 +397,11 @@ function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: 
     };
 
     updatePosition();
+    const timeoutId = window.setTimeout(updatePosition, 0);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
+      window.clearTimeout(timeoutId);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
@@ -427,31 +440,35 @@ function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: 
         onBlur={onBlur}
         placeholder="transparent"
       />
-      {open && (
-        <div
-          ref={popoverRef}
-          className="fixed z-[1000] w-[220px] rounded-lg border border-border bg-popover p-3 shadow-xl"
-          style={{ top: pickerPosition.top, left: pickerPosition.left }}
-        >
-          <div className="flex items-center gap-2">
-            <input
-              type="color"
-              value={swatchValue}
-              onChange={(e) => onChange(e.target.value)}
-              onBlur={onBlur}
-              className="h-9 w-9 cursor-pointer rounded border border-input bg-background p-0"
-            />
-            <input
-              className="h-9 w-full rounded border border-input bg-background px-2 text-sm"
-              value={normalizedValue || ""}
-              onChange={(e) => onChange(e.target.value)}
-              onBlur={onBlur}
-              placeholder="#ffffff"
-            />
-          </div>
-          <div className="mt-2 text-[11px] text-muted-foreground">The picker stays inside the builder window.</div>
-        </div>
-      )}
+      {open && mounted && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={popoverRef}
+              className="fixed z-[9999] w-[220px] rounded-lg border border-border bg-popover p-3 shadow-xl"
+              style={{ top: pickerPosition.top, left: pickerPosition.left }}
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={swatchValue}
+                  onChange={(e) => onChange(e.target.value)}
+                  onBlur={onBlur}
+                  className="h-9 w-9 cursor-pointer rounded border border-input bg-background p-0"
+                />
+                <input
+                  className="h-9 w-full rounded border border-input bg-background px-2 text-sm"
+                  value={normalizedValue || ""}
+                  onChange={(e) => onChange(e.target.value)}
+                  onBlur={onBlur}
+                  placeholder="#ffffff"
+                />
+              </div>
+              <div className="mt-2 text-[11px] text-muted-foreground">The picker stays inside the builder window.</div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -461,20 +478,27 @@ export function PropertiesPanel() {
   const selectedId = useBuilder((s) => s.selectedSectionId);
   const selectedElement = useBuilder((s) => s.selectedElement);
   const selectedElementStyle = useBuilder((s) => s.selectedElementStyle);
+  const select = useBuilder((s) => s.selectSection);
+  const selectElement = useBuilder((s) => s.selectElement);
   const updateSection = useBuilder((s) => s.updateSection);
   const updateWidgetInstance = useBuilder((s) => s.updateWidgetInstance);
   const pushHistory = useBuilder((s) => s.pushHistory);
   const addAsset = useBuilder((s) => s.addAsset);
 
+  const clearSelection = () => {
+    selectElement(null);
+    select(null);
+  };
+
   // Hooks must run unconditionally â€” define local React hooks here
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const draggedIndexRef = useRef<number | null>(null);
 
-  const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === selectedId) ?? null;
+  const section = selectedId
+    ? findSectionInProject(project, selectedId, pageOf(project))
+    : null;
   const widgetInstance = section?.widgetInstance;
-  if (widgetInstance?.type === "hero") {
-    console.log("HERO INSTANCE", widgetInstance);
-  }
+  
   const WidgetPropertiesComponent = widgetInstance ? getWidgetPropertiesComponent(widgetInstance.type) : null;
   const selectedChildWidget = (() => {
     const selectedChildId = selectedElement?.childId || selectedElement?.elementKey;
@@ -485,22 +509,39 @@ export function PropertiesPanel() {
     if (section.widgetInstance.id !== selectedParentWidgetId) {
       return null;
     }
-    const children = getWidgetChildItems(section.widgetInstance, selectedElement?.columnId ? { columnId: selectedElement.columnId } : undefined);
+    const resolvedColumnId =
+      selectedElement?.columnId ||
+      selectedElement?.childContainerId ||
+      findGridColumnIdForChild(section.widgetInstance, selectedChildId);
+    const children = getWidgetChildItems(
+      section.widgetInstance,
+      resolvedColumnId ? { columnId: resolvedColumnId } : undefined,
+    );
     const child = children.find((candidate) => candidate.id === selectedChildId);
     if (!child) {
       return null;
     }
+    const normalizedChild = section.widgetInstance.type === "hero" && isHeroWidgetData(section.widgetInstance)
+      ? normalizeHeroChildItem(section.widgetInstance, child as ContainerChildItem)
+      : (child as ContainerChildItem);
+    const childData = getChildWidgetData(normalizedChild);
+    const normalizedChildStyle = {
+      ...childData.style,
+      ...(child.type === "heading" || child.type === "text") && childData.style && !childData.style.textColor && childData.style.color
+        ? { textColor: String(childData.style.color) }
+        : {},
+    } as Record<string, unknown>;
     const childWidgetInstance = createWidgetInstance(child.type, {
       id: `${section.widgetInstance.id}-${child.id}`,
-      content: (child.data as Record<string, unknown> | undefined)?.content ?? (child.data ?? {}),
-      style: (child.data as Record<string, unknown> | undefined)?.style ?? {},
-      layout: (child.data as Record<string, unknown> | undefined)?.layout ?? {},
-      responsive: (child.data as Record<string, unknown> | undefined)?.responsive ?? {},
-      animation: (child.data as Record<string, unknown> | undefined)?.animation ?? {},
-      advanced: (child.data as Record<string, unknown> | undefined)?.advanced ?? {},
-      variant: (child.data as Record<string, unknown> | undefined)?.variant ?? (child.type === "button" ? "Filled" : undefined),
+      content: childData.content,
+      style: normalizedChildStyle,
+      layout: childData.layout,
+      responsive: childData.responsive,
+      animation: childData.animation,
+      advanced: childData.advanced,
+      variant: childData.variant ?? (child.type === "button" ? "Filled" : undefined),
     } as any);
-    return { child, childWidgetInstance };
+    return { child, childWidgetInstance, columnId: resolvedColumnId };
   })();
   const SelectedChildPropertiesComponent = selectedChildWidget ? getWidgetPropertiesComponent(selectedChildWidget.childWidgetInstance.type) : null;
 
@@ -515,19 +556,27 @@ export function PropertiesPanel() {
 
   if (selectedChildWidget && SelectedChildPropertiesComponent) {
     return (
-      <div className="h-full overflow-hidden bg-card p-1">
-        <div className="mb-2 px-2 text-xs uppercase tracking-[0.24em] text-muted-foreground">Child Properties</div>
+      <div className="h-full overflow-hidden bg-white">
         <SelectedChildPropertiesComponent
           value={selectedChildWidget.childWidgetInstance}
+          onClose={clearSelection}
           onChange={(nextValue) => {
             const selectedChildId = selectedElement?.childId || selectedElement?.elementKey;
             const selectedParentWidgetId = selectedElement?.parentWidgetId || selectedElement?.widgetId;
             if (!section?.widgetInstance || section.widgetInstance.id !== selectedParentWidgetId || !selectedChildId) return;
-            const children = getWidgetChildItems(section.widgetInstance, selectedElement?.childContainerId || selectedElement?.columnId ? { childContainerId: selectedElement?.childContainerId ?? selectedElement?.columnId ?? null } : undefined);
+            const resolvedColumnId =
+              selectedChildWidget.columnId ||
+              selectedElement?.childContainerId ||
+              selectedElement?.columnId ||
+              findGridColumnIdForChild(section.widgetInstance, selectedChildId);
+            const location = resolvedColumnId
+              ? { childContainerId: resolvedColumnId, columnId: resolvedColumnId }
+              : undefined;
+            const children = getWidgetChildItems(section.widgetInstance, location);
             const nextChildren = children.map((child) => child.id === selectedChildId
               ? {
                   ...child,
-                  data: {
+                  data: buildNormalizedChildData({
                     content: (nextValue.content as Record<string, unknown> | undefined) ?? {},
                     style: (nextValue.style as Record<string, unknown> | undefined) ?? {},
                     layout: (nextValue.layout as Record<string, unknown> | undefined) ?? {},
@@ -535,10 +584,10 @@ export function PropertiesPanel() {
                     animation: (nextValue.animation as Record<string, unknown> | undefined) ?? {},
                     advanced: (nextValue.advanced as Record<string, unknown> | undefined) ?? {},
                     variant: (nextValue.variant as string | undefined),
-                  },
+                  }),
                 }
               : child);
-            updateWidgetInstance(section.widgetInstance.id, setWidgetChildItems(section.widgetInstance, nextChildren, selectedElement?.childContainerId || selectedElement?.columnId ? { childContainerId: selectedElement?.childContainerId ?? selectedElement?.columnId ?? null } : undefined) as any);
+            updateWidgetInstance(section.widgetInstance.id, setWidgetChildItems(section.widgetInstance, nextChildren, location) as any);
             pushHistory();
           }}
         />
@@ -548,9 +597,10 @@ export function PropertiesPanel() {
 
   if (widgetInstance && WidgetPropertiesComponent) {
     return (
-      <div className="h-full overflow-hidden bg-card p-1">
+      <div className="h-full overflow-hidden bg-white">
         <WidgetPropertiesComponent
           value={widgetInstance}
+          onClose={clearSelection}
           onChange={(nextValue) => {
             updateWidgetInstance(widgetInstance.id, nextValue);
             pushHistory();
@@ -683,12 +733,20 @@ export function PropertiesPanel() {
 
   const updateHtml = (html: string) => updateSection(section.id, { html });
 
+  function normalizeSelectedColor(color?: string) {
+    if (!color) return "";
+    const normalized = String(color).trim();
+    if (/^transparent$/i.test(normalized)) return "";
+    if (/^rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)$/i.test(normalized)) return "";
+    return normalized;
+  }
+
   const selectedTypographyState = (() => {
     if (selectedElement && selectedElementStyle) {
       return {
         fontFamily: selectedElementStyle.fontFamily || '',
-        fontSize: selectedElementStyle.fontSize || '',
-        color: selectedElementStyle.color || '',
+        fontSize: normalizeFontSizeToPx(selectedElementStyle.fontSize) || selectedElementStyle.fontSize || '',
+        color: normalizeSelectedColor(selectedElementStyle.color),
         fontWeight: selectedElementStyle.fontWeight || '',
         lineHeight: selectedElementStyle.lineHeight || '',
         textAlign: selectedElementStyle.textAlign || '',
@@ -696,12 +754,18 @@ export function PropertiesPanel() {
         textTransform: selectedElementStyle.textTransform || '',
       };
     }
-    if (selectedElement?.kind === 'text' && selectedTextItem) return selectedTextItem;
-    if (selectedElement?.kind === 'link' && selectedLinkStyle) return selectedLinkStyle;
-    if (selectedElement?.kind === 'container' && selectedContainerTypography) return selectedContainerTypography;
+    if (selectedElement?.kind === 'text' && selectedTextItem) {
+      return { ...selectedTextItem, fontSize: normalizeFontSizeToPx(selectedTextItem.fontSize) || selectedTextItem.fontSize || '' };
+    }
+    if (selectedElement?.kind === 'link' && selectedLinkStyle) {
+      return { ...selectedLinkStyle, fontSize: normalizeFontSizeToPx(selectedLinkStyle.fontSize) || selectedLinkStyle.fontSize || '' };
+    }
+    if (selectedElement?.kind === 'container' && selectedContainerTypography) {
+      return { ...selectedContainerTypography, fontSize: normalizeFontSizeToPx(selectedContainerTypography.fontSize) || selectedContainerTypography.fontSize || '' };
+    }
     return {
       fontFamily: style['font-family'] || '',
-      fontSize: style['font-size'] || '',
+      fontSize: normalizeFontSizeToPx(style['font-size']) || style['font-size'] || '',
       color: style['color'] || '',
       fontWeight: style['font-weight'] || '',
       lineHeight: style['line-height'] || '',
@@ -720,22 +784,23 @@ export function PropertiesPanel() {
 
   function applyTypographyChange(key: string, value: string) {
     if (!section) return;
+    const nextValue = key === "fontSize" ? (normalizeFontSizeToPx(value) ?? value) : value;
     if (selectedElement?.kind === 'text' && selectedElement.index != null) {
-      updateHtml(setTextItemStyle(section.html, selectedElement.index, { [key]: value } as any));
+      updateHtml(setTextItemStyle(section.html, selectedElement.index, { [key]: nextValue } as any));
       pushHistory();
       return;
     }
     if (selectedElement?.kind === 'link' && selectedElement.index != null) {
-      updateHtml(setLinkStyle(section.html, selectedElement.index, { [key]: value } as any));
+      updateHtml(setLinkStyle(section.html, selectedElement.index, { [key]: nextValue } as any));
       pushHistory();
       return;
     }
     if (selectedElement?.kind === 'container' && selectedElement.index != null) {
-      updateHtml(setContainerTypography(section.html, selectedElement.index, { [key]: value } as any));
+      updateHtml(setContainerTypography(section.html, selectedElement.index, { [key]: nextValue } as any));
       pushHistory();
       return;
     }
-    set(key, value);
+    set(key, nextValue);
   }
 
   const contentTabContent = (
@@ -1016,25 +1081,43 @@ export function PropertiesPanel() {
               })()}
             </Field>
             <Field label="Weight">
-              <select className={selectCls} value={selectedTypographyState.fontWeight || ""} onChange={(e) => applyTypographyChange('fontWeight', e.target.value)} onBlur={pushHistory}>
-                <option value="">{selectedTypographyState.fontWeight || "Default"}</option>
-                <option value="400">Regular</option>
-                <option value="500">Medium</option>
-                <option value="600">Semibold</option>
-                <option value="700">Bold</option>
-              </select>
-            </Field>
+            {(() => {
+              const current = selectedTypographyState.fontWeight || "";
+              const standardWeights = ["400", "500", "600", "700"];
+              const options = current && current.trim()
+                ? (standardWeights.includes(current) ? ["", ...standardWeights] : [current, "", ...standardWeights])
+                : ["", ...standardWeights];
+
+              return (
+                <select className={selectCls} value={current} onChange={(e) => applyTypographyChange('fontWeight', e.target.value)} onBlur={pushHistory}>
+                  {options.map((weight) => (
+                    <option key={weight} value={weight}>
+                      {weight === "" ? "Default" : weight === "400" ? "Regular" : weight === "500" ? "Medium" : weight === "600" ? "Semibold" : weight === "700" ? "Bold" : weight}
+                    </option>
+                  ))}
+                </select>
+              );
+            })()}
+          </Field>
           </div>
           <Field label="Line height">
-            <select className={selectCls} value={selectedTypographyState.lineHeight || ""} onChange={(e) => applyTypographyChange('lineHeight', e.target.value)} onBlur={pushHistory}>
-              <option value="">{selectedTypographyState.lineHeight || "Line height"}</option>
-              <option value="1">1</option>
-              <option value="1.15">1.15</option>
-              <option value="1.25">1.25</option>
-              <option value="1.5">1.5</option>
-              <option value="1.75">1.75</option>
-              <option value="2">2</option>
-            </select>
+            {(() => {
+              const current = selectedTypographyState.lineHeight || "";
+              const standardLineHeights = ["1", "1.15", "1.25", "1.5", "1.75", "2"];
+              const options = current && current.trim()
+                ? (standardLineHeights.includes(current) ? ["", ...standardLineHeights] : [current, "", ...standardLineHeights])
+                : ["", ...standardLineHeights];
+
+              return (
+                <select className={selectCls} value={current} onChange={(e) => applyTypographyChange('lineHeight', e.target.value)} onBlur={pushHistory}>
+                  {options.map((lineHeight) => (
+                    <option key={lineHeight} value={lineHeight}>
+                      {lineHeight === "" ? "Line height" : lineHeight}
+                    </option>
+                  ))}
+                </select>
+              );
+            })()}
           </Field>
           <Field label="Text color">
             <ColorInput value={selectedTypographyState.color || ""} onChange={(v) => applyTypographyChange('color', v)} onBlur={pushHistory} />
@@ -1125,23 +1208,12 @@ export function PropertiesPanel() {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-transparent">
-      <div className="p-3 border-b border-border/70 bg-card/55 backdrop-blur">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
-          <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
-          <span>Section</span>
-        </div>
-        <input
-          value={section.name}
-          onChange={(e) => updateSection(section.id, { name: e.target.value })}
-          onBlur={pushHistory}
-          className="mt-1 w-full text-base font-semibold bg-transparent focus:outline-none"
-        />
-      </div>
-      <div className="flex-1 min-h-0 overflow-hidden px-3 py-3 pb-4 text-sm">
+      <div className="flex-1 min-h-0 overflow-hidden text-sm">
         <TabbedPropertyPanel
           title="Section"
           subtitle={section.name}
-          badgeLabel={widgetInstance?.type ? widgetInstance.type : undefined}
+          badgeLabel={widgetInstance?.type ? widgetInstance.type : "Section"}
+          onClose={clearSelection}
           content={contentTabContent}
           style={styleTabContent}
           advanced={advancedTabContent}

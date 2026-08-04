@@ -2,6 +2,7 @@ import type { WidgetData } from "../widgetRegistry";
 import { getWidgetElementDuplicateEntries } from "../elementDuplication";
 import { defaultButtonWidgetData, isButtonWidgetData } from "./ButtonTypes";
 import { getResponsiveSpacingCss, getSpacingValueForDevice, serializeSpacingValue } from "../spacing";
+import { normalizeFontSizeToPx } from "../fontSize";
 
 function escapeHtml(value: string | undefined) {
   if (!value) return "";
@@ -81,7 +82,7 @@ export function buildButtonBootstrapMarkup(data: WidgetData = defaultButtonWidge
 
     const styleFragments: string[] = [];
     if (style.fontFamily) styleFragments.push(`font-family: ${escapeHtml(String(style.fontFamily))};`);
-    if (style.fontSize) styleFragments.push(`font-size: ${escapeHtml(String(style.fontSize))};`);
+    if (style.fontSize) styleFragments.push(`font-size: ${escapeHtml(String(normalizeFontSizeToPx(style.fontSize) ?? style.fontSize))};`);
     styleFragments.push(`padding: ${sizePadding};`);
     styleFragments.push(`border-radius: ${borderRadius};`);
     if (style.display === "block") {

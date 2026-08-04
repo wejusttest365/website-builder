@@ -2,6 +2,7 @@ import type { WidgetData } from "../widgetRegistry";
 import { getWidgetElementDuplicateEntries } from "../elementDuplication";
 import { defaultHeadingWidgetData, isHeadingWidgetData } from "./HeadingTypes";
 import { getResponsiveSpacingCss, getSpacingValueForDevice, serializeSpacingValue } from "../spacing";
+import { normalizeFontSizeToPx } from "../fontSize";
 
 function escapeHtml(value: string | undefined) {
   if (!value) return "";
@@ -43,9 +44,13 @@ export function buildHeadingBootstrapMarkup(data: WidgetData = defaultHeadingWid
     const desktopMargin = serializeSpacingValue(getSpacingValueForDevice(layout.margin, "desktop"));
     const desktopPadding = serializeSpacingValue(getSpacingValueForDevice(layout.padding, "desktop"));
 
+    const gradientStart = String(style.gradientStart ?? "").trim();
+    const gradientEnd = String(style.gradientEnd ?? "").trim();
+    const hasGradient = headingData.variant === "Gradient" && gradientStart && gradientEnd && gradientStart !== gradientEnd;
+
     if (style.fontFamily) styleFragments.push(`font-family: ${escapeHtml(String(style.fontFamily))};`);
     if (style.textColor) styleFragments.push(`color: ${escapeHtml(String(style.textColor))};`);
-    if (style.fontSize) styleFragments.push(`font-size: ${escapeHtml(String(style.fontSize))};`);
+    if (style.fontSize) styleFragments.push(`font-size: ${escapeHtml(String(normalizeFontSizeToPx(style.fontSize) ?? style.fontSize))};`);
     if (style.fontWeight) styleFragments.push(`font-weight: ${escapeHtml(String(style.fontWeight))};`);
     if (style.lineHeight) styleFragments.push(`line-height: ${escapeHtml(String(style.lineHeight))};`);
     if (style.letterSpacing) styleFragments.push(`letter-spacing: ${escapeHtml(String(style.letterSpacing))};`);
@@ -56,9 +61,9 @@ export function buildHeadingBootstrapMarkup(data: WidgetData = defaultHeadingWid
     const headingStyle = styleFragments.join(" ");
     const spacingCss = getResponsiveSpacingCss(layout as Record<string, unknown>, spacingClassName);
     const spacingMarkup = spacingCss ? `<style>${spacingCss}</style>` : "";
-    const labelHtml = headingData.variant === "Section Title" ? `<div class="mb-2 text-uppercase text-muted" style="font-weight:600;letter-spacing:0.12em;font-size:0.85rem;color:${escapeHtml(String(style.textColor || "#111827"))};">${escapeHtml(String(content.label || "Section title"))}</div>` : "";
+    const labelHtml = headingData.variant === "Section Title" ? `<div class="mb-2 text-uppercase text-muted" style="font-weight:600;letter-spacing:0.12em;font-size:14px;color:${escapeHtml(String(style.textColor || "#111827"))};">${escapeHtml(String(content.label || "Section title"))}</div>` : "";
 
-    const gradientStyle = headingData.variant === "Gradient" ? `background-image: linear-gradient(90deg, ${escapeHtml(String(style.gradientStart || "#2563eb"))}, ${escapeHtml(String(style.gradientEnd || "#9333ea"))}); -webkit-background-clip: text; color: transparent; -webkit-text-fill-color: transparent;` : "";
+    const gradientStyle = hasGradient ? `background-image: linear-gradient(90deg, ${escapeHtml(gradientStart)}, ${escapeHtml(gradientEnd)}); -webkit-background-clip: text; -webkit-text-fill-color: transparent;` : "";
     const underlineStyle = headingData.variant === "Underline" ? `border-bottom: 4px solid ${escapeHtml(String(style.underlineColor || "#2563eb"))}; display: inline-block; padding-bottom: 0.25rem;` : "";
 
     const decorationStyle = [gradientStyle, underlineStyle].filter(Boolean).join(" ");

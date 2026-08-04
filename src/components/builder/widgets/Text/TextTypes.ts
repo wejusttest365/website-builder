@@ -69,7 +69,7 @@ export const defaultTextWidgetData: TextWidgetData = {
   },
   style: {
     textColor: "#111827",
-    fontSize: "1rem",
+    fontSize: "16px",
     fontWeight: "400",
     lineHeight: "1.75",
     letterSpacing: "0px",
@@ -83,8 +83,8 @@ export const defaultTextWidgetData: TextWidgetData = {
     hideOnMobile: false,
     hideOnTablet: false,
     hideOnDesktop: false,
-    fontSizeMobile: "0.95rem",
-    fontSizeTablet: "1rem",
+    fontSizeMobile: "15px",
+    fontSizeTablet: "16px",
   },
   animation: {
     enabled: false,

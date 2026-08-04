@@ -19,7 +19,7 @@ export function SectionCard({ tpl, onAdd }: Props) {
 
         window.dispatchEvent(
           new CustomEvent("wto-library-drag-start", {
-            detail: tpl.id,
+            detail: { kind: "section", sectionId: tpl.id },
           })
         );
       }}

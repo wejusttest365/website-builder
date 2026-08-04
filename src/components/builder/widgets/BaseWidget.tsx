@@ -1,8 +1,10 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { useBuilder } from "@/lib/builder/store";
-import { SelectControl } from "@/components/builder/property-panel/controls/SelectControl";
-import { TextControl } from "@/components/builder/property-panel/controls/TextControl";
 import type { WidgetData } from "./widgetRegistry";
+import { WidgetSection, type WidgetSectionTag } from "./WidgetSection";
+import { getWidgetBackgroundStyle } from "./BackgroundStyle";
+import { SelectControl, TextControl } from "@/components/builder/property-controls";
+import { getWidgetSelectionLabel } from "./widgetSelectionLabels";
 
 export type SectionWidthMode = "container" | "fluid" | "custom";
 export interface SectionWidthLayout {
@@ -17,7 +19,7 @@ function escapeHtml(value: string) {
 
 function resolveSectionWidthLayout(layout?: Record<string, unknown>): Required<SectionWidthLayout> {
   const raw = layout ?? {};
-  const containerMode = raw.containerMode === "fluid" || raw.containerMode === "custom" ? (raw.containerMode as SectionWidthMode) : "container";
+  const containerMode = raw.containerMode === "container" || raw.containerMode === "custom" ? (raw.containerMode as SectionWidthMode) : "fluid";
   return {
     containerMode,
     maxWidth: String(raw.maxWidth ?? "1200px"),
@@ -43,20 +45,30 @@ export function getSectionWidthStyle(layout?: Record<string, unknown>): CSSPrope
   return style;
 }
 
-export function renderSectionWidthBootstrapWrapper(layout: Record<string, unknown> | undefined, html: string): string {
+export function renderSectionWidthBootstrapWrapper(layout: Record<string, unknown> | undefined, outerStyleCss: string | undefined, html: string): string {
   const { containerMode, maxWidth, horizontalPadding } = resolveSectionWidthLayout(layout);
-  const styles = [
+
+  const outerStyles = [
     "width:100%;",
+    "box-sizing:border-box;",
+    outerStyleCss ? outerStyleCss : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const innerClass = containerMode === "fluid" ? "container-fluid" : "container";
+  const innerStyles = [
+    "width:100%;",
+    "box-sizing:border-box;",
     `padding-left:${escapeHtml(horizontalPadding)};`,
     `padding-right:${escapeHtml(horizontalPadding)};`,
-    "box-sizing:border-box;",
   ];
 
   if (containerMode === "container" || containerMode === "custom") {
-    styles.push(`max-width:${escapeHtml(maxWidth)};`, "margin-left:auto;", "margin-right:auto;");
+    innerStyles.push(`max-width:${escapeHtml(maxWidth)};`, "margin-left:auto;", "margin-right:auto;");
   }
 
-  return `<div style="${styles.join("")}">${html}</div>`;
+  return `<div style="${outerStyles}"><div class="${innerClass}" style="${innerStyles.join("")}">${html}</div></div>`;
 }
 
 export function SectionWidthProperties({
@@ -95,6 +107,8 @@ export interface BaseWidgetProps {
   variantLabel?: string;
   wrapperClassName?: string;
   contentClassName?: string;
+  disableSectionWidthStyle?: boolean;
+  as?: WidgetSectionTag;
   toolbar?: ReactNode;
   children: ReactNode;
 }
@@ -120,52 +134,84 @@ export function BaseWidget({
   data,
   widgetType,
   title,
-  variantLabel,
   wrapperClassName = "",
   contentClassName = "",
+  disableSectionWidthStyle = false,
+  as = "section",
   toolbar,
   children,
 }: BaseWidgetProps) {
   const selectedWidgetId = useBuilder((s) => s.selectedWidgetId);
-  const [hovered, setHovered] = useState(false);
-  const isSelected = data.id === selectedWidgetId;
-  const responsiveClasses = useMemo(() => getResponsiveClasses(data.responsive as Record<string, unknown> | undefined), [data.responsive]);
+  const selectedElement = useBuilder((s) => s.selectedElement);
+
+  const childSelected =
+    Boolean(selectedElement?.childId || selectedElement?.elementKey) &&
+    (selectedElement?.parentWidgetId === data.id || selectedElement?.widgetId === data.id);
+  const isSelected = data.id === selectedWidgetId && !childSelected;
+  const isParentActive = childSelected;
+  const badgeLabel = getWidgetSelectionLabel(widgetType, title);
+
+  const responsiveClasses = useMemo(
+    () => getResponsiveClasses(data.responsive as Record<string, unknown> | undefined),
+    [data.responsive],
+  );
+
+  const sectionStyle: CSSProperties = disableSectionWidthStyle
+    ? {
+        width: "100%",
+        maxWidth: "none",
+        margin: 0,
+        padding: 0,
+        boxSizing: "border-box",
+      }
+    : getSectionWidthStyle(data.layout as Record<string, unknown> | undefined);
+
+  const backgroundStyle = getWidgetBackgroundStyle(data.style as Record<string, unknown> | undefined);
+
+  const selectionOverlay = isSelected || isParentActive ? (
+    <div
+      className="builder-editor-only pointer-events-none absolute inset-0 z-[20]"
+      data-builder-editor-only="1"
+      style={{
+        border: isSelected ? "1.5px dashed #7c3aed" : "1px dashed rgba(148,163,184,0.75)",
+        borderRadius: "inherit",
+      }}
+    />
+  ) : null;
 
   return (
-    <div
-      className={`relative ${responsiveClasses} ${wrapperClassName}`.trim()}
-      data-widget={widgetType}
-      data-widget-id={data.id}
-      data-widget-variant={data.variant}
-      data-widget-selected={isSelected ? "1" : "0"}
-      data-wto-widget-root="1"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+    <WidgetSection
+      as={as}
+      className={`${responsiveClasses} ${wrapperClassName}`.trim()}
+      contentClassName={contentClassName}
+      disableInnerWrapper={disableSectionWidthStyle}
+      outerStyle={{
+        overflow: "visible",
+        position: "relative",
+        ...backgroundStyle,
+      }}
+      innerStyle={sectionStyle}
+      dataAttributes={{
+        "data-widget": widgetType,
+        "data-widget-id": data.id,
+        "data-widget-variant": data.variant,
+        "data-wto-widget-label": badgeLabel,
+        "data-widget-selected": isSelected ? "1" : "0",
+        "data-wto-widget-root": "1",
+      }}
     >
-      <div
-        className={`relative ${contentClassName}`.trim()}
-        style={getSectionWidthStyle(data.layout as Record<string, unknown> | undefined)}
-      >
-        <div
-          className={`pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[11px] font-semibold text-slate-700 shadow-sm transition-opacity duration-200 ${
-            isSelected || hovered ? "opacity-100" : "opacity-0"
-          }`}
+      {isSelected || isParentActive ? (
+        <span
+          className="builder-editor-only pointer-events-none absolute left-0 top-0 z-[60] inline-flex -translate-y-[calc(100%+2px)] rounded-[5px] px-[7px] py-[3px] text-[11px] font-semibold leading-tight text-white"
+          style={{ background: isParentActive && !isSelected ? "#334155" : "#0f172a" }}
+          data-builder-editor-only="1"
         >
-          <span>{title}</span>
-          {variantLabel ? (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-              {variantLabel}
-            </span>
-          ) : null}
-          {isSelected ? (
-            <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-white">
-              Selected
-            </span>
-          ) : null}
-        </div>
+          {badgeLabel}
+        </span>
+      ) : null}
+      {selectionOverlay}
 
-        {toolbar || children}
-      </div>
-    </div>
+      {toolbar || children}
+    </WidgetSection>
   );
 }

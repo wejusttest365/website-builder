@@ -40,6 +40,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
+    if (typeof window !== "undefined" && import.meta.env.DEV && window.localStorage.getItem("wto-dev-auth") === "1") {
+      const devUser: AuthUser = {
+        id: "dev-user",
+        name: "Dev User",
+        email: "dev@example.com",
+        plan: "Free plan",
+        initials: "DU",
+      };
+      latestUserId.current = devUser.id;
+      setUser(devUser);
+      setAuthReady(true);
+      return () => {
+        isMounted = false;
+      };
+    }
+
     const unsubscribe = subscribeToAuth(async (firebaseUser) => {
       if (!isMounted) return;
 

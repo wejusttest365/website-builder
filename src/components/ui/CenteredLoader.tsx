@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import aiLoaderRobot from "../../assets/images/ai-robot.png";
+import bgLoader from "../../assets/images/bg-loader.png";
 
 interface CenteredLoaderProps {
   message?: string;
@@ -210,104 +211,17 @@ export function CenteredLoader({
       `}</style>
 
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[#07091a]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(99,102,241,0.14),transparent_28%)] opacity-90" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(168,85,247,0.18),transparent_28%)]" style={{ animation: "premium-drift-opposite 23s ease-in-out infinite" }} />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_rgba(245,158,11,0.18),transparent_30%)]" style={{ animation: "premium-drift 19s ease-in-out infinite" }} />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.16),transparent_26%)] opacity-80" />
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage:
-              'linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)',
-            backgroundSize: '38px 38px',
-            opacity: 0.22,
-            animation: 'premium-grid-fade 20s ease-in-out infinite',
+            backgroundImage: `url(${bgLoader})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
           }}
         />
-        <div className="absolute left-[-15%] top-[55%] h-[220px] w-[420px] rounded-full bg-[radial-gradient(circle,_rgba(236,72,153,0.08),transparent_58%)] blur-3xl opacity-40" />
-        <div className="absolute right-[-12%] top-[40%] h-[220px] w-[360px] rounded-full bg-[radial-gradient(circle,_rgba(79,70,229,0.1),transparent_56%)] blur-3xl opacity-35" />
-        <div className="absolute left-[4%] bottom-[10%] h-[120px] w-[420px] bg-[radial-gradient(circle,_rgba(249,115,22,0.18),transparent_54%)] blur-3xl opacity-40" />
-        <div className="absolute left-[12%] bottom-[22%] h-1 w-[46%] rounded-full bg-gradient-to-r from-orange-500/40 via-transparent to-fuchsia-500/10 blur-sm" style={{ transform: "rotate(-3deg)" }} />
-        <div className="absolute right-[10%] bottom-[24%] h-1 w-[38%] rounded-full bg-gradient-to-r from-violet-500/30 via-transparent to-cyan-400/10 blur-sm" style={{ transform: "rotate(4deg)" }} />
-
-        {[
-          { cx: "14%", cy: "22%", size: 10, color: "rgba(168,85,247,0.6)", delay: "0s" },
-          { cx: "72%", cy: "18%", size: 16, color: "rgba(59,130,246,0.45)", delay: "3s" },
-          { cx: "26%", cy: "76%", size: 12, color: "rgba(245,158,11,0.38)", delay: "1.8s" },
-          { cx: "58%", cy: "64%", size: 8, color: "rgba(168,85,247,0.5)", delay: "5s" },
-          { cx: "82%", cy: "48%", size: 14, color: "rgba(56,189,248,0.32)", delay: "2.5s" },
-          { cx: "40%", cy: "36%", size: 9, color: "rgba(255,184,108,0.35)", delay: "4.2s" },
-        ].map((particle) => (
-          <span
-            key={particle.cx + particle.cy}
-            className="absolute rounded-full"
-            style={{
-              left: particle.cx,
-              top: particle.cy,
-              width: `${particle.size}px`,
-              height: `${particle.size}px`,
-              background: particle.color,
-              filter: "blur(1px)",
-              opacity: 0.8,
-              animation: `premium-particle 22s ease-in-out ${particle.delay} infinite`,
-            }}
-          />
-        ))}
-      </div>
-
-      <div className="pointer-events-none absolute inset-0 hidden md:block">
-        <div
-          className="absolute top-24 rounded-[26px] border border-violet-400/20 bg-slate-950/20 p-4 shadow-[0_0_40px_rgba(124,58,237,0.14)] backdrop-blur-xl opacity-75"
-          style={{ left: -180, width: 192, animation: "premium-panel-float 14s ease-in-out infinite" }}
-        >
-          <div className="mb-3 h-2.5 w-16 rounded-full bg-violet-400/30" />
-          <div className="space-y-2">
-            <div className="h-2 rounded-full bg-white/10" />
-            <div className="h-2 rounded-full bg-white/10 w-5/6" />
-            <div className="h-2 rounded-full bg-white/10 w-3/4" />
-            <div className="h-2 rounded-full bg-white/10 w-2/3" />
-          </div>
-        </div>
-
-        <div
-          className="absolute left-[calc(50%_-_260px)] top-[63%] rounded-[26px] border border-violet-400/20 bg-slate-950/18 p-4 shadow-[0_0_40px_rgba(124,58,237,0.14)] backdrop-blur-xl opacity-70"
-          style={{ animation: "premium-panel-float 11s ease-in-out infinite", animationDelay: "1.5s" }}
-        >
-          <div className="mb-3 h-3 w-20 rounded-full bg-violet-400/35" />
-          <div className="grid grid-cols-2 gap-2">
-            <div className="h-16 rounded-2xl bg-white/10" />
-            <div className="h-16 rounded-2xl bg-white/10" />
-          </div>
-          <div className="mt-2 h-2 rounded-full bg-white/10 w-4/5" />
-        </div>
-
-        <div
-          className="absolute right-[calc(50%_-_260px)] top-24 rounded-[26px] border border-violet-400/20 bg-slate-950/18 p-4 shadow-[0_0_40px_rgba(124,58,237,0.14)] backdrop-blur-xl opacity-70"
-          style={{ animation: "premium-panel-float 13s ease-in-out infinite", animationDelay: "0.8s" }}
-        >
-          <div className="mb-3 h-2.5 w-16 rounded-full bg-violet-400/30" />
-          <div className="space-y-2">
-            <div className="h-4 w-4 rounded-full bg-white/10" />
-            <div className="h-4 w-4 rounded-full bg-white/10" />
-            <div className="h-4 w-4 rounded-full bg-white/10" />
-          </div>
-          <div className="mt-3 h-2 rounded-full bg-white/10 w-3/4" />
-          <div className="mt-2 h-2 rounded-full bg-white/10 w-2/3" />
-        </div>
-
-        <div
-          className="absolute right-[-180px] top-[55%] rounded-[26px] border border-violet-400/20 bg-slate-950/20 p-4 shadow-[0_0_40px_rgba(124,58,237,0.14)] backdrop-blur-xl opacity-75"
-          style={{ width: 180, animation: "premium-panel-float 15s ease-in-out infinite", animationDelay: "2s" }}
-        >
-          <div className="mb-3 h-2.5 w-16 rounded-full bg-violet-400/30" />
-          <div className="grid grid-cols-3 gap-2">
-            <div className="h-8 rounded-2xl bg-white/10" />
-            <div className="h-8 rounded-2xl bg-white/10" />
-            <div className="h-8 rounded-2xl bg-white/10" />
-          </div>
-          <div className="mt-3 h-2 rounded-full bg-white/10 w-3/5" />
-        </div>
+        <div className="absolute inset-0 bg-[#07091a]/60" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.16),transparent_55%)]" />
       </div>
 
       <div className="relative z-10 flex w-full max-w-5xl flex-col items-center gap-6 px-5 py-8 sm:px-6 sm:py-8 lg:px-10">
@@ -348,26 +262,6 @@ export function CenteredLoader({
           </span>
         </div>
 
-        <div className="hidden xl:grid w-full grid-cols-1 gap-3 xl:grid-cols-4">
-          {[
-            { title: "Loading Components", subtitle: "Setting up essential tools" },
-            { title: "AI Assistant", subtitle: "Powering your creativity" },
-            { title: "Cloud Sync", subtitle: "Preparing your workspace" },
-            { title: "Secure & Fast", subtitle: "Optimizing performance" },
-          ].map((item) => (
-            <div key={item.title} className="overflow-hidden rounded-[24px] border border-white/10 bg-white/5 p-4 shadow-[0_20px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-white shadow-lg shadow-violet-500/10">
-                  <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-400" />
-                </span>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-white">{item.title}</div>
-                  <div className="mt-1 text-xs text-slate-400">{item.subtitle}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );

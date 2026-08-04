@@ -4,6 +4,7 @@ export interface HeadingContentGroup extends Record<string, unknown> {
   text?: string;
   headingLevel?: "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
   label?: string;
+  link?: string;
 }
 
 export interface HeadingStyleGroup extends Record<string, unknown> {
@@ -74,7 +75,7 @@ export const defaultHeadingWidgetData: HeadingWidgetData = {
   },
   style: {
     textColor: "#111827",
-    fontSize: "3rem",
+    fontSize: "48px",
     fontWeight: "700",
     lineHeight: "1.1",
     letterSpacing: "0px",
@@ -91,8 +92,8 @@ export const defaultHeadingWidgetData: HeadingWidgetData = {
     hideOnMobile: false,
     hideOnTablet: false,
     hideOnDesktop: false,
-    fontSizeMobile: "2rem",
-    fontSizeTablet: "2.5rem",
+    fontSizeMobile: "32px",
+    fontSizeTablet: "40px",
   },
   animation: {
     enabled: false,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { APP_CSS_HREF, buildPreviewHTML } from "@/lib/builder/preview";
 import type { Project } from "@/lib/builder/store";
+import { composePageSections } from "@/lib/builder/sharedChrome";
 
 function extractProjectId(param: string) {
   const match = param.match(/-([A-Za-z0-9]+)$/);
@@ -99,7 +100,7 @@ export function DemoView({ projectId }: { projectId: string }) {
     if (!proj || activePageId === null) return null;
     const page = proj.pages.find((pg) => pg.id === activePageId) ?? proj.pages[0];
     return buildPreviewHTML({
-      sections: page.sections,
+      sections: composePageSections(proj, page),
       globalCss: proj.globalCss || "",
       globalJs: proj.globalJs || "",
       editable: false,

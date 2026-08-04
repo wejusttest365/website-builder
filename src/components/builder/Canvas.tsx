@@ -1,13 +1,30 @@
-import { useBuilder, pageOf } from "@/lib/builder/store";
+import { useBuilder, pageOf, composePageSections, SHARED_HEADER_SECTION_ID, SHARED_FOOTER_SECTION_ID } from "@/lib/builder/store";
 import { SECTION_LIBRARY } from "@/lib/builder/sections";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMounted } from "@/hooks/use-mounted";
-import { APP_CSS_HREF, buildPreviewHTML, resolveAssetPaths } from "@/lib/builder/preview";
+import { APP_CSS_HREF, buildPreviewHTML } from "@/lib/builder/preview";
 import { getImageObjectUrl } from "@/lib/builder/image-storage";
 import { createWidgetInstance, createWidgetSectionTemplate, getWidgetRegistration } from "@/components/builder/widgets/widgetRegistry";
 import { buildContainerChildData, createContainerChildItem } from "@/components/builder/widgets/Container/ContainerTypes";
+import { createGridColumn, getEqualColumnSpan, resolveGridColumnCount } from "@/components/builder/widgets/Grid/GridTypes";
 import { nanoid } from "nanoid";
 import { UploadCloud } from "lucide-react";
+
+function composedInsertToPageIndex(project: NonNullable<ReturnType<typeof useBuilder.getState>["currentProject"]>, insertIndex: number) {
+  const page = pageOf(project);
+  const composed = composePageSections(project, page, { includeHiddenChrome: true });
+  let pageIdx = 0;
+  const max = Math.max(0, Math.min(insertIndex, composed.length));
+  for (let i = 0; i < max; i++) {
+    const section = composed[i];
+    if (!section) continue;
+    if (section.id === SHARED_HEADER_SECTION_ID || section.id === SHARED_FOOTER_SECTION_ID || section.shared === "header" || section.shared === "footer") {
+      continue;
+    }
+    pageIdx += 1;
+  }
+  return pageIdx;
+}
 
 interface Props {
   editable?: boolean;
@@ -24,7 +41,6 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
   const selectElement = useBuilder((s) => s.selectElement);
   const selectPage = useBuilder((s) => s.selectPage);
   const selectedElement = useBuilder((s) => s.selectedElement);
-  const selectedElementStyle = useBuilder((s) => s.selectedElementStyle);
   const setSelectedElementStyle = useBuilder((s) => s.setSelectedElementStyle);
   const setSectionHtml = useBuilder((s) => s.setSectionHtml);
   const remove = useBuilder((s) => s.removeSection);
@@ -32,20 +48,13 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
   const move = useBuilder((s) => s.moveSection);
   const toggleCollapsed = useBuilder((s) => s.toggleCollapsed);
   const updateSection = useBuilder((s) => s.updateSection);
-  const addAsset = useBuilder((s) => s.addAsset);
   const addSection = useBuilder((s) => s.addSection);
   const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
   const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
   const [screenshotPending, setScreenshotPending] = useState(false);
   const [draggingLibrarySection, setDraggingLibrarySection] = useState(false);
   const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
-  const [imageEditor, setImageEditor] = useState<{
-    sectionId: string;
-    src: string;
-    idx: string | null;
-    path?: string | null;
-    kind: "img" | "box";
-  } | null>(null);
+  const libraryDragRef = useRef<{ kind?: string; widgetId?: string; variant?: string; sectionId?: string } | null>(null);
   const [srcDoc, setSrcDoc] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState<number | null>(null);
   const [containerDropTarget, setContainerDropTarget] = useState<{ containerId: string; insertIndex: number } | null>(null);
@@ -69,15 +78,6 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
       }),
     );
     return Object.fromEntries(resolvedEntries.filter((entry): entry is readonly [string, string] => !!entry[1]));
-  }
-
-  function assetPathForDataUrl(src: string) {
-    if (!project || !src.startsWith("data:")) return src;
-    const asset = Object.entries(project.assets ?? {}).find(([_name, data]) => {
-      if (typeof data === "string") return data === src;
-      return data?.src === src;
-    });
-    return asset ? `images/${asset[0]}` : src;
   }
 
   const restoreOuterScroll = () => {
@@ -196,19 +196,6 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
   }, [mounted, selectedId]);
 
   useEffect(() => {
-    if (!mounted) return;
-    const iframeWindow = iframeRefToUse.current?.contentWindow;
-    if (!iframeWindow) return;
-    try {
-      if (selectedId && selectedElement && selectedElement.kind === "image") {
-        iframeWindow.postMessage({ __wto: true, type: 'show-upload-target', payload: { sectionId: selectedId, elementKind: selectedElement.kind, index: selectedElement.index, tag: selectedElement.tag } }, '*');
-      } else {
-        iframeWindow.postMessage({ __wto: true, type: 'hide-upload-target' }, '*');
-      }
-    } catch (_) {}
-  }, [mounted, selectedId, selectedElement]);
-  
-  useEffect(() => {
     if (!draggingLibrarySection) {
       sendIframeMessage("hide-drop-target");
       setPlaceholderIndex(null);
@@ -218,37 +205,250 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
 
   const structuralKey = useMemo(() => {
     if (!project) return "";
+    const page = pageOf(project);
+    const sections = composePageSections(project, page, { includeHiddenChrome: true });
     return JSON.stringify({
-      ids: (pageOf(project)?.sections ?? []).map((s: any) => s.id + ":" + (s.collapsed ? 1 : 0)),
-      styles: (pageOf(project)?.sections ?? []).map((s: any) => s.style),
-      classes: (pageOf(project)?.sections ?? []).map((s: any) => s.className),
-      domIds: (pageOf(project)?.sections ?? []).map((s: any) => s.domId),
+      ids: sections.map((s: any) => s.id + ":" + (s.collapsed ? 1 : 0) + ":" + (s.hidden ? 1 : 0)),
+      styles: sections.map((s: any) => s.style),
+      classes: sections.map((s: any) => s.className),
+      domIds: sections.map((s: any) => s.domId),
+      sharedHeader: project.sharedHeader?.widgetInstance ?? null,
+      sharedFooter: project.sharedFooter?.widgetInstance ?? null,
+      pageChrome: {
+        useGlobalHeader: page?.useGlobalHeader,
+        useGlobalFooter: page?.useGlobalFooter,
+        hideHeader: page?.hideHeader,
+        hideFooter: page?.hideFooter,
+      },
+      // Grid-only fingerprint: column/child updates must rebuild canvas even when updatedAt collides.
+      grids: sections.map((s: any) => {
+        const widget = s.widgetInstance;
+        if (!widget || widget.type !== "grid") return null;
+        const columns = Array.isArray(widget.content?.columns) ? widget.content.columns : [];
+        return {
+          id: widget.id,
+          variant: widget.variant,
+          layoutColumns: widget.layout?.columns ?? null,
+          columnIds: columns.map((column: any) => column?.id ?? ""),
+          columnChildCounts: columns.map((column: any) => (Array.isArray(column?.children) ? column.children.length : 0)),
+          columnChildIds: columns.map((column: any) =>
+            Array.isArray(column?.children) ? column.children.map((child: any) => child?.id).join(",") : "",
+          ),
+          styleGap: widget.style?.columnGap ?? widget.style?.gap ?? null,
+          responsive: widget.responsive ?? null,
+        };
+      }),
+      carousels: sections.map((s: any) => {
+        const widget = s.widgetInstance;
+        if (!widget || widget.type !== "carousel") return null;
+        const slides = Array.isArray(widget.content?.slides) ? widget.content.slides : [];
+        return {
+          id: widget.id,
+          variant: widget.variant,
+          slideIds: slides.map((slide: any) => slide?.id ?? "").join(","),
+          slideSrcs: slides
+            .map((slide: any) => {
+              const src = slide?.src;
+              if (typeof src === "string") return src;
+              if (src && typeof src === "object") return String(src.url || src.src || src.filename || "");
+              return "";
+            })
+            .join("|"),
+          selectedSlideId: widget.content?.selectedSlideId ?? null,
+          style: widget.style ?? null,
+          contentFlags: {
+            autoplay: widget.content?.autoplay ?? false,
+            autoplayDelay: widget.content?.autoplayDelay ?? 5000,
+            infiniteLoop: widget.content?.infiniteLoop ?? true,
+            pauseOnHover: widget.content?.pauseOnHover ?? true,
+            transitionDuration: widget.content?.transitionDuration ?? 500,
+            keyboardNavigation: widget.content?.keyboardNavigation ?? true,
+            swipeNavigation: widget.content?.swipeNavigation ?? true,
+          },
+          responsive: widget.responsive ?? null,
+          advanced: widget.advanced ?? null,
+        };
+      }),
+      galleries: sections.map((s: any) => {
+        const widget = s.widgetInstance;
+        if (!widget || widget.type !== "gallery") return null;
+        const images = Array.isArray(widget.content?.images) ? widget.content.images : [];
+        return {
+          id: widget.id,
+          variant: widget.variant,
+          imageIds: images.map((item: any) => item?.id ?? "").join(","),
+          imageSrcs: images
+            .map((item: any) => {
+              const src = item?.src;
+              if (typeof src === "string") return src;
+              if (src && typeof src === "object") return String(src.url || src.src || src.filename || "");
+              return "";
+            })
+            .join("|"),
+          selectedImageId: widget.content?.selectedImageId ?? null,
+          style: widget.style ?? null,
+          layout: widget.layout ?? null,
+          responsive: widget.responsive ?? null,
+          advanced: widget.advanced ?? null,
+        };
+      }),
+      faqs: sections.map((s: any) => {
+        const widget = s.widgetInstance;
+        if (!widget || widget.type !== "faq") return null;
+        const items = Array.isArray(widget.content?.items) ? widget.content.items : [];
+        return {
+          id: widget.id,
+          variant: widget.variant,
+          itemIds: items.map((item: any) => item?.id ?? "").join(","),
+          itemText: items
+            .map((item: any) => `${item?.question ?? ""}|${item?.answer ?? ""}|${item?.enabled !== false ? 1 : 0}`)
+            .join("||"),
+          selectedItemId: widget.content?.selectedItemId ?? null,
+          contentFlags: {
+            allowMultiple: widget.content?.allowMultiple ?? false,
+            defaultOpenItemId: widget.content?.defaultOpenItemId ?? null,
+            openAllByDefault: widget.content?.openAllByDefault ?? false,
+            closeAllByDefault: widget.content?.closeAllByDefault ?? false,
+          },
+          style: widget.style ?? null,
+          layout: widget.layout ?? null,
+          responsive: widget.responsive ?? null,
+          advanced: widget.advanced ?? null,
+        };
+      }),
+      servicesSections: sections.map((s: any) => {
+        const widget = s.widgetInstance;
+        if (!widget || widget.type !== "services") return null;
+        const services = Array.isArray(widget.content?.services) ? widget.content.services : [];
+        return {
+          id: widget.id,
+          variant: widget.variant,
+          serviceIds: services.map((item: any) => item?.id ?? "").join(","),
+          serviceSrcs: services
+            .map((item: any) => {
+              const src = item?.src;
+              if (typeof src === "string") return src;
+              if (src && typeof src === "object") return String(src.url || src.src || src.filename || "");
+              return "";
+            })
+            .join("|"),
+          serviceText: services
+            .map((item: any) => `${item?.heading ?? ""}|${item?.description ?? ""}|${item?.buttonLabel ?? ""}|${item?.buttonUrl ?? ""}|${item?.showHeading !== false ? 1 : 0}|${item?.showDescription !== false ? 1 : 0}|${item?.showButton !== false ? 1 : 0}`)
+            .join("||"),
+          selectedServiceId: widget.content?.selectedServiceId ?? null,
+          style: widget.style ?? null,
+          layout: widget.layout ?? null,
+          responsive: widget.responsive ?? null,
+          advanced: widget.advanced ?? null,
+        };
+      }),
+      abouts: sections.map((s: any) => {
+        const widget = s.widgetInstance;
+        if (!widget || widget.type !== "about") return null;
+        const features = Array.isArray(widget.content?.features) ? widget.content.features : [];
+        return {
+          id: widget.id,
+          variant: widget.variant,
+          contentFlags: {
+            showEyebrow: widget.content?.showEyebrow !== false,
+            showHeading: widget.content?.showHeading !== false,
+            showDescription: widget.content?.showDescription !== false,
+            showFeatures: widget.content?.showFeatures !== false,
+            showButton: widget.content?.showButton !== false,
+            showImage: widget.content?.showImage !== false,
+            eyebrow: widget.content?.eyebrow ?? "",
+            heading: widget.content?.heading ?? "",
+            description: widget.content?.description ?? "",
+            buttonLabel: widget.content?.buttonLabel ?? "",
+            buttonUrl: widget.content?.buttonUrl ?? "",
+            imageSrc:
+              typeof widget.content?.imageSrc === "string"
+                ? widget.content.imageSrc
+                : String(widget.content?.imageSrc?.url || widget.content?.imageSrc?.src || ""),
+          },
+          featureIds: features.map((item: any) => item?.id ?? "").join(","),
+          featureText: features.map((item: any) => `${item?.text ?? ""}|${item?.icon ?? ""}`).join("||"),
+          style: widget.style ?? null,
+          layout: widget.layout ?? null,
+          responsive: widget.responsive ?? null,
+          advanced: widget.advanced ?? null,
+        };
+      }),
+      ctas: sections.map((s: any) => {
+        const widget = s.widgetInstance;
+        if (!widget || widget.type !== "cta") return null;
+        return {
+          id: widget.id,
+          variant: widget.variant,
+          contentFlags: {
+            showEyebrow: widget.content?.showEyebrow !== false,
+            showHeading: widget.content?.showHeading !== false,
+            showParagraph: widget.content?.showParagraph !== false,
+            showPrimaryButton: widget.content?.showPrimaryButton !== false,
+            showSecondaryButton: widget.content?.showSecondaryButton !== false,
+            eyebrow: widget.content?.eyebrow ?? "",
+            heading: widget.content?.heading ?? "",
+            paragraph: widget.content?.paragraph ?? "",
+            primaryButtonLabel: widget.content?.primaryButtonLabel ?? "",
+            primaryButtonUrl: widget.content?.primaryButtonUrl ?? "",
+            secondaryButtonLabel: widget.content?.secondaryButtonLabel ?? "",
+            secondaryButtonUrl: widget.content?.secondaryButtonUrl ?? "",
+            backgroundImageSrc:
+              typeof widget.content?.backgroundImageSrc === "string"
+                ? widget.content.backgroundImageSrc
+                : String(
+                    widget.content?.backgroundImageSrc?.url ||
+                      widget.content?.backgroundImageSrc?.src ||
+                      "",
+                  ),
+            backgroundImageAlt: widget.content?.backgroundImageAlt ?? "",
+          },
+          style: widget.style ?? null,
+          layout: widget.layout ?? null,
+          responsive: widget.responsive ?? null,
+          advanced: widget.advanced ?? null,
+        };
+      }),
       css: project.globalCss,
       js: project.globalJs,
       editable,
       assets: project.assets ? Object.keys(project.assets).join(",") : "",
       pageId: project.currentPageId,
       updatedAt: project.updatedAt,
+      device,
     });
-  }, [project, editable]);
+  }, [project, editable, device]);
 
   const htmlKey = useMemo(
-    () => (pageOf(project)?.sections ?? []).map((s: any) => s.html).join("\u0001") ?? "",
+    () => composePageSections(project, pageOf(project), { includeHiddenChrome: true }).map((s: any) => s.html).join("\u0001") ?? "",
     [project],
   );
 
   useEffect(() => {
     if (!mounted) return;
-    const onStart = () => setDraggingLibrarySection(true);
-    const onEnd = () => setDraggingLibrarySection(false);
-    window.addEventListener("wto-library-drag-start", onStart);
+    const onStart = (event: Event) => {
+      setDraggingLibrarySection(true);
+      const detail = (event as CustomEvent).detail;
+      if (detail && typeof detail === "object") {
+        libraryDragRef.current = detail as { kind?: string; widgetId?: string; variant?: string; sectionId?: string };
+      } else if (typeof detail === "string") {
+        libraryDragRef.current = { kind: "section", sectionId: detail };
+      } else {
+        libraryDragRef.current = null;
+      }
+    };
+    const onEnd = () => {
+      setDraggingLibrarySection(false);
+      libraryDragRef.current = null;
+    };
+    window.addEventListener("wto-library-drag-start", onStart as EventListener);
     window.addEventListener("wto-library-drag-end", onEnd);
-    window.addEventListener("wto-library-drag-element-start", onStart);
+    window.addEventListener("wto-library-drag-element-start", onStart as EventListener);
     window.addEventListener("wto-library-drag-element-end", onEnd);
     return () => {
-      window.removeEventListener("wto-library-drag-start", onStart);
+      window.removeEventListener("wto-library-drag-start", onStart as EventListener);
       window.removeEventListener("wto-library-drag-end", onEnd);
-      window.removeEventListener("wto-library-drag-element-start", onStart);
+      window.removeEventListener("wto-library-drag-element-start", onStart as EventListener);
       window.removeEventListener("wto-library-drag-element-end", onEnd);
     };
   }, [mounted]);
@@ -264,7 +464,7 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
       const resolvedAssets = await resolvePreviewAssets();
       setSrcDoc(
         buildPreviewHTML({
-          sections: (pageOf(project)?.sections ?? []),
+          sections: composePageSections(project, pageOf(project), { includeHiddenChrome: true }),
           globalCss: project.globalCss,
           globalJs: project.globalJs,
           editable,
@@ -276,6 +476,7 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
           customHead: project.customHead,
           currentPageSlug: pageOf(project)?.slug,
           previewCssHref: APP_CSS_HREF,
+          device,
         }),
       );
     };
@@ -295,7 +496,8 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
   useEffect(() => {
     const doc = iframeRefToUse.current?.contentDocument;
     if (!doc) return;
-    doc.querySelectorAll("[data-wto-section]").forEach((el) => {
+    doc.querySelectorAll("[data-wto-section]").forEach((node) => {
+      const el = node as HTMLElement;
       const isSelected = el.getAttribute("data-wto-section") === selectedId;
       el.classList.toggle("wto-selected", isSelected);
       if (!isSelected) {
@@ -304,6 +506,18 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
       }
     });
   }, [selectedId, srcDoc]);
+
+  useEffect(() => {
+    const doc = iframeRefToUse.current?.contentDocument;
+    if (!doc?.body) return;
+    if (editable) {
+      doc.body.setAttribute("data-builder-edit-mode", "1");
+      doc.body.setAttribute("data-builder-device", device);
+    } else {
+      doc.body.removeAttribute("data-builder-edit-mode");
+      doc.body.removeAttribute("data-builder-device");
+    }
+  }, [device, editable, srcDoc]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -371,15 +585,6 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         setPreviewCycle((value) => value + 1);
         useBuilder.getState().persist();
       }
-      if (data.type === "image-click") {
-        setImageEditor({
-          sectionId: String(data.payload?.sectionId ?? ""),
-          src: assetPathForDataUrl(String(data.payload?.src ?? "")),
-          idx: data.payload?.idx != null ? String(data.payload.idx) : null,
-          path: data.payload?.path ? String(data.payload.path) : null,
-          kind: (data.payload?.kind as "img" | "box") ?? "img",
-        });
-      }
       if (data.type === "element-duplicate") {
         const nextSelection = {
           sectionId: data.payload?.sectionId ? String(data.payload.sectionId) : null,
@@ -426,14 +631,50 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         });
 
         if (containerWidget.type === "grid") {
-          const columns = Array.isArray(containerWidget.content?.columns) ? [...containerWidget.content.columns] : [];
+          const desiredCount = resolveGridColumnCount(containerWidget as any);
+          const equalSpan = getEqualColumnSpan(desiredCount);
+          let columns = Array.isArray(containerWidget.content?.columns)
+            ? containerWidget.content.columns.map((column: any) => ({
+                ...column,
+                children: Array.isArray(column.children) ? [...column.children] : [],
+              }))
+            : [];
+          while (columns.length < desiredCount) {
+            columns.push(createGridColumn(equalSpan));
+          }
+          // Prefer explicit column, else last-selected column on the grid, else Column 1.
+          const liveSelected = state.selectedElement as any;
+          const selectedColumnId =
+            columnId ||
+            (liveSelected?.widgetId === containerWidget.id ? liveSelected?.columnId : null) ||
+            columns[0]?.id ||
+            null;
+          const targetColumnId = String(selectedColumnId ?? columns[0]?.id ?? "");
+          if (!targetColumnId) return;
           const nextColumns = columns.map((column: any) => {
-            if (String(column.id ?? "") !== String(columnId ?? "")) return column;
+            if (String(column.id ?? "") !== targetColumnId) return column;
             const existingChildren = Array.isArray(column.children) ? [...column.children] : [];
             return { ...column, children: [...existingChildren, childItem] };
           });
+          const matched = nextColumns.some(
+            (column: any) =>
+              String(column.id ?? "") === targetColumnId &&
+              Array.isArray(column.children) &&
+              column.children.some((child: any) => child?.id === childItem.id),
+          );
+          if (!matched) {
+            // Fallback: still add to first column so the menu never silently no-ops.
+            nextColumns[0] = {
+              ...nextColumns[0],
+              children: [...(Array.isArray(nextColumns[0]?.children) ? nextColumns[0].children : []), childItem],
+            };
+          }
           state.updateWidgetInstance(containerWidget.id, {
             ...containerWidget,
+            layout: {
+              ...containerWidget.layout,
+              columns: desiredCount,
+            },
             content: {
               ...containerWidget.content,
               columns: nextColumns,
@@ -448,8 +689,8 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
             parentWidgetId: containerWidget.id,
             childId: childItem.id,
             elementKey: childItem.id,
-            elementType: "container",
-            columnId,
+            elementType: childType,
+            columnId: matched ? targetColumnId : nextColumns[0]?.id ?? targetColumnId,
           } as any);
           return;
         }
@@ -487,11 +728,14 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         if (act === "move") {
           state.selectSection(sid);
         }
-        if (act === "up" && fromIdx > 0) state.moveSection(fromIdx, fromIdx - 1);
-        if (act === "down" && fromIdx >= 0 && fromIdx < secs.length - 1) state.moveSection(fromIdx, fromIdx + 1);
-        if (act === "top" && fromIdx > 0) state.moveSection(fromIdx, 0);
-        if (act === "bottom" && fromIdx >= 0) state.moveSection(fromIdx, secs.length - 1);
-        if (act === "dup") state.duplicateSection(sid);
+        const isSharedChrome = sid === SHARED_HEADER_SECTION_ID || sid === SHARED_FOOTER_SECTION_ID;
+        if (!isSharedChrome) {
+          if ((act === "up" || act === "move-up") && fromIdx > 0) state.moveSection(fromIdx, fromIdx - 1);
+          if ((act === "down" || act === "move-down") && fromIdx >= 0 && fromIdx < secs.length - 1) state.moveSection(fromIdx, fromIdx + 1);
+          if (act === "top" && fromIdx > 0) state.moveSection(fromIdx, 0);
+          if (act === "bottom" && fromIdx >= 0) state.moveSection(fromIdx, secs.length - 1);
+          if (act === "dup") state.duplicateSection(sid);
+        }
         if (act === "hide") state.toggleHidden(sid);
         if (act === "del") state.removeSection(sid);
         if (act === "template") {
@@ -549,6 +793,8 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         const state = useBuilder.getState();
         const cur = state.currentProject();
         if (!fromId || !toId || !cur) return;
+        if (fromId === SHARED_HEADER_SECTION_ID || fromId === SHARED_FOOTER_SECTION_ID) return;
+        if (toId === SHARED_HEADER_SECTION_ID || toId === SHARED_FOOTER_SECTION_ID) return;
         const secs = pageOf(cur)?.sections ?? [];
         const fromIdx = secs.findIndex((s: any) => s.id === fromId);
         const toIdx = secs.findIndex((s: any) => s.id === toId);
@@ -572,16 +818,6 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
       }
       if (data.type === "console") {
         window.dispatchEvent(new CustomEvent("wto-console", { detail: data.payload }));
-      }
-      if (data.type === "brand-upload") {
-        const sid = String(data.payload?.sectionId ?? "");
-        if (!sid || !project) return;
-        const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === sid);
-        if (!section) return;
-        const doc = new DOMParser().parseFromString(`<body>${section.html}</body>`, "text/html");
-        const brand = findBrandAnchorInDoc(doc);
-        const currentSrc = brand?.querySelector("img")?.getAttribute("src") || "";
-        setImageEditor({ sectionId: sid, src: assetPathForDataUrl(currentSrc), idx: null, kind: "img" });
       }
     }
     window.addEventListener("message", onMsg);
@@ -668,8 +904,9 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
       return;
     }
 
-    const widgetId = e.dataTransfer.getData("application/x-wto-widget");
+    const widgetId = e.dataTransfer.getData("application/x-wto-widget") || libraryDragRef.current?.widgetId || "";
     if (widgetId && project) {
+      const variant = e.dataTransfer.getData("application/x-wto-widget-variant") || libraryDragRef.current?.variant || "";
       const registration = getWidgetRegistration(widgetId);
       const childType = registration?.type;
       const supportedChildTypes = new Set(["heading", "text", "button", "image"]);
@@ -680,7 +917,7 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         const containerWidget = targetSection?.widgetInstance;
         if (containerWidget && Array.isArray(containerWidget.content?.children)) {
           const nextChildren = [...containerWidget.content.children];
-          const childInstance = createWidgetInstance(childType);
+          const childInstance = createWidgetInstance(childType, variant ? { variant } : {});
           const childItem = createContainerChildItem(childType as any, {
             id: nanoid(8),
             data: buildContainerChildData({
@@ -712,11 +949,13 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
             elementKey: childItem.id,
             elementType: "container",
           } as any);
+          libraryDragRef.current = null;
           return;
         }
       }
 
       const page = pageOf(project);
+      const composedCount = composePageSections(project, page, { includeHiddenChrome: true }).length;
       const sectionCount = page?.sections.length ?? 0;
       let insertIndex = sectionCount;
 
@@ -726,27 +965,29 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         if (placeholderIndex == null) {
           const dropY = Math.max(frameRect.top, Math.min(e.clientY, frameRect.bottom));
           const ratio = (dropY - frameRect.top) / frameRect.height;
-          insertIndex = Math.floor(ratio * (sectionCount + 1));
+          insertIndex = composedInsertToPageIndex(project, Math.floor(ratio * (composedCount + 1)));
         } else {
-          insertIndex = placeholderIndex;
+          insertIndex = composedInsertToPageIndex(project, placeholderIndex);
         }
       }
 
-      const sectionTemplate = createWidgetSectionTemplate(widgetId);
+      const sectionTemplate = createWidgetSectionTemplate(widgetId, variant ? { variant } : {});
       const sectionId = addSection(sectionTemplate as any, insertIndex ?? sectionCount);
       if (sectionId) {
         useBuilder.getState().selectSection(sectionId);
         scrollSectionIntoView(sectionId);
       }
+      libraryDragRef.current = null;
       return;
     }
 
-    const tplId = e.dataTransfer.getData("application/x-wto-section") || e.dataTransfer.getData("text/plain");
+    const tplId = e.dataTransfer.getData("application/x-wto-section") || libraryDragRef.current?.sectionId || e.dataTransfer.getData("text/plain");
     if (!tplId) return;
     const tpl = SECTION_LIBRARY.find((s) => s.id === tplId);
     if (!tpl || !project) return;
 
     const page = pageOf(project);
+    const composedCount = composePageSections(project, page, { includeHiddenChrome: true }).length;
     const sectionCount = page?.sections.length ?? 0;
     let insertIndex = sectionCount;
 
@@ -757,13 +998,18 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
       if (placeholderIndex == null) {
         const dropY = Math.max(frameRect.top, Math.min(e.clientY, frameRect.bottom));
         const ratio = (dropY - frameRect.top) / frameRect.height;
-        insertIndex = Math.floor(ratio * (sectionCount + 1));
+        insertIndex = composedInsertToPageIndex(project, Math.floor(ratio * (composedCount + 1)));
       } else {
-        insertIndex = placeholderIndex;
+        insertIndex = composedInsertToPageIndex(project, placeholderIndex);
       }
     }
 
-    addSection(tpl, insertIndex ?? sectionCount);
+    const sectionId = addSection(tpl, insertIndex ?? sectionCount);
+    if (sectionId) {
+      useBuilder.getState().selectSection(sectionId);
+      scrollSectionIntoView(sectionId);
+    }
+    libraryDragRef.current = null;
   };
 
   const handleSectionDrop = (targetIndex: number) => (e: React.DragEvent) => {
@@ -777,7 +1023,7 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
   };
 
   const frameWidth = device === "desktop" ? "100%" : device === "tablet" ? "820px" : "390px";
-  const frameMaxWidth = device === "desktop" ? "1180px" : "100%";
+  const frameMaxWidth = device === "desktop" ? "100%" : "100%";
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -790,8 +1036,12 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
           const frame = iframeRefToUse.current;
           const frameRect = frame?.getBoundingClientRect();
           if (frameRect) {
-            const widgetId = e.dataTransfer.getData("application/x-wto-widget");
-            sendIframeMessage("show-drop-target", { y: e.clientY - frameRect.top, widgetId });
+            const widgetId = libraryDragRef.current?.widgetId || "";
+            sendIframeMessage("show-drop-target", {
+              y: e.clientY - frameRect.top,
+              x: e.clientX - frameRect.left,
+              widgetId,
+            });
           }
         }}
         onDragLeave={(e) => {
@@ -805,10 +1055,10 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
           handleDrop(e);
         }}
       >
-        <div ref={wrapperRef} className="w-full h-full min-h-0 flex items-stretch justify-center overflow-y-auto overflow-x-auto bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.08),_transparent_42%)] p-1 pb-4">
+        <div ref={wrapperRef} className="w-full h-full min-h-0 flex items-stretch justify-start overflow-y-auto overflow-x-auto bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.08),_transparent_42%)] p-1 pb-4">
           <div
-            className="relative flex h-full min-h-0 flex-col overflow-hidden  border border-black/5 bg-white shadow-[0_20px_80px_-28px_rgba(15,23,42,0.35)] transition-all duration-200"
-            style={{ width: frameWidth, maxWidth: frameMaxWidth, minWidth: 0, margin: "0 auto", overflowX: "hidden" }}
+            className="relative flex h-full min-h-0 flex-col overflow-hidden border border-black/5 bg-white shadow-[0_20px_80px_-28px_rgba(15,23,42,0.35)] transition-all duration-200"
+            style={{ width: frameWidth, maxWidth: frameMaxWidth, minWidth: 0, margin: 0, overflowX: "hidden" }}
           >
             {mounted ? (
               <iframe
@@ -819,290 +1069,44 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
                 className={`w-full h-full border-0 ${(disablePointerEvents || draggingLibrarySection) ? "pointer-events-none" : ""}`}
               />
             ) : null}
-            {mounted && project && pageOf(project)?.sections.length === 0 ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 border border-dashed border-slate-300/80 bg-[radial-gradient(circle_at_top,_rgba(124,58,237,0.10),_transparent_55%),rgba(255,255,255,0.96)] px-6 py-10 text-center text-sm text-slate-600">
-                <div className="inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-violet-600/10 text-violet-600 shadow-sm">
-                  <UploadCloud className="h-8 w-8" />
-                </div>
-                <div className="max-w-[280px] space-y-2">
-                  <div className="text-base font-semibold text-slate-900">Start building your website.</div>
-                  <div className="text-sm leading-6 text-slate-500">Open the widget library and drop in a hero, navbar, or content block to begin.</div>
-                </div>
-                <button
-                  className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
-                  onClick={() => {
-                    setLeftPanelView("widgets");
-                    setLeftPanelOpen(true);
-                  }}
-                >
-                  <span>Open Widgets</span>
-                </button>
+            {mounted && project && pageOf(project)?.sections.length === 0 && !project.sharedHeader && !project.sharedFooter ? (
+              <div
+                className={`absolute inset-0 flex flex-col items-center justify-center gap-4 border px-6 py-10 text-center text-sm ${
+                  draggingLibrarySection
+                    ? "border-dashed border-sky-400 bg-sky-100/80 text-sky-700"
+                    : "border-dashed border-slate-300/80 bg-[radial-gradient(circle_at_top,_rgba(124,58,237,0.10),_transparent_55%),rgba(255,255,255,0.96)] text-slate-600"
+                }`}
+              >
+                {draggingLibrarySection ? (
+                  <div className="max-w-[320px] space-y-2">
+                    <div className="text-base font-semibold text-sky-800">Drop widget here</div>
+                    <div className="text-sm leading-6 text-sky-700/80">Release to add this widget to the canvas.</div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-violet-600/10 text-violet-600 shadow-sm">
+                      <UploadCloud className="h-8 w-8" />
+                    </div>
+                    <div className="max-w-[280px] space-y-2">
+                      <div className="text-base font-semibold text-slate-900">Start building your website.</div>
+                      <div className="text-sm leading-6 text-slate-500">Open the widget library and drop in a hero, navbar, or content block to begin.</div>
+                    </div>
+                    <button
+                      className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                      onClick={() => {
+                        setLeftPanelView("widgets");
+                        setLeftPanelOpen(true);
+                      }}
+                    >
+                      <span>Open Widgets</span>
+                    </button>
+                  </>
+                )}
               </div>
             ) : null}
           </div>
-          {imageEditor && (
-            <ImageEditorModal
-              initialSrc={imageEditor.src}
-              initialAlt={""}
-              resolvedPreview={resolveAssetPaths(imageEditor.src, project?.assets)}
-              onUpload={(dataUrl, filename) => addAsset(dataUrl, filename)}
-              onClose={() => setImageEditor(null)}
-              onApply={(newSrc, altText) => {
-                if (!project) return;
-                const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === imageEditor.sectionId);
-                if (!section) return;
-                const nextHtml = replaceImageAt(section.html, imageEditor, newSrc, altText);
-                updateSection(section.id, { html: nextHtml });
-                setImageEditor(null);
-              }}
-              onRemove={() => {
-                if (!project) return;
-                const section = (pageOf(project)?.sections ?? []).find((s: any) => s.id === imageEditor.sectionId);
-                if (!section) return;
-                const nextHtml = removeImageAt(section.html, imageEditor);
-                updateSection(section.id, { html: nextHtml });
-                setImageEditor(null);
-              }}
-            />
-          )}
         </div>
       </div>
     </div>
   );
 }
-
-function findByIdx(root: ParentNode, idx: string): Element | null {
-  if (!idx) return null;
-  if (idx.includes(",")) {
-    const parts = idx.split(",").map((p) => Number(p));
-    let cur: Element | null = root as Element | null;
-    for (const p of parts) {
-      if (!cur || !cur.children || cur.children.length <= p) return null;
-      cur = cur.children[p] as Element | null;
-    }
-    return cur;
-  }
-  return root.querySelector(`[data-wto-idx="${CSS.escape(idx)}"]`);
-}
-
-function parseSection(html: string) {
-  return new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
-}
-
-function findBrandAnchorInDoc(doc: Document) {
-  const header = doc.body.querySelector("header");
-  const nav = doc.body.querySelector("nav") ?? doc.body.querySelector("[data-wto-nav]");
-  const anchors = header ? Array.from(header.querySelectorAll("a")) : [];
-  if (nav) anchors.push(...Array.from(nav.querySelectorAll("a")));
-  const brand =
-    anchors.find((a) => !a.closest("ul") && !a.closest("li") && !a.closest("[data-wto-nav-menu]") && ((a.getAttribute("href") || "").trim() === "#top" || (header && a.closest("header") && !a.closest("nav")))) ||
-    anchors.find((a) => !a.closest("ul") && !a.closest("li") && !a.closest("[data-wto-nav-menu]"));
-  return brand ?? null;
-}
-
-function cleanGradientClasses(cls: string) {
-  return cls
-    .split(/\s+/)
-    .filter(
-      (c) =>
-        !/^bg-gradient/.test(c) &&
-        !/^from-/.test(c) &&
-        !/^via-/.test(c) &&
-        !/^to-/.test(c) &&
-        !/^bg-\[/.test(c),
-    )
-    .join(" ");
-}
-
-function replaceImageAt(
-  html: string,
-  target: { idx: string | null; path?: string | null; src: string; kind: "img" | "box" },
-  newSrc: string,
-  altText?: string,
-): string {
-  const doc = parseSection(html);
-  const root = doc.body.children.length === 1 && doc.body.firstElementChild?.tagName.toLowerCase() === "section" ? (doc.body.firstElementChild as Element) : doc.body;
-  let el: Element | null = null;
-  if (target.idx) el = findByIdx(root, target.idx);
-  if (!el && target.path) el = findByIdx(root, target.path);
-  if (!el && target.src && target.kind === "img") {
-    el = doc.body.querySelector(`img[src="${cssAttr(target.src)}"]`);
-  }
-  if (!el && target.kind === "img") {
-    const brand = findBrandAnchorInDoc(doc);
-    if (brand) {
-      brand.innerHTML = "";
-      const img = doc.createElement("img");
-      img.setAttribute("src", newSrc);
-      img.setAttribute("alt", "logo");
-      img.setAttribute("style", "height:40px;width:auto;object-fit:contain;");
-      brand.appendChild(img);
-      return doc.body.innerHTML;
-    }
-  }
-  if (!el) return html;
-
-  if (el.tagName === "IMG") {
-    el.setAttribute("src", newSrc);
-    if (altText !== undefined) el.setAttribute("alt", altText);
-  } else {
-    const img = doc.createElement("img");
-    const cls = cleanGradientClasses(el.getAttribute("class") ?? "");
-    img.setAttribute("class", (cls + " object-cover w-full h-full").trim());
-    img.setAttribute("src", newSrc);
-    img.setAttribute("alt", altText ?? "");
-    const wrapper = doc.createElement("div");
-    wrapper.setAttribute("class", el.getAttribute("class") ?? "");
-    wrapper.setAttribute("style", (el.getAttribute("style") ?? "") + ";overflow:hidden");
-    wrapper.appendChild(img);
-    el.replaceWith(wrapper);
-  }
-  return doc.body.innerHTML;
-}
-
-function removeImageAt(
-  html: string,
-  target: { idx: string | null; path?: string | null; src: string; kind: "img" | "box" },
-): string {
-  const doc = parseSection(html);
-  const root = doc.body.children.length === 1 && doc.body.firstElementChild?.tagName.toLowerCase() === "section" ? (doc.body.firstElementChild as Element) : doc.body;
-  let el: Element | null = null;
-  if (target.idx) el = findByIdx(root, target.idx);
-  if (!el && target.path) el = findByIdx(root, target.path);
-  if (!el && target.src && target.kind === "img") {
-    el = doc.body.querySelector(`img[src="${cssAttr(target.src)}"]`);
-  }
-  if (!el) return html;
-  if (el.tagName === "IMG") {
-    el.remove();
-  } else {
-    const cls = cleanGradientClasses(el.getAttribute("class") ?? "");
-    el.setAttribute("class", (cls + " bg-gradient-to-br from-slate-300 to-slate-500").trim());
-    el.innerHTML = "";
-  }
-  return doc.body.innerHTML;
-}
-
-function cssAttr(s: string) {
-  return s.replace(/"/g, '\\"');
-}
-
-function getAssetName(src: string) {
-  const clean = src.split("?")[0].split("#")[0];
-  const last = clean.split("/").pop() ?? clean;
-  return last || "image";
-}
-
-function ImageEditorModal({
-  initialSrc,
-  initialAlt = "",
-  resolvedPreview,
-  onUpload,
-  onClose,
-  onApply,
-  onRemove,
-}: {
-  initialSrc: string;
-  initialAlt?: string;
-  resolvedPreview: string;
-  onUpload: (dataUrl: string, filename?: string) => string;
-  onClose: () => void;
-  onApply: (src: string, altText: string) => void;
-  onRemove: () => void;
-}) {
-  const [url, setUrl] = useState(initialSrc);
-  const [assetName, setAssetName] = useState(getAssetName(initialSrc));
-  const [altText, setAltText] = useState(initialAlt);
-  const [previewUrl, setPreviewUrl] = useState(resolvedPreview);
-  useEffect(() => {
-    setUrl(initialSrc);
-    setAssetName(getAssetName(initialSrc));
-    setAltText(initialAlt);
-    setPreviewUrl(resolvedPreview);
-  }, [initialSrc, initialAlt, resolvedPreview]);
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md p-4">
-        <h3 className="text-lg font-bold mb-3">Edit Image</h3>
-        
-        {/* Horizontal layout: image left (200x200), controls right */}
-        <div className="flex gap-4 mb-4">
-          {/* Image thumbnail - fixed 200x200 */}
-          <div className="w-52 h-52 bg-muted rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
-            {previewUrl || url ? (
-              <img src={previewUrl || url} alt="preview" className="max-w-full max-h-full object-contain" />
-            ) : (
-              <span className="text-muted-foreground text-xs">No image</span>
-            )}
-          </div>
-          
-          {/* Controls - stacked vertically on the right */}
-          <div className="flex-1 flex flex-col gap-3 min-w-0">
-            <div>
-              <label className="text-xs font-medium">Path</label>
-              <input
-                className="w-full px-2 py-1.5 rounded border border-input bg-background text-xs mt-0.5"
-                value={url}
-                onChange={(e) => {
-                  const nextValue = e.target.value;
-                  setUrl(nextValue);
-                  setAssetName(getAssetName(nextValue));
-                  setPreviewUrl(nextValue);
-                }}
-                placeholder="images/filename.jpg"
-              />
-            </div>
-            
-            <div>
-              <label className="text-xs font-medium">Name</label>
-              <input className="w-full px-2 py-1.5 rounded border border-input bg-background text-xs mt-0.5" value={assetName} readOnly placeholder="image-name" />
-            </div>
-            
-            <div>
-              <label className="text-xs font-medium">ALT</label>
-              <input className="w-full px-2 py-1.5 rounded border border-input bg-background text-xs mt-0.5" value={altText} onChange={(e) => setAltText(e.target.value)} placeholder="ALT" />
-            </div>
-            
-            <label className="flex items-center gap-1 rounded border border-input bg-muted px-2 py-1.5 text-xs font-medium cursor-pointer hover:bg-accent/10 flex-shrink-0">
-              <UploadCloud className="h-3 w-3" />
-              <span>Upload</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                onChange={(e) => {
-                  const f = e.currentTarget.files?.[0];
-                  if (!f) return;
-                  const r = new FileReader();
-                  r.onload = () => {
-                    try {
-                      const dataUrl = String(r.result);
-                      const path = onUpload(dataUrl, f.name);
-                      setUrl(path || dataUrl);
-                      setAssetName(getAssetName(path || dataUrl));
-                      setPreviewUrl(dataUrl);
-                      e.currentTarget.value = "";
-                    } catch (err) {
-                      console.error("Image upload failed", err);
-                      e.currentTarget.value = "";
-                    }
-                  };
-                  r.readAsDataURL(f);
-                }}
-              />
-            </label>
-          </div>
-        </div>
-        
-        {/* Buttons below */}
-        <div className="flex justify-end gap-2 pt-3 border-t border-border">
-          <button className="px-3 py-1.5 text-xs rounded border border-input hover:bg-accent" onClick={onRemove}>Remove</button>
-          <button className="px-3 py-1.5 text-xs rounded border border-input hover:bg-accent" onClick={onClose}>Cancel</button>
-          <button className="px-3 py-1.5 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => onApply(url, altText)}>Apply</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-

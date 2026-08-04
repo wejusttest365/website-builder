@@ -1,9 +1,18 @@
 import { BaseWidget } from "../BaseWidget";
-import { defaultGridWidgetData, getColumnBootstrapClass, isGridWidgetData } from "./GridTypes";
+import {
+  buildCssGridTemplateColumns,
+  defaultGridWidgetData,
+  getEqualColumnSpan,
+  isGridWidgetData,
+  resolveGridColumnCount,
+  resolveResponsiveGridColumns,
+  createGridColumn,
+} from "./GridTypes";
 import type { WidgetData } from "../widgetRegistry";
 import { createWidgetInstance, getWidgetRegistration } from "../widgetRegistry";
 import { getChildWidgetData } from "../Container/ContainerTypes";
 import { useBuilder } from "@/lib/builder/store";
+import { getSpacingBoxStyle } from "../spacing";
 
 export interface GridProps {
   data: WidgetData;
@@ -12,26 +21,47 @@ export interface GridProps {
 export function Grid({ data = defaultGridWidgetData }: GridProps) {
   const gridValue = isGridWidgetData(data) ? data : defaultGridWidgetData;
   const visible = gridValue.advanced.visibility ?? true;
+  const device = useBuilder((s) => s.device);
+  const select = useBuilder((s) => s.selectElement);
   if (!visible) return null;
 
-  const columnCount = Math.max(1, Math.min(6, Number(gridValue.layout.columns ?? gridValue.content.columns?.length ?? 1)));
-  const columns = (Array.isArray(gridValue.content.columns) && gridValue.content.columns.length ? gridValue.content.columns : Array.from({ length: columnCount }, () => ({ id: `column-${Math.random().toString(36).slice(2, 8)}`, span: 12, children: [] }))) as Array<{ id: string; span: number; children?: Array<{ id: string; type: string; data?: Record<string, unknown> }> }>;
-  const select = useBuilder((s) => s.selectElement);
-  const stackOnMobile = gridValue.responsive.stackOnMobile ?? true;
-  const tabletColumns = Math.max(1, Math.min(6, Number(gridValue.responsive.tabletColumns ?? Math.min(2, columnCount || 1))));
-  const mobileColumns = Math.max(1, Math.min(6, Number(gridValue.responsive.mobileColumns ?? 1)));
-  const useBootstrapColumns = columnCount <= 4;
-  const containerStyle = {
-    padding: gridValue.layout.padding ?? "1rem",
-    margin: gridValue.layout.margin ?? "0rem",
-    backgroundColor: gridValue.style.backgroundColor ?? "transparent",
-    border: gridValue.style.border ?? "1px solid #e2e8f0",
-    borderRadius: gridValue.style.borderRadius ?? "0.75rem",
-    boxShadow: gridValue.style.shadow ?? "none",
-  } as const;
+  const desktopColumns = resolveGridColumnCount(gridValue);
+  const sourceColumns = Array.isArray(gridValue.content.columns) ? gridValue.content.columns : [];
+  const equalSpan = getEqualColumnSpan(desktopColumns);
+  const columns = Array.from({ length: Math.max(1, desktopColumns) }, (_, index) => {
+    const source = sourceColumns[index];
+    if (source) {
+      return {
+        ...source,
+        children: Array.isArray(source.children) ? source.children : [],
+      };
+    }
+    return createGridColumn(equalSpan, `column-${index + 1}`);
+  });
+
+  const { tablet, mobile } = resolveResponsiveGridColumns(
+    desktopColumns,
+    gridValue.responsive.tabletColumns,
+    gridValue.responsive.mobileColumns,
+  );
+
+  const activeColumns =
+    device === "mobile" ? mobile : device === "tablet" ? tablet : desktopColumns;
+
+  const spacingBox = getSpacingBoxStyle(gridValue.layout.padding, gridValue.layout.margin, device);
+  const columnGap = String(gridValue.style.columnGap || gridValue.style.gap || "16px");
+  const rowGap = String(gridValue.style.rowGap || gridValue.style.gap || "16px");
+  const alignItems = gridValue.layout.alignment || "stretch";
+
+  const gridClass = `wto-css-grid wto-css-grid-${String(gridValue.id).replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const desktopTemplate = buildCssGridTemplateColumns(columns, desktopColumns, gridValue.variant);
+  const activeTemplate =
+    activeColumns === desktopColumns
+      ? desktopTemplate
+      : `repeat(${Math.max(1, activeColumns)}, minmax(0, 1fr))`;
 
   function renderChild(child: { id: string; type: string; data?: Record<string, unknown> }, columnId: string) {
-    const childData = getChildWidgetData(child);
+    const childData = getChildWidgetData(child as any);
     const childInstance = createWidgetInstance(child.type, {
       id: `${gridValue.id}-${child.id}`,
       content: childData.content,
@@ -48,13 +78,16 @@ export function Grid({ data = defaultGridWidgetData }: GridProps) {
     return (
       <div
         key={child.id}
+        className="wto-grid-item"
         data-container-parent-widget-id={gridValue.id}
         data-container-child-id={child.id}
         data-wto-parent-widget-id={gridValue.id}
         data-wto-child-id={child.id}
         data-wto-widget-element-key={child.id}
-        data-wto-widget-element-type="container"
+        data-wto-widget-element-type={child.type}
         data-grid-column-id={columnId}
+        data-grid-item="1"
+        style={{ minWidth: 0, width: "100%", maxWidth: "none", boxSizing: "border-box" }}
         onClick={(event) => {
           event.stopPropagation();
           select({
@@ -65,8 +98,9 @@ export function Grid({ data = defaultGridWidgetData }: GridProps) {
             childId: child.id,
             elementKey: child.id,
             elementType: child.type,
+            columnId,
             index: null,
-          });
+          } as any);
         }}
       >
         {Component ? <Component data={childInstance as WidgetData} /> : null}
@@ -81,61 +115,78 @@ export function Grid({ data = defaultGridWidgetData }: GridProps) {
       title="Grid"
       variantLabel={gridValue.variant}
       wrapperClassName="w-full"
-      contentClassName="overflow-hidden"
+      contentClassName="overflow-visible"
     >
+      <style>{`
+        .${gridClass} {
+          display: grid;
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          grid-template-columns: ${activeTemplate};
+          column-gap: ${columnGap};
+          row-gap: ${rowGap};
+          align-items: ${alignItems};
+        }
+        .${gridClass} > .wto-grid-column,
+        .${gridClass} .wto-grid-item {
+          min-width: 0;
+          width: 100%;
+          max-width: none;
+          box-sizing: border-box;
+          flex: none;
+        }
+      `}</style>
       <div
         id={gridValue.advanced.id || undefined}
-        className={[gridValue.advanced.className ?? ""].filter(Boolean).join(" ")}
-        style={containerStyle}
+        className={[
+          gridClass,
+          gridValue.advanced.className ?? "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        data-widget="grid"
+        data-grid-columns-count={desktopColumns}
+        style={{
+          padding: spacingBox.padding ?? "16px",
+          margin: spacingBox.margin ?? "0px",
+          backgroundColor: gridValue.style.backgroundColor ?? "transparent",
+          border: gridValue.style.border ?? "1px solid #e2e8f0",
+          borderRadius: gridValue.style.borderRadius ?? "0.75rem",
+          boxShadow: gridValue.style.shadow ?? "none",
+          width: "100%",
+          maxWidth: "100%",
+          boxSizing: "border-box",
+          display: "grid",
+          gridTemplateColumns: activeTemplate,
+          columnGap,
+          rowGap,
+          alignItems,
+        }}
       >
-        {columns.length === 0 ? (
-          <div className="builder-editor-only text-sm text-slate-400">Drop widgets here</div>
-        ) : useBootstrapColumns ? (
-          <div className={`row ${stackOnMobile ? "flex-column flex-md-row" : "flex-column"}`}>
-            {columns.map((column) => (
-              <div key={column.id} className={getColumnBootstrapClass(column.span, stackOnMobile)}>
-                <div className="relative h-full min-h-[60px] rounded-md p-3 text-sm text-slate-400">
-                  <div className="builder-editor-only absolute inset-0 rounded-md border border-dashed border-slate-200 bg-slate-50/70" />
-                  <div className="relative z-10">
-                    {column.children?.length ? column.children.map((child) => renderChild(child, column.id)) : <span className="builder-editor-only">Empty column</span>}
-                  </div>
-                </div>
+        {columns.map((column) => (
+          <div
+            key={column.id}
+            className="wto-grid-column"
+            data-grid-column-id={column.id}
+            data-grid-column-wrapper="1"
+            style={{ minWidth: 0, width: "100%", maxWidth: "none", boxSizing: "border-box" }}
+          >
+            <div
+              className="relative h-full min-h-[60px] rounded-md text-sm text-slate-400"
+              style={{ minWidth: 0, width: "100%", maxWidth: "none", boxSizing: "border-box" }}
+            >
+              <div className="builder-editor-only absolute inset-0 rounded-md border border-dashed border-slate-200/80 bg-slate-50/40 pointer-events-none" />
+              <div className="relative z-10 flex flex-col gap-2" style={{ minWidth: 0, width: "100%" }}>
+                {column.children?.length ? (
+                  column.children.map((child) => renderChild(child as any, column.id))
+                ) : (
+                  <span className="builder-editor-only px-2 py-3">Drop widgets here</span>
+                )}
               </div>
-            ))}
-          </div>
-        ) : (
-          <>
-            <style>{`
-              .wto-grid-${gridValue.id} {
-                display: grid;
-                gap: ${gridValue.style.gap ?? "1rem"};
-                grid-template-columns: repeat(${Math.max(1, columns.length)}, minmax(0, 1fr));
-              }
-              @media (max-width: 991px) {
-                .wto-grid-${gridValue.id} {
-                  grid-template-columns: repeat(${Math.max(1, tabletColumns)}, minmax(0, 1fr)) !important;
-                }
-              }
-              @media (max-width: 767px) {
-                .wto-grid-${gridValue.id} {
-                  grid-template-columns: repeat(${Math.max(1, mobileColumns)}, minmax(0, 1fr)) !important;
-                }
-              }
-            `}</style>
-            <div className={`wto-grid-${gridValue.id}`}>
-              {columns.map((column) => (
-                <div key={column.id} className="min-w-0">
-                  <div className="relative h-full min-h-[60px] rounded-md p-3 text-sm text-slate-400">
-                    <div className="builder-editor-only absolute inset-0 rounded-md border border-dashed border-slate-200 bg-slate-50/70" />
-                    <div className="relative z-10">
-                      {column.children?.length ? column.children.map((child) => renderChild(child, column.id)) : <span className="builder-editor-only">Empty column</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
-          </>
-        )}
+          </div>
+        ))}
       </div>
     </BaseWidget>
   );

@@ -5,6 +5,7 @@ import { BaseWidget } from "../BaseWidget";
 import { getWidgetElementDuplicateEntries } from "../elementDuplication";
 import { useBuilder } from "@/lib/builder/store";
 import { getSpacingStyleValue } from "../spacing";
+import { normalizeFontSizeToPx } from "../fontSize";
 
 function getHeadingTag(level: string) {
   switch (level) {
@@ -47,10 +48,16 @@ export function Heading({ data = defaultHeadingWidgetData }: HeadingProps) {
     const text = String(content.text || "Create a bold heading");
     const headingTag = getHeadingTag(String(content.headingLevel || "h2"));
     const alignClass = layout.alignment === "center" ? "text-center" : layout.alignment === "right" ? "text-end" : "text-start";
+    const textColor = String(style.textColor ?? "#111827").trim() || "#111827";
+    const gradientStart = String(style.gradientStart ?? "").trim();
+    const gradientEnd = String(style.gradientEnd ?? "").trim();
+    const hasGradient = headingData.variant === "Gradient" && gradientStart && gradientEnd && gradientStart !== gradientEnd;
+    const fallbackGradientColor = headingData.variant === "Gradient" && gradientStart && gradientStart === gradientEnd ? gradientStart : undefined;
+    const effectiveColor = fallbackGradientColor || textColor;
     const headingStyle: React.CSSProperties = {
       fontFamily: style.fontFamily as string | undefined,
-      color: style.textColor as string | undefined,
-      fontSize: style.fontSize as string | undefined,
+      color: effectiveColor,
+      fontSize: normalizeFontSizeToPx(style.fontSize) ?? (style.fontSize as string | undefined),
       fontWeight: style.fontWeight as string | undefined,
       lineHeight: style.lineHeight as string | undefined,
       letterSpacing: style.letterSpacing as string | undefined,
@@ -60,10 +67,11 @@ export function Heading({ data = defaultHeadingWidgetData }: HeadingProps) {
     };
 
     const decorationStyle: React.CSSProperties =
-      headingData.variant === "Gradient"
+      hasGradient
         ? {
-            backgroundImage: `linear-gradient(90deg, ${String(style.gradientStart || "#2563eb")}, ${String(style.gradientEnd || "#9333ea")})`,
+            backgroundImage: `linear-gradient(90deg, ${gradientStart}, ${gradientEnd})`,
             WebkitBackgroundClip: "text",
+            backgroundClip: "text",
             WebkitTextFillColor: "transparent",
           }
         : headingData.variant === "Underline"
@@ -77,7 +85,7 @@ export function Heading({ data = defaultHeadingWidgetData }: HeadingProps) {
     const sectionLabel = headingData.variant === "Section Title" ? (
       <div
         className="mb-2 text-uppercase text-muted"
-        style={{ color: style.textColor as string | undefined, fontWeight: 600, letterSpacing: "0.12em", fontSize: "0.85rem" }}
+        style={{ color: style.textColor as string | undefined, fontWeight: 600, letterSpacing: "0.12em", fontSize: "14px" }}
       >
         {String(content.label || "Section title")}
       </div>
@@ -114,7 +122,7 @@ export function Heading({ data = defaultHeadingWidgetData }: HeadingProps) {
           const renderState = buildRenderState(item.entry ?? undefined);
           if (!renderState.visible) return null;
           return (
-            <div key={`${item.key}-${item.duplicateId || "base"}`} className={renderState.alignClass} style={{ margin: renderState.layout.margin, padding: renderState.layout.padding }}>
+            <div key={`${item.key}-${item.duplicateId || "base"}`} className={renderState.alignClass} style={{ margin: getSpacingStyleValue(renderState.layout.margin, device), padding: getSpacingStyleValue(renderState.layout.padding, device) }}>
               {renderState.sectionLabel}
               {React.createElement(
                 renderState.headingTag,

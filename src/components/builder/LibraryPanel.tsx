@@ -1,4 +1,4 @@
-import { type FormEvent, type SVGProps, useMemo, useRef, useState, useEffect } from "react";
+import { type DragEvent, type FormEvent, type SVGProps, useMemo, useRef, useState, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { SECTION_LIBRARY, CATEGORIES, type SectionTemplate } from "@/lib/builder/sections";
 import { useMounted } from "@/hooks/use-mounted";
@@ -186,6 +186,23 @@ const activePanelKey = showProjectDashboard
       const section = doc?.querySelector(`[data-wto-section="${sectionId}"]`) as HTMLElement | null;
       section?.scrollIntoView({ block: "center", behavior: "smooth" });
     }, 80);
+  };
+
+  const beginWidgetDrag = (event: DragEvent, widget: WidgetRegistration, variant?: string) => {
+    const resolvedVariant = variant || widget.defaultVariant || widget.supportedVariants?.[0] || "";
+    event.dataTransfer.setData("application/x-wto-widget", widget.id);
+    if (resolvedVariant) event.dataTransfer.setData("application/x-wto-widget-variant", resolvedVariant);
+    event.dataTransfer.setData("text/plain", widget.id);
+    event.dataTransfer.effectAllowed = "copy";
+    window.dispatchEvent(
+      new CustomEvent("wto-library-drag-start", {
+        detail: { kind: "widget", widgetId: widget.id, variant: resolvedVariant || undefined },
+      }),
+    );
+  };
+
+  const endLibraryDrag = () => {
+    window.dispatchEvent(new CustomEvent("wto-library-drag-end"));
   };
 
   const visibleWidgets = useMemo(() => {
@@ -735,11 +752,24 @@ const handleLogout = async () => {
                                 {visibleWidgets.map((widget, index) => {
                                   const open = q.trim() ? true : openWidgetId === widget.id;
                                   return (
-                                    <div key={widget.id} className={`overflow-hidden ${index < visibleWidgets.length - 1 ? "border-b border-slate-200/70" : ""} bg-white`}>
-                                      <button
-                                        type="button"
-                                        className="flex h-[52px] w-full items-center gap-3 px-3 text-left text-sm text-slate-800 transition hover:bg-slate-50"
+                                    <div
+                                      key={widget.id}
+                                      className={`overflow-hidden ${index < visibleWidgets.length - 1 ? "border-b border-slate-200/70" : ""} bg-white`}
+                                      draggable
+                                      onDragStart={(event) => beginWidgetDrag(event, widget)}
+                                      onDragEnd={endLibraryDrag}
+                                    >
+                                      <div
+                                        role="button"
+                                        tabIndex={0}
+                                        className="flex h-[52px] w-full cursor-grab items-center gap-3 px-3 text-left text-sm text-slate-800 transition hover:bg-slate-50 active:cursor-grabbing"
                                         onClick={() => {
+                                          if (q.trim()) return;
+                                          setOpenWidgetId((prev) => (prev === widget.id ? null : widget.id));
+                                        }}
+                                        onKeyDown={(event) => {
+                                          if (event.key !== "Enter" && event.key !== " ") return;
+                                          event.preventDefault();
                                           if (q.trim()) return;
                                           setOpenWidgetId((prev) => (prev === widget.id ? null : widget.id));
                                         }}
@@ -756,7 +786,7 @@ const handleLogout = async () => {
                                         <span className="text-slate-400">
                                           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                         </span>
-                                      </button>
+                                      </div>
                                       {open ? (
                                         <div className="border-t border-slate-200/80 px-3 pb-3 pt-2">
                                           <div className="flex flex-wrap gap-2">
@@ -766,8 +796,17 @@ const handleLogout = async () => {
                                                 <button
                                                   key={variantKey}
                                                   type="button"
+                                                  draggable
+                                                  onDragStart={(event) => {
+                                                    event.stopPropagation();
+                                                    beginWidgetDrag(event, widget, variant);
+                                                  }}
+                                                  onDragEnd={(event) => {
+                                                    event.stopPropagation();
+                                                    endLibraryDrag();
+                                                  }}
                                                   onClick={() => addWidgetVariant(widget, variant)}
-                                                  className="min-h-[28px] rounded-[7px] border border-slate-300 bg-slate-100 px-3 text-[11px] font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-200"
+                                                  className="min-h-[28px] cursor-grab rounded-[7px] border border-slate-300 bg-slate-100 px-3 text-[11px] font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-200 active:cursor-grabbing"
                                                 >
                                                   {variant}
                                                 </button>
@@ -1033,7 +1072,7 @@ function SectionCard({ tpl, onAdd }: { tpl: SectionTemplate; onAdd: () => void }
         e.dataTransfer.setData("application/x-wto-section", tpl.id);
         e.dataTransfer.setData("text/plain", tpl.id);
         e.dataTransfer.effectAllowed = "copy";
-        window.dispatchEvent(new CustomEvent("wto-library-drag-start", { detail: tpl.id }));
+        window.dispatchEvent(new CustomEvent("wto-library-drag-start", { detail: { kind: "section", sectionId: tpl.id } }));
       }}
       onDragEnd={() => window.dispatchEvent(new CustomEvent("wto-library-drag-end"))}
       onDoubleClick={onAdd}

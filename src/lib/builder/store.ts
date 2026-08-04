@@ -7,10 +7,24 @@ import { nanoid } from "nanoid";
 import type { SectionTemplate } from "./sections";
 import type { WidgetInstance } from "@/components/builder/widgets/widgetRegistry";
 import { createWidgetElementDuplicateEntry } from "@/components/builder/widgets/elementDuplication";
-import { getWidgetChildItems, setWidgetChildItems, type WidgetChildLocation } from "@/components/builder/widgets/childWidgetUtils";
+import { getWidgetChildItems, mergeWidgetChildData, setWidgetChildItems, type WidgetChildLocation } from "@/components/builder/widgets/childWidgetUtils";
+import { normalizeFontSizeToPx } from "@/components/builder/widgets/fontSize";
 import type { TemplateDefinition } from "./templates";
 import { createImageAssetReference, normalizeAssetMap, saveImageBlob, type BuilderAssetEntry } from "./image-storage";
-import { createGridColumn, getGridVariantForCount } from "@/components/builder/widgets/Grid/GridTypes";
+import { createGridColumn, getEqualColumnSpan, getGridVariantForCount } from "@/components/builder/widgets/Grid/GridTypes";
+import {
+  composePageSections,
+  createDefaultSharedFooter,
+  createDefaultSharedHeader,
+  findSectionInProject,
+  isFooterSection,
+  isNavbarSection,
+  isSharedChromeSection,
+  migrateSharedChrome,
+  SHARED_FOOTER_SECTION_ID,
+  SHARED_HEADER_SECTION_ID,
+  syncSharedHeaderNav,
+} from "./sharedChrome";
 
 export interface PageSection {
   id: string;
@@ -87,6 +101,14 @@ export interface Page {
   description?: string; // SEO meta description
   keywords?: string; // SEO meta keywords
   seo?: PageSeo;
+  /** Use project.sharedHeader (default true). */
+  useGlobalHeader?: boolean;
+  /** Use project.sharedFooter (default true). */
+  useGlobalFooter?: boolean;
+  /** Hide shared header on this page only. */
+  hideHeader?: boolean;
+  /** Hide shared footer on this page only. */
+  hideFooter?: boolean;
 }
 
 export interface Project {
@@ -94,6 +116,12 @@ export interface Project {
   name: string;
   pages: Page[];
   currentPageId: string;
+  /** Single shared header for all pages. */
+  sharedHeader?: PageSection | null;
+  /** Single shared footer for all pages. */
+  sharedFooter?: PageSection | null;
+  /** Internal flag set after header/footer migration. */
+  sharedChromeMigrated?: boolean;
   globalCss: string;
   globalJs: string;
   customHead: string; // Custom HTML for head (GA tracking, etc.)
@@ -112,6 +140,9 @@ interface HistoryEntry {
   pageId: string;
   sections: PageSection[];
   widgetInstances?: WidgetInstance[];
+  sharedHeader?: PageSection | null;
+  sharedFooter?: PageSection | null;
+  pagesChrome?: Array<Pick<Page, "id" | "useGlobalHeader" | "useGlobalFooter" | "hideHeader" | "hideFooter">>;
   globalCss: string;
   globalJs: string;
 }
@@ -218,6 +249,7 @@ interface BuilderState {
   moveChildUp: (sectionId: string, parentWidgetId: string, childContainerId: string | null, childWidgetId: string) => void;
   moveChildDown: (sectionId: string, parentWidgetId: string, childContainerId: string | null, childWidgetId: string) => void;
   duplicateChild: (sectionId: string, parentWidgetId: string, childContainerId: string | null, childWidgetId: string) => void;
+  updateGridColumns: (widgetId: string, count: number) => void;
   deleteChild: (sectionId: string, parentWidgetId: string, childContainerId: string | null, childWidgetId: string) => void;
   updateWidgetElementStyle: (sectionId: string, widgetId: string, childId: string | null, elementKey: string | null, patch: Record<string, unknown>, location?: WidgetChildLocation) => void;
   updateWidgetElementContent: (sectionId: string, widgetId: string, childId: string | null, elementKey: string | null, patch: Record<string, unknown>, location?: WidgetChildLocation) => void;
@@ -229,6 +261,10 @@ interface BuilderState {
   setProjectSeo: (patch: Partial<ProjectSeo>) => void;
   setPageDescription: (id: string, v: string) => void;
   setPageKeywords: (id: string, v: string) => void;
+  setPageChromeSettings: (
+    id: string,
+    patch: Partial<Pick<Page, "useGlobalHeader" | "useGlobalFooter" | "hideHeader" | "hideFooter">>,
+  ) => void;
   setSectionHtml: (id: string, html: string) => void;
   setPageHtml: (html: string) => void; // replaces all sections with a single custom block
 
@@ -265,17 +301,62 @@ function slugify(s: string) {
 // single-page Project with `pages`.
 function migrateProject(raw: unknown): Project {
   const p = raw as Partial<Project> & { sections?: PageSection[]; description?: string; keywords?: string };
+  let base: Project;
   if (p.pages && p.currentPageId) {
     const pages: Page[] = p.pages.map((page): Page => ({
       ...page,
       description: page.description ?? "",
       keywords: page.keywords ?? "",
+      useGlobalHeader: page.useGlobalHeader ?? true,
+      useGlobalFooter: page.useGlobalFooter ?? true,
+      hideHeader: page.hideHeader ?? false,
+      hideFooter: page.hideFooter ?? false,
     }));
-    return {
+    base = {
       id: String(p.id),
       name: p.name ?? "Untitled",
       pages,
       currentPageId: p.currentPageId,
+      sharedHeader: p.sharedHeader ?? null,
+      sharedFooter: p.sharedFooter ?? null,
+      sharedChromeMigrated: p.sharedChromeMigrated,
+      globalCss: p.globalCss ?? "/* Global CSS */\n",
+      globalJs: p.globalJs ?? "// Global JS\n",
+      customHead: p.customHead ?? "",
+      seo: p.seo,
+      createdAt: p.createdAt ?? Date.now(),
+      updatedAt: p.updatedAt ?? Date.now(),
+      assets: p.assets,
+      selectedTemplateId: p.selectedTemplateId,
+      description: p.description,
+      keywords: p.keywords,
+      publishedAt: p.publishedAt,
+      thumbnail: p.thumbnail,
+    };
+  } else {
+    const pageId = nanoid(8);
+    const pages: Page[] = [
+      {
+        id: pageId,
+        name: "Home",
+        slug: "index",
+        sections: p.sections ?? [],
+        description: p.description ?? "",
+        keywords: p.keywords ?? "",
+        useGlobalHeader: true,
+        useGlobalFooter: true,
+        hideHeader: false,
+        hideFooter: false,
+      },
+    ];
+    base = {
+      id: String(p.id ?? nanoid(8)),
+      name: p.name ?? "Untitled",
+      pages,
+      currentPageId: pageId,
+      sharedHeader: p.sharedHeader ?? null,
+      sharedFooter: p.sharedFooter ?? null,
+      sharedChromeMigrated: p.sharedChromeMigrated,
       globalCss: p.globalCss ?? "/* Global CSS */\n",
       globalJs: p.globalJs ?? "// Global JS\n",
       customHead: p.customHead ?? "",
@@ -284,29 +365,7 @@ function migrateProject(raw: unknown): Project {
       assets: p.assets,
     };
   }
-  const pageId = nanoid(8);
-  const pages: Page[] = [
-    {
-      id: pageId,
-      name: "Home",
-      slug: "index",
-      sections: p.sections ?? [],
-      description: p.description ?? "",
-      keywords: p.keywords ?? "",
-    },
-  ];
-  return {
-    id: String(p.id ?? nanoid(8)),
-    name: p.name ?? "Untitled",
-    pages,
-    currentPageId: pageId,
-    globalCss: p.globalCss ?? "/* Global CSS */\n",
-    globalJs: p.globalJs ?? "// Global JS\n",
-    customHead: p.customHead ?? "",
-    createdAt: p.createdAt ?? Date.now(),
-    updatedAt: p.updatedAt ?? Date.now(),
-    assets: p.assets,
-  };
+  return migrateSharedChrome(base);
 }
 
 type StoredLeftPanelView =
@@ -411,11 +470,28 @@ function writeToIndexedDB(payload: string): boolean {
 function emptyProject(name = "Untitled Project"): Project {
   const id = nanoid(8);
   const pageId = nanoid(8);
+  const pages: Page[] = [
+    {
+      id: pageId,
+      name: "Home",
+      slug: "index",
+      sections: [],
+      useGlobalHeader: true,
+      useGlobalFooter: true,
+      hideHeader: false,
+      hideFooter: false,
+    },
+  ];
+  const sharedHeader = createDefaultSharedHeader(pages);
+  const sharedFooter = createDefaultSharedFooter();
   return {
     id,
     name,
-    pages: [{ id: pageId, name: "Home", slug: "index", sections: [] }],
+    pages,
     currentPageId: pageId,
+    sharedHeader,
+    sharedFooter,
+    sharedChromeMigrated: true,
     globalCss: "/* Global CSS */\n",
     globalJs: "// Global JS\n",
     customHead: "",
@@ -505,6 +581,13 @@ async function persistProjectToCloud(project: Project): Promise<boolean> {
 export function pageOf(project: Project | null): Page | null {
   return getCurrentPage(project);
 }
+
+export {
+  composePageSections,
+  findSectionInProject,
+  SHARED_FOOTER_SECTION_ID,
+  SHARED_HEADER_SECTION_ID,
+} from "./sharedChrome";
 
 void requestPersistentStorage();
 
@@ -678,6 +761,8 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     history: [{
       pageId: page.id,
       sections: [],
+      sharedHeader: p.sharedHeader ? JSON.parse(JSON.stringify(p.sharedHeader)) : null,
+      sharedFooter: p.sharedFooter ? JSON.parse(JSON.stringify(p.sharedFooter)) : null,
       globalCss: p.globalCss,
       globalJs: p.globalJs,
     }],
@@ -709,10 +794,11 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
   
  loadCloudProject: async (id: string) => {
-  const project = await getBuilderProject(id);
+  const projectRaw = await getBuilderProject(id);
 
-  if (!project) return;
+  if (!projectRaw) return;
 
+  const project = migrateSharedChrome(migrateProject(projectRaw));
   const page = getCurrentPage(project)!;
 
   set((s) => ({
@@ -726,6 +812,8 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       {
         pageId: page.id,
         sections: page.sections,
+        sharedHeader: project.sharedHeader ?? null,
+        sharedFooter: project.sharedFooter ?? null,
         globalCss: project.globalCss,
         globalJs: project.globalJs,
       },
@@ -804,19 +892,24 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const id = nanoid(8);
     let s = slug ? slugify(slug) : slugify(name);
     while (p.pages.some((pg) => pg.slug === s)) s += "-1";
-    // Copy shared header/footer sections from an existing page (prefer first page)
-    const src = p.pages[0] ?? null;
-    const sharedSections: PageSection[] = [];
-    if (src) {
-      for (const sec of src.sections) {
-        if ((sec as any).shared) {
-          const copy: PageSection = { ...JSON.parse(JSON.stringify(sec)), id: nanoid(8) };
-          sharedSections.push(copy);
-        }
-      }
-    }
-    const page: Page = { id, name, slug: s, sections: sharedSections };
-    updateCurrent(set, get, { pages: [...p.pages, page], currentPageId: id });
+    const page: Page = {
+      id,
+      name,
+      slug: s,
+      sections: [],
+      useGlobalHeader: true,
+      useGlobalFooter: true,
+      hideHeader: false,
+      hideFooter: false,
+    };
+    const pages = [...p.pages, page];
+    const sharedHeader = syncSharedHeaderNav(p.sharedHeader, pages, {
+      type: "add",
+      pageId: id,
+      name,
+      slug: s,
+    });
+    updateCurrent(set, get, { pages, currentPageId: id, sharedHeader });
     set({ selectedSectionId: null });
     get().pushHistory();
     return id;
@@ -824,17 +917,28 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   renamePage: (id, name) => {
     const p = get().currentProject();
     if (!p) return;
-    updateCurrent(set, get, {
-      pages: p.pages.map((pg) => (pg.id === id ? { ...pg, name } : pg)),
+    const previous = p.pages.find((pg) => pg.id === id);
+    if (!previous) return;
+    const pages = p.pages.map((pg) => (pg.id === id ? { ...pg, name } : pg));
+    const sharedHeader = syncSharedHeaderNav(p.sharedHeader, pages, {
+      type: "rename",
+      pageId: id,
+      name,
+      previousName: previous.name,
     });
+    updateCurrent(set, get, { pages, sharedHeader });
   },
   setPageSlug: (id, slug) => {
     const p = get().currentProject();
     if (!p) return;
     const s = slugify(slug);
-    updateCurrent(set, get, {
-      pages: p.pages.map((pg) => (pg.id === id ? { ...pg, slug: s } : pg)),
+    const pages = p.pages.map((pg) => (pg.id === id ? { ...pg, slug: s } : pg));
+    const sharedHeader = syncSharedHeaderNav(p.sharedHeader, pages, {
+      type: "slug",
+      pageId: id,
+      slug: s,
     });
+    updateCurrent(set, get, { pages, sharedHeader });
   },
   duplicatePage: (id) => {
     const p = get().currentProject();
@@ -849,8 +953,21 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       id: nid,
       name: src.name + " (copy)",
       slug: s,
+      // Page-specific sections only — shared chrome stays project-level.
+      sections: (src.sections ?? []).filter((section) => !isNavbarSection(section) && !isFooterSection(section)),
+      useGlobalHeader: src.useGlobalHeader ?? true,
+      useGlobalFooter: src.useGlobalFooter ?? true,
+      hideHeader: src.hideHeader ?? false,
+      hideFooter: src.hideFooter ?? false,
     };
-    updateCurrent(set, get, { pages: [...p.pages, copy], currentPageId: nid });
+    const pages = [...p.pages, copy];
+    const sharedHeader = syncSharedHeaderNav(p.sharedHeader, pages, {
+      type: "add",
+      pageId: nid,
+      name: copy.name,
+      slug: copy.slug,
+    });
+    updateCurrent(set, get, { pages, currentPageId: nid, sharedHeader });
     return nid;
   },
   deletePage: (id) => {
@@ -858,7 +975,11 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     if (!p || p.pages.length <= 1) return;
     const nextPages = p.pages.filter((pg) => pg.id !== id);
     const nextCurrent = p.currentPageId === id ? nextPages[0].id : p.currentPageId;
-    updateCurrent(set, get, { pages: nextPages, currentPageId: nextCurrent });
+    const sharedHeader = syncSharedHeaderNav(p.sharedHeader, nextPages, {
+      type: "delete",
+      pageId: id,
+    });
+    updateCurrent(set, get, { pages: nextPages, currentPageId: nextCurrent, sharedHeader });
     set({ selectedSectionId: null });
     get().pushHistory();
   },
@@ -877,6 +998,15 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       pageId: page.id,
       sections: JSON.parse(JSON.stringify(page.sections)),
       widgetInstances: JSON.parse(JSON.stringify(getPageWidgetInstances(page))),
+      sharedHeader: p.sharedHeader ? JSON.parse(JSON.stringify(p.sharedHeader)) : null,
+      sharedFooter: p.sharedFooter ? JSON.parse(JSON.stringify(p.sharedFooter)) : null,
+      pagesChrome: p.pages.map((pg) => ({
+        id: pg.id,
+        useGlobalHeader: pg.useGlobalHeader,
+        useGlobalFooter: pg.useGlobalFooter,
+        hideHeader: pg.hideHeader,
+        hideFooter: pg.hideFooter,
+      })),
       globalCss: p.globalCss,
       globalJs: p.globalJs,
     };
@@ -904,6 +1034,39 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       widgetInstance,
       animation: { type: "fade-up", duration: 700, delay: 0 },
     };
+
+    // Navbar/Footer always map to the single shared chrome objects.
+    if (isNavbarSection(section) || widgetInstance?.type === "navbar") {
+      const sharedHeader = {
+        ...section,
+        id: SHARED_HEADER_SECTION_ID,
+        shared: "header" as const,
+        sharedKey: "global-header",
+        widgetInstance: widgetInstance
+          ? { ...widgetInstance, id: widgetInstance.id || `navbar-${nanoid(6)}` }
+          : createDefaultSharedHeader(project.pages).widgetInstance,
+      };
+      updateCurrent(set, get, { sharedHeader });
+      get().pushHistory();
+      set({ selectedSectionId: SHARED_HEADER_SECTION_ID, selectedWidgetId: sharedHeader.widgetInstance?.id ?? null });
+      return SHARED_HEADER_SECTION_ID;
+    }
+    if (isFooterSection(section) || widgetInstance?.type === "footer") {
+      const sharedFooter = {
+        ...section,
+        id: SHARED_FOOTER_SECTION_ID,
+        shared: "footer" as const,
+        sharedKey: "global-footer",
+        widgetInstance: widgetInstance
+          ? { ...widgetInstance, id: widgetInstance.id || `footer-${nanoid(6)}` }
+          : createDefaultSharedFooter().widgetInstance,
+      };
+      updateCurrent(set, get, { sharedFooter });
+      get().pushHistory();
+      set({ selectedSectionId: SHARED_FOOTER_SECTION_ID, selectedWidgetId: sharedFooter.widgetInstance?.id ?? null });
+      return SHARED_FOOTER_SECTION_ID;
+    }
+
     const sections = [...page.sections];
     const at = index ?? sections.length;
     sections.splice(at, 0, section);
@@ -948,18 +1111,11 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     };
 
     const buildTemplatePage = (pageDef: any) => {
-      const sharedHeader = (tpl.sharedSections ?? []).filter((section) => section.type === "header");
-      const sharedFooter = (tpl.sharedSections ?? []).filter((section) => section.type === "footer");
       const pageSections: PageSection[] = [];
-
-      sharedHeader.forEach((section, index) => {
-        pageSections.push(createSection(section, `${tpl.id}-shared-header-${index}`, index * 80));
-      });
       pageDef.sections.forEach((section: any, index: number) => {
-        pageSections.push(createSection(section, undefined, sharedHeader.length * 80 + index * 80));
-      });
-      sharedFooter.forEach((section, index) => {
-        pageSections.push(createSection(section, `${tpl.id}-shared-footer-${index}`, (sharedHeader.length + pageDef.sections.length + index) * 80));
+        // Skip inline header/footer — they become project shared chrome.
+        if (section.type === "header" || section.type === "footer") return;
+        pageSections.push(createSection(section, undefined, index * 80));
       });
 
       return {
@@ -970,23 +1126,55 @@ export const useBuilder = create<BuilderState>((set, get) => ({
         keywords: pageDef.keywords,
         seo: pageDef.seo ? { ...pageDef.seo } : undefined,
         sections: pageSections,
+        useGlobalHeader: true,
+        useGlobalFooter: true,
+        hideHeader: false,
+        hideFooter: false,
       };
     };
 
+    const templateSharedHeaderDefs = (tpl.sharedSections ?? []).filter((section) => section.type === "header");
+    const templateSharedFooterDefs = (tpl.sharedSections ?? []).filter((section) => section.type === "footer");
+    const sharedHeader = templateSharedHeaderDefs[0]
+      ? {
+          ...createSection(templateSharedHeaderDefs[0], `${tpl.id}-shared-header`, 0),
+          id: SHARED_HEADER_SECTION_ID,
+          shared: "header" as const,
+          sharedKey: "global-header",
+        }
+      : createDefaultSharedHeader();
+    const sharedFooter = templateSharedFooterDefs[0]
+      ? {
+          ...createSection(templateSharedFooterDefs[0], `${tpl.id}-shared-footer`, 0),
+          id: SHARED_FOOTER_SECTION_ID,
+          shared: "footer" as const,
+          sharedKey: "global-footer",
+        }
+      : createDefaultSharedFooter();
+
     if (tpl.pages && tpl.pages.length > 0) {
       const pages = tpl.pages.map(buildTemplatePage);
+      const syncedHeader = syncSharedHeaderNav(sharedHeader, pages) || sharedHeader;
       const firstPageId = pages[0].id;
       updateCurrent(set, get, {
         ...resetProjectBase,
         pages,
         currentPageId: firstPageId,
+        sharedHeader: syncedHeader,
+        sharedFooter,
+        sharedChromeMigrated: true,
       });
-      set({ selectedSectionId: null, selectedElement: null, selectedElementStyle: null, history: [{ pageId: firstPageId, sections: JSON.parse(JSON.stringify(pages[0].sections)), globalCss: resetProjectBase.globalCss ?? "", globalJs: resetProjectBase.globalJs ?? "" }], historyIndex: 0 });
+      set({ selectedSectionId: null, selectedElement: null, selectedElementStyle: null, history: [{ pageId: firstPageId, sections: JSON.parse(JSON.stringify(pages[0].sections)), sharedHeader: JSON.parse(JSON.stringify(syncedHeader)), sharedFooter: JSON.parse(JSON.stringify(sharedFooter)), globalCss: resetProjectBase.globalCss ?? "", globalJs: resetProjectBase.globalJs ?? "" }], historyIndex: 0 });
       get().persist();
       return;
     }
 
-    const sections = tpl.sections.map((section, index) => ({
+    const sections = tpl.sections
+      .filter((section) => {
+        const name = String(section.name || "").toLowerCase();
+        return !name.includes("header") && !name.includes("footer") && !name.includes("nav");
+      })
+      .map((section, index) => ({
       id: nanoid(8),
       templateId: `${tpl.id}-${index}`,
       name: section.name,
@@ -1002,13 +1190,21 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       name: "Home",
       slug: "index",
       sections,
+      useGlobalHeader: true,
+      useGlobalFooter: true,
+      hideHeader: false,
+      hideFooter: false,
     };
+    const syncedHeader = syncSharedHeaderNav(sharedHeader, [page]) || sharedHeader;
     updateCurrent(set, get, {
       ...resetProjectBase,
       pages: [page],
       currentPageId: page.id,
+      sharedHeader: syncedHeader,
+      sharedFooter,
+      sharedChromeMigrated: true,
     });
-    set({ selectedSectionId: null, selectedElement: null, selectedElementStyle: null, history: [{ pageId: page.id, sections: JSON.parse(JSON.stringify(page.sections)), globalCss: resetProjectBase.globalCss ?? "", globalJs: resetProjectBase.globalJs ?? "" }], historyIndex: 0 });
+    set({ selectedSectionId: null, selectedElement: null, selectedElementStyle: null, history: [{ pageId: page.id, sections: JSON.parse(JSON.stringify(page.sections)), sharedHeader: JSON.parse(JSON.stringify(syncedHeader)), sharedFooter: JSON.parse(JSON.stringify(sharedFooter)), globalCss: resetProjectBase.globalCss ?? "", globalJs: resetProjectBase.globalJs ?? "" }], historyIndex: 0 });
     const currentProject = get().currentProject();
     if (currentProject) {
       void persistProjectToCloud(currentProject).catch((error) => {
@@ -1020,6 +1216,18 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   updateSection: (id: string, patch: Partial<PageSection>) => {
     const cur = get().currentProject();
     if (!cur) return;
+
+    if (id === SHARED_HEADER_SECTION_ID || id === cur.sharedHeader?.id) {
+      if (!cur.sharedHeader) return;
+      updateCurrent(set, get, { sharedHeader: { ...cur.sharedHeader, ...patch, id: SHARED_HEADER_SECTION_ID, shared: "header" } });
+      return;
+    }
+    if (id === SHARED_FOOTER_SECTION_ID || id === cur.sharedFooter?.id) {
+      if (!cur.sharedFooter) return;
+      updateCurrent(set, get, { sharedFooter: { ...cur.sharedFooter, ...patch, id: SHARED_FOOTER_SECTION_ID, shared: "footer" } });
+      return;
+    }
+
     // find original section and its sharedKey (if any)
     let original: PageSection | null = null;
     for (const pg of cur.pages) {
@@ -1065,18 +1273,31 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     if (!cur) return;
     const page = getCurrentPage(cur);
     if (!page) return;
+
+    // Shared chrome is never deleted with a page section remove — hide on this page instead.
+    if (id === SHARED_HEADER_SECTION_ID || id === cur.sharedHeader?.id) {
+      const pages = cur.pages.map((pg) =>
+        pg.id === page.id ? { ...pg, hideHeader: true } : pg,
+      );
+      updateCurrent(set, get, { pages });
+      get().pushHistory();
+      set({ selectedSectionId: null });
+      return;
+    }
+    if (id === SHARED_FOOTER_SECTION_ID || id === cur.sharedFooter?.id) {
+      const pages = cur.pages.map((pg) =>
+        pg.id === page.id ? { ...pg, hideFooter: true } : pg,
+      );
+      updateCurrent(set, get, { pages });
+      get().pushHistory();
+      set({ selectedSectionId: null });
+      return;
+    }
+
     const removedIndex = page.sections.findIndex((s) => s.id === id);
     if (removedIndex < 0) return;
 
-    // check if section is shared and remove from all pages
-    let original: PageSection | null = null;
-    for (const pg of cur.pages) {
-      const s = pg.sections.find((ss) => ss.id === id);
-      if (s) {
-        original = s;
-        break;
-      }
-    }
+    let original: PageSection | null = page.sections[removedIndex] ?? null;
     if (!original) return;
     const sharedKey = (original as any).sharedKey as string | undefined;
     const pages = cur.pages.map((pg) => {
@@ -1105,6 +1326,9 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   },
 
   duplicateSection: (id) => {
+    if (isSharedChromeSection({ id } as PageSection) || id === SHARED_HEADER_SECTION_ID || id === SHARED_FOOTER_SECTION_ID) {
+      return;
+    }
     const page = getCurrentPage(get().currentProject());
     if (!page) return;
     const idx = page.sections.findIndex((s) => s.id === id);
@@ -1120,9 +1344,10 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const page = getCurrentPage(get().currentProject());
     if (!page) return;
     const sections = [...page.sections];
+    if (from < 0 || from >= sections.length || to < 0 || to > sections.length) return;
     const [item] = sections.splice(from, 1);
-    if (!item) return;
-    sections.splice(to, 0, item);
+    if (!item || isSharedChromeSection(item)) return;
+    sections.splice(Math.max(0, Math.min(to, sections.length)), 0, item);
     updatePageSections(set, get, sections);
     get().pushHistory();
   },
@@ -1136,8 +1361,25 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     updatePageSections(set, get, sections);
   },
   toggleHidden: (id) => {
-    const page = getCurrentPage(get().currentProject());
-    if (!page) return;
+    const cur = get().currentProject();
+    const page = getCurrentPage(cur);
+    if (!cur || !page) return;
+    if (id === SHARED_HEADER_SECTION_ID || id === cur.sharedHeader?.id) {
+      const pages = cur.pages.map((pg) =>
+        pg.id === page.id ? { ...pg, hideHeader: !pg.hideHeader } : pg,
+      );
+      updateCurrent(set, get, { pages });
+      get().pushHistory();
+      return;
+    }
+    if (id === SHARED_FOOTER_SECTION_ID || id === cur.sharedFooter?.id) {
+      const pages = cur.pages.map((pg) =>
+        pg.id === page.id ? { ...pg, hideFooter: !pg.hideFooter } : pg,
+      );
+      updateCurrent(set, get, { pages });
+      get().pushHistory();
+      return;
+    }
     const sections = page.sections.map((s) =>
       s.id === id ? { ...s, hidden: !s.hidden } : s,
     );
@@ -1147,7 +1389,10 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   selectSection: (id) => {
     const project = get().currentProject();
     const page = getCurrentPage(project);
-    const section = page?.sections.find((s) => s.id === id) ?? null;
+    const section =
+      (id && project ? findSectionInProject(project, id, page) : null) ??
+      page?.sections.find((s) => s.id === id) ??
+      null;
     const widgetInstanceId = section?.widgetInstance?.id ?? null;
     set({ selectedSectionId: id, selectedWidgetId: widgetInstanceId, selectedElement: null, selectedElementStyle: null });
   },
@@ -1320,24 +1565,34 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const currentWidget = sourceSection.widgetInstance as any;
     const currentColumns = Array.isArray(currentWidget.content?.columns) ? [...currentWidget.content.columns] : [];
     const resolvedCount = Math.max(1, Math.min(6, Number(count) || 1));
-    const shouldConfirm = resolvedCount < currentColumns.length && currentColumns.slice(resolvedCount).some((column: any) => Array.isArray(column.children) && column.children.length > 0);
-    if (shouldConfirm && typeof window !== "undefined" && typeof window.confirm === "function" && !window.confirm("Remove the extra columns and their contents?")) {
-      return;
-    }
 
     const nextColumns = Array.from({ length: resolvedCount }, (_, index) => {
       const sourceColumn = currentColumns[index];
-      const span = resolvedCount <= 1 ? 12 : resolvedCount === 2 ? 6 : resolvedCount === 3 ? 4 : resolvedCount === 4 ? 3 : 12;
+      const span = getEqualColumnSpan(resolvedCount);
       if (sourceColumn) {
         return {
           ...sourceColumn,
           id: sourceColumn.id ?? `column-${Math.random().toString(36).slice(2, 8)}`,
-          span: sourceColumn.span ?? span,
+          span,
           children: Array.isArray(sourceColumn.children) ? [...sourceColumn.children] : [],
         };
       }
       return createGridColumn(span);
     });
+
+    // When reducing columns, move overflow children into the last remaining column (never silent-drop).
+    if (currentColumns.length > resolvedCount && nextColumns.length > 0) {
+      const overflowChildren = currentColumns
+        .slice(resolvedCount)
+        .flatMap((column: any) => (Array.isArray(column?.children) ? column.children : []));
+      if (overflowChildren.length > 0) {
+        const lastIndex = nextColumns.length - 1;
+        nextColumns[lastIndex] = {
+          ...nextColumns[lastIndex],
+          children: [...(nextColumns[lastIndex].children ?? []), ...overflowChildren],
+        };
+      }
+    }
 
     get().updateWidgetInstance(widgetId, {
       ...currentWidget,
@@ -1360,25 +1615,23 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   updateWidgetElementStyle: (sectionId, widgetId, childId, elementKey, patch, location) => {
     const project = get().currentProject();
     const page = getCurrentPage(project);
-    if (!page) return;
-    const sourceSection = page.sections.find((section) => section.id === sectionId);
+    if (!project || !page) return;
+    const sourceSection = findSectionInProject(project, sectionId, page);
     if (!sourceSection?.widgetInstance || sourceSection.widgetInstance.id !== widgetId) return;
+    const stylePatch = { ...(patch as Record<string, unknown>) };
+    if ("fontSize" in stylePatch && stylePatch.fontSize != null && stylePatch.fontSize !== "") {
+      const normalized = normalizeFontSizeToPx(stylePatch.fontSize);
+      if (normalized) stylePatch.fontSize = normalized;
+    }
     const children = getWidgetChildItems(sourceSection.widgetInstance, location);
     let childPatched = false;
     const nextChildren = children.map((child) => {
       if (!child || (child.id !== childId && child.id !== elementKey)) return child;
       childPatched = true;
       const currentData = (child.data ?? {}) as Record<string, unknown>;
-      const currentStyle = (currentData.style ?? {}) as Record<string, unknown>;
       return {
         ...child,
-        data: {
-          ...currentData,
-          style: {
-            ...currentStyle,
-            ...patch,
-          },
-        },
+        data: mergeWidgetChildData(currentData, { style: stylePatch }),
       };
     });
     if (childPatched) {
@@ -1388,22 +1641,22 @@ export const useBuilder = create<BuilderState>((set, get) => ({
         ...sourceSection.widgetInstance,
         style: {
           ...sourceSection.widgetInstance.style,
-          ...patch,
+          ...stylePatch,
         },
       } as any);
     }
     get().pushHistory();
     const currentSelected = get().selectedElement;
     if (currentSelected?.sectionId === sectionId && currentSelected?.widgetId === widgetId && currentSelected?.childId === childId) {
-      set({ selectedElementStyle: { ...(get().selectedElementStyle ?? {}), ...(patch as Record<string, string>) } });
+      set({ selectedElementStyle: { ...(get().selectedElementStyle ?? {}), ...(stylePatch as Record<string, string>) } });
     }
   },
 
   updateWidgetElementContent: (sectionId, widgetId, childId, elementKey, patch, location) => {
     const project = get().currentProject();
     const page = getCurrentPage(project);
-    if (!page) return;
-    const sourceSection = page.sections.find((section) => section.id === sectionId);
+    if (!project || !page) return;
+    const sourceSection = findSectionInProject(project, sectionId, page);
     if (!sourceSection?.widgetInstance || sourceSection.widgetInstance.id !== widgetId) return;
     const children = getWidgetChildItems(sourceSection.widgetInstance, location);
     let childPatched = false;
@@ -1411,16 +1664,9 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       if (!child || (child.id !== childId && child.id !== elementKey)) return child;
       childPatched = true;
       const currentData = (child.data ?? {}) as Record<string, unknown>;
-      const currentContent = (currentData.content ?? {}) as Record<string, unknown>;
       return {
         ...child,
-        data: {
-          ...currentData,
-          content: {
-            ...currentContent,
-            ...patch,
-          },
-        },
+        data: mergeWidgetChildData(currentData, { content: patch as Record<string, unknown> }),
       };
     });
     if (!childPatched) return;
@@ -1500,6 +1746,14 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       }),
     });
   },
+  setPageChromeSettings: (id, patch) => {
+    const p = get().currentProject();
+    if (!p) return;
+    updateCurrent(set, get, {
+      pages: p.pages.map((pg) => (pg.id === id ? { ...pg, ...patch } : pg)),
+    });
+    get().pushHistory();
+  },
   setSectionHtml: (id, html) => {
     const page = getCurrentPage(get().currentProject());
     if (!page) return;
@@ -1512,6 +1766,23 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     const page = getCurrentPage(project);
     if (!page) return;
 
+    if (project.sharedHeader?.widgetInstance?.id === id) {
+      const sharedHeader = {
+        ...project.sharedHeader,
+        widgetInstance: { ...project.sharedHeader.widgetInstance, ...patch },
+      };
+      updateCurrent(set, get, { sharedHeader });
+      return;
+    }
+    if (project.sharedFooter?.widgetInstance?.id === id) {
+      const sharedFooter = {
+        ...project.sharedFooter,
+        widgetInstance: { ...project.sharedFooter.widgetInstance, ...patch },
+      };
+      updateCurrent(set, get, { sharedFooter });
+      return;
+    }
+
     const sections = page.sections.map((s) => {
       if (!s.widgetInstance || s.widgetInstance.id !== id) return s;
       return { ...s, widgetInstance: { ...s.widgetInstance, ...patch } };
@@ -1521,8 +1792,28 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       .map((section) => section.widgetInstance)
       .filter((item): item is WidgetInstance => !!item);
 
-    updatePageWidgetInstances(set, get, widgetInstances);
-    updatePageSections(set, get, sections);
+    // Single atomic update so Canvas rebuild sees sections + widgetInstances together.
+    set((s) => {
+      if (!s.currentProjectId) return s;
+      const cur = s.projects[s.currentProjectId];
+      if (!cur) return s;
+      const pages = cur.pages.map((pg) =>
+        pg.id === cur.currentPageId ? { ...pg, sections, widgetInstances } : pg,
+      );
+      return {
+        projects: {
+          ...s.projects,
+          [s.currentProjectId]: { ...cur, pages, updatedAt: Date.now() },
+        },
+      };
+    });
+    get().persist();
+    const currentProject = get().currentProject();
+    if (currentProject) {
+      void persistProjectToCloud(currentProject).catch((error) => {
+        console.error("Failed to sync current project to Firestore", error);
+      });
+    }
   },
   setPageHtml: (html) => {
     const page = getCurrentPage(get().currentProject());
@@ -1618,15 +1909,26 @@ function applyHistoryEntry(
     if (!s.currentProjectId) return s;
     const cur = s.projects[s.currentProjectId];
     if (!cur) return s;
-    const pages = cur.pages.map((pg) =>
-      pg.id === entry.pageId
-        ? {
-            ...pg,
-            sections: entry.sections,
-            widgetInstances: entry.widgetInstances ?? entry.sections.map((section) => section.widgetInstance).filter((item): item is WidgetInstance => !!item),
-          }
-        : pg,
-    );
+    const chromeById = new Map((entry.pagesChrome ?? []).map((item) => [item.id, item]));
+    const pages = cur.pages.map((pg) => {
+      const chrome = chromeById.get(pg.id);
+      const nextPage =
+        pg.id === entry.pageId
+          ? {
+              ...pg,
+              sections: entry.sections,
+              widgetInstances: entry.widgetInstances ?? entry.sections.map((section) => section.widgetInstance).filter((item): item is WidgetInstance => !!item),
+            }
+          : pg;
+      if (!chrome) return nextPage;
+      return {
+        ...nextPage,
+        useGlobalHeader: chrome.useGlobalHeader,
+        useGlobalFooter: chrome.useGlobalFooter,
+        hideHeader: chrome.hideHeader,
+        hideFooter: chrome.hideFooter,
+      };
+    });
     return {
       projects: {
         ...s.projects,
@@ -1634,6 +1936,8 @@ function applyHistoryEntry(
           ...cur,
           pages,
           currentPageId: entry.pageId,
+          sharedHeader: entry.sharedHeader !== undefined ? entry.sharedHeader : cur.sharedHeader,
+          sharedFooter: entry.sharedFooter !== undefined ? entry.sharedFooter : cur.sharedFooter,
           globalCss: entry.globalCss,
           globalJs: entry.globalJs,
           updatedAt: Date.now(),

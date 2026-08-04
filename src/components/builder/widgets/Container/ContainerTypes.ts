@@ -1,6 +1,7 @@
 import type { WidgetData } from "../widgetRegistry";
+import { normalizeFontSizeFields } from "../fontSize";
 
-export type ContainerChildWidgetType = "heading" | "text" | "button" | "image";
+export type ContainerChildWidgetType = "heading" | "text" | "button" | "image" | "container";
 export type WidgetChildType = ContainerChildWidgetType;
 
 export interface ContainerChildItem {
@@ -27,9 +28,9 @@ export function getContainerChildWidgetData(child: ContainerChildItem) {
 
   return {
     content: (hasNestedData ? (source.content as Record<string, unknown> | undefined) ?? {} : source) as Record<string, unknown>,
-    style: (hasNestedData ? (source.style as Record<string, unknown> | undefined) ?? {} : {}) as Record<string, unknown>,
+    style: normalizeFontSizeFields((hasNestedData ? (source.style as Record<string, unknown> | undefined) ?? {} : {}) as Record<string, unknown>),
     layout: (hasNestedData ? (source.layout as Record<string, unknown> | undefined) ?? {} : {}) as Record<string, unknown>,
-    responsive: (hasNestedData ? (source.responsive as Record<string, unknown> | undefined) ?? {} : {}) as Record<string, unknown>,
+    responsive: normalizeFontSizeFields((hasNestedData ? (source.responsive as Record<string, unknown> | undefined) ?? {} : {}) as Record<string, unknown>),
     animation: (hasNestedData ? (source.animation as Record<string, unknown> | undefined) ?? {} : {}) as Record<string, unknown>,
     advanced: (hasNestedData ? (source.advanced as Record<string, unknown> | undefined) ?? {} : {}) as Record<string, unknown>,
     variant: typeof source.variant === "string" ? source.variant : undefined,
@@ -74,6 +75,8 @@ export interface ContainerWidgetData extends WidgetData {
     alignment?: "left" | "center" | "right";
     gap?: string;
     columns?: number;
+    padding?: unknown;
+    margin?: unknown;
   };
   responsive: Record<string, unknown>;
   animation: Record<string, unknown>;
