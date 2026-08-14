@@ -7,6 +7,8 @@ import {
   updateProject,
 } from '@/services/projectService';
 import { useProjectStore } from '@/store/projectStore';
+import { useCloudProjectsStore } from '@/lib/builder/cloudProjectsStore';
+import { useBuilder } from '@/lib/builder/store';
 
 export function useProjects() {
   const {
@@ -49,8 +51,40 @@ export function useProjects() {
 
   const deleteExistingProject = useCallback(
     async (projectId: string) => {
+      // Delete from cloud first
       await deleteProject(projectId);
+
+      // Remove from project metadata store (single source of truth for metadata)
       removeProject(projectId);
+
+      // Remove from builder-local store if present. If the project is currently open in the editor,
+      // navigate to the dashboard to avoid leaving broken references.
+      try {
+        const builderState = useBuilder.getState();
+        const wasCurrent = builderState.currentProjectId === projectId;
+        if (builderState.projects && builderState.projects[projectId]) {
+          builderState.deleteProject(projectId);
+        }
+        if (wasCurrent && typeof window !== 'undefined') {
+          // Prefer client-side navigation if available by updating location.
+          try {
+            window.history.replaceState({}, '', '/dashboard');
+            // Also trigger a popstate so routers listening may react
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          } catch (e) {
+            window.location.href = '/dashboard';
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+
+      // Refresh cloud projects store so dashboard and other views update immediately
+      try {
+        useCloudProjectsStore.getState().refreshProjects();
+      } catch (err) {
+        // ignore
+      }
     },
     [removeProject]
   );

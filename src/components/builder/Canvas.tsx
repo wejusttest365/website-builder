@@ -735,9 +735,9 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
           if (act === "top" && fromIdx > 0) state.moveSection(fromIdx, 0);
           if (act === "bottom" && fromIdx >= 0) state.moveSection(fromIdx, secs.length - 1);
           if (act === "dup") state.duplicateSection(sid);
+          if (act === "del") state.removeSection(sid);
         }
         if (act === "hide") state.toggleHidden(sid);
-        if (act === "del") state.removeSection(sid);
         if (act === "template") {
           state.setLeftPanelView("templates");
           state.setLeftPanelOpen(true);

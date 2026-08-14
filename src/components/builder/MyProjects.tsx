@@ -11,7 +11,9 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { useAuth } from "@/lib/auth";
 import { useBuilder, type Page } from "@/lib/builder/store";
 import { useCloudProjects } from "@/lib/builder/useCloudProjects";
-import { createProject as createCloudProject, updateProject as updateCloudProject, deleteProject as deleteCloudProject } from "@/services/project";
+import { createProject as createCloudProject, updateProject as updateCloudProject } from "@/services/project";
+import { useProjects } from '@/hooks/useProjects';
+import { useCloudProjectsStore } from '@/lib/builder/cloudProjectsStore';
 import { deleteBuilderProject, getBuilderProject, saveBuilderProject } from "@/services/builderProject";
 import { buildSiteExport } from "@/lib/builder/preview";
 import { useNavigate } from "@tanstack/react-router";
@@ -62,6 +64,7 @@ export function MyProjects({
   const [exportLoading, setExportLoading] = useState(false);
   const [animatingFavoriteId, setAnimatingFavoriteId] = useState<string | null>(null);
   const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
+  const { deleteExistingProject } = useProjects();
 
   useEffect(() => setLocalProjects(projects), [projects]);
 
@@ -84,28 +87,23 @@ export function MyProjects({
     setDeleteLoading(true);
 
     try {
-      if (deleteMode === "delete-forever") {
-        await deleteCloudProject(activeProject.id);
-        try {
-          await deleteBuilderProject(activeProject.id);
-        } catch (e) {
-          // Ignore if builder project was not present locally.
-        }
-
+      // Use centralized deletion to ensure all stores and caches are updated
+      if (deleteMode === 'delete-forever') {
+        await deleteExistingProject(activeProject.id);
         setLocalProjects((prev: any[]) => prev.filter((p) => p.id !== activeProject.id));
-        refresh();
-        toast.success("Project permanently deleted");
+        toast.success('Project permanently deleted');
       } else {
         const now = Date.now();
-        await updateCloudProject(activeProject.id, { status: "trashed", updatedAt: now });
-        setLocalProjects((prev: any[]) => prev.map((p) => (p.id === activeProject.id ? { ...p, status: "trashed", updatedAt: now } : p)));
-        refresh();
+        // Move to trash via cloud update and refresh
+        await updateCloudProject(activeProject.id, { status: 'trashed', updatedAt: now });
+        setLocalProjects((prev: any[]) => prev.map((p) => (p.id === activeProject.id ? { ...p, status: 'trashed', updatedAt: now } : p)));
+        useCloudProjectsStore.getState().refreshProjects();
 
         if (currentProjectId === activeProject.id) {
           navigate({ to: "/dashboard" as never });
         }
 
-        toast.success("Project moved to Trash");
+        toast.success('Project moved to Trash');
       }
     } catch (err) {
       console.error(err);

@@ -1,6 +1,5 @@
 import type { WidgetData } from "../widgetRegistry";
 import { defaultNavbarWidgetData, isNavbarWidgetData, type NavbarNavItem } from "./NavbarTypes";
-import { getNavbarVariantPresentation, normalizeNavbarVariant } from "./navbarVariantStyles";
 
 function escapeHtml(value: string | undefined) {
   if (!value) return "";
@@ -21,6 +20,63 @@ function breakpointMinWidth(breakpoint: string | undefined) {
     default:
       return 992;
   }
+}
+
+function normalizeNavbarVariant(variant: string | undefined) {
+  const variants = new Set([
+    "Classic Light",
+    "Dark Premium",
+    "Gradient CTA",
+    "Minimal No Button",
+    "Centered Brand",
+    "Centered Logo",
+    "Transparent",
+    "Minimal",
+    "Classic",
+  ]);
+  return variants.has(variant ?? "") ? variant! : "Classic Light";
+}
+
+function getNavbarVariantPresentation(
+  navbarData: NavbarWidgetData,
+  _options: { breakpoint: string; isMenuOpen: boolean; isDesktopViewport: boolean },
+) {
+  const variant = normalizeNavbarVariant(navbarData.variant);
+  const textColor = navbarData.style.textColor || (variant === "Dark Premium" ? "#f8fafc" : "#212529");
+  const navTextColor = navbarData.style.textColor || (variant === "Dark Premium" ? "#f8fafc" : "#212529");
+  const navHoverColor = navbarData.style.hoverColor || "#2563eb";
+  const navActiveColor = navbarData.style.activeColor || "#0f172a";
+  const brandClassName = "builder-navbar__brand";
+  const navClassName = variant === "Centered Brand" ? "wto-navbar--centered-brand" : "";
+
+  const navStyle: Record<string, string | undefined> = {};
+  if (variant === "Gradient CTA") {
+    navStyle.backgroundColor = navbarData.style.backgroundColor || "#ffffff";
+    navStyle.backgroundImage = "linear-gradient(90deg, #8b5cf6 0%, #2563eb 100%)";
+    navStyle.boxShadow = navbarData.style.shadow === "none" ? "none" : "0 10px 30px rgba(15, 23, 42, 0.08)";
+  } else if (variant === "Transparent") {
+    navStyle.backgroundColor = "transparent";
+    navStyle.boxShadow = "none";
+    navStyle.borderBottom = "none";
+  } else if (variant === "Dark Premium") {
+    navStyle.backgroundColor = navbarData.style.backgroundColor || "#0f172a";
+    navStyle.boxShadow = navbarData.style.shadow === "none" ? "none" : "0 10px 30px rgba(15, 23, 42, 0.18)";
+  } else {
+    navStyle.backgroundColor = navbarData.style.backgroundColor || "#ffffff";
+    if (navbarData.style.shadow !== "none") {
+      navStyle.boxShadow = "0 10px 30px rgba(15, 23, 42, 0.08)";
+    }
+  }
+
+  return {
+    navStyle,
+    textColor,
+    navTextColor,
+    navHoverColor,
+    navActiveColor,
+    navClassName,
+    brandClassName,
+  };
 }
 
 export function buildNavbarBootstrapMarkup(data: WidgetData = defaultNavbarWidgetData): string {

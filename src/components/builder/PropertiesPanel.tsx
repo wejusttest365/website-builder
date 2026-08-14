@@ -416,7 +416,6 @@ function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: 
       if (popoverRef.current?.contains(target)) return;
       setOpen(false);
     };
-
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [open]);

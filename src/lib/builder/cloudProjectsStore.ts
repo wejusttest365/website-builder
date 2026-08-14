@@ -65,7 +65,15 @@ export const useCloudProjectsStore = create<CloudProjectsState>((set, get) => ({
 
     const promise = (async () => {
       const data = await getProjects(firebaseUser.uid);
-      set({ projects: data, loading: false, error: null });
+      // Sort projects by updatedAt (newest first) to ensure Recent Projects are deterministic
+      const toMillis = (v: any) => {
+        if (!v) return 0;
+        if (typeof v === 'number') return v;
+        if (typeof v?.toDate === 'function') return v.toDate().getTime();
+        return Number(v) || 0;
+      };
+      const sorted = (data || []).slice().sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
+      set({ projects: sorted, loading: false, error: null });
     })()
       .catch((loadError) => {
         set({ projects: [], loading: false, error: getProjectLoadErrorMessage(loadError) });

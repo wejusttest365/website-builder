@@ -1253,7 +1253,19 @@ export const RUNTIME_SCRIPT = `
     ['del','fa-solid fa-trash','Delete'],
   ];
   tb.innerHTML = btns.map(b => '<button data-act="'+b[0]+'" title="'+b[2]+'" style="all:unset;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;cursor:pointer;color:#e2e8f0;background:rgba(255,255,255,0.06);border:1px solid rgba(148,163,184,0.16);transition:background .15s ease;color:#f8fafc;"><i class="'+b[1]+'" style="font-size:14px;width:16px;text-align:center"></i></button>').join('');
-  document.body.appendChild(tb);
+  let toolbarMounted = false;
+  function mountToolbar() {
+    if (!toolbarMounted && !tb.parentNode) {
+      document.body.appendChild(tb);
+      toolbarMounted = true;
+    }
+  }
+  function unmountToolbar() {
+    if (toolbarMounted && tb.parentNode) {
+      tb.parentNode.removeChild(tb);
+      toolbarMounted = false;
+    }
+  }
   const styleControlWrapper = document.createElement('div');
   styleControlWrapper.style.cssText = 'display:none;align-items:center;gap:6px;padding:0 4px;';
   const toolbarButtonCss = 'all:unset;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;cursor:pointer;color:#f8fafc;background:rgba(255,255,255,0.06);border:1px solid rgba(148,163,184,0.16);transition:background .15s ease, transform .15s ease;position:relative;';
@@ -1709,6 +1721,14 @@ export const RUNTIME_SCRIPT = `
 
   function updateToolbarForSelection(selection) {
     currentSelection = selection;
+    const isSharedSection = currentSection && !!currentSection.querySelector('[data-wto-shared]');
+    if (isSharedSection) {
+      hideAddElementMenu();
+      hideAllPopovers();
+      unmountToolbar();
+      return;
+    }
+    mountToolbar();
     const addBtn = tb.querySelector('[data-act="add"]');
     if (addBtn) {
       const isVisible = !!selection && !!selection.widgetType && childCapableWidgetTypes.has(selection.widgetType);
@@ -1729,9 +1749,20 @@ export const RUNTIME_SCRIPT = `
     if (!selection || !selection.widgetType || !childCapableWidgetTypes.has(selection.widgetType)) {
       hideAddElementMenu();
     }
+    ["move-up", "move-down", "dup", "del"].forEach((act) => {
+      const btn = tb.querySelector('[data-act="' + act + '"]');
+      if (btn) btn.style.display = "inline-flex";
+    });
   }
   function positionToolbar(element) {
-    if (!element) { tb.style.display = 'none'; return; }
+    if (!element) { unmountToolbar(); return; }
+    const isSharedSection = currentSection && !!currentSection.querySelector('[data-wto-shared]');
+    if (isSharedSection) {
+      unmountToolbar();
+      return;
+    }
+    if (!toolbarMounted) mountToolbar();
+    if (!tb.parentNode) return;
     const r = element.getBoundingClientRect();
     tb.style.display = 'flex';
     const tbw = tb.offsetWidth || 220;

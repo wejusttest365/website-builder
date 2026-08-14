@@ -123,6 +123,40 @@ export function getNavbarVariantDefaultShowCta(variant?: string) {
   }
 }
 
+export function normalizeNavbarWidgetData(data: NavbarWidgetData): NavbarWidgetData {
+  return {
+    ...defaultNavbarWidgetData,
+    ...data,
+    content: {
+      ...defaultNavbarWidgetData.content,
+      ...(data.content || {}),
+      navItems: Array.isArray(data.content?.navItems)
+        ? data.content.navItems
+        : defaultNavbarWidgetData.content.navItems,
+    },
+    style: {
+      ...defaultNavbarWidgetData.style,
+      ...(data.style || {}),
+    },
+    layout: {
+      ...defaultNavbarWidgetData.layout,
+      ...(data.layout || {}),
+    },
+    responsive: {
+      ...defaultNavbarWidgetData.responsive,
+      ...(data.responsive || {}),
+    },
+    animation: {
+      ...defaultNavbarWidgetData.animation,
+      ...(data.animation || {}),
+    },
+    advanced: {
+      ...defaultNavbarWidgetData.advanced,
+      ...(data.advanced || {}),
+    },
+  };
+}
+
 export const defaultNavbarWidgetData: NavbarWidgetData = {
   id: "navbar-widget-v1",
   type: "navbar",

@@ -14,6 +14,7 @@ import {
   type ProjectMetadata,
 } from "@/services/project";
 import { deleteBuilderProject } from "@/services/builderProject";
+import { useProjects } from '@/hooks/useProjects';
 import { useCloudProjects } from "@/lib/builder/useCloudProjects";
 import { ClientOnly } from "./ClientOnly";
 import { ProjectActionsMenu } from "./ProjectActionsMenu";
@@ -47,6 +48,7 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
   const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
   const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
   const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
+  const { deleteExistingProject } = useProjects();
   const [createOpen, setCreateOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
   const [projectName, setProjectName] = useState("My Project");
@@ -134,10 +136,8 @@ const navigate = useNavigate();
   };
 
   const onDelete = async (projectId: string) => {
-    deleteProject(projectId);
     try {
-      await deleteCloudProject(projectId);
-      await deleteBuilderProject(projectId);
+      await deleteExistingProject(projectId);
       refresh();
       toast.success("Project deleted");
     } catch (error) {
