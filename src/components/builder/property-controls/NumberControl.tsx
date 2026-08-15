@@ -37,7 +37,7 @@ export function NumberControl({
         step={step}
         disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[13px] text-slate-700 outline-none transition duration-150 focus:border-slate-300 focus:ring-1 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-8 w-full rounded-lg border border-[#363636] bg-[#171717] px-2.5 text-[13px] text-[#F5F5F5] outline-none transition duration-150 focus:border-[#FACC15] focus:ring-2 focus:ring-[#FACC15]/20 disabled:cursor-not-allowed disabled:opacity-50"
       />
     </ControlWrapper>
   );

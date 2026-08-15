@@ -45,10 +45,10 @@ export function ButtonGroupControl<T extends string>({
               title={option.tooltip || option.label}
               disabled={optionDisabled}
               onClick={() => !optionDisabled && onChange(option.value)}
-              className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition duration-150 focus:outline-none focus:ring-2 focus:ring-primary/40 ${
+              className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition duration-150 focus:outline-none focus:ring-2 focus:ring-[#FACC15]/40 ${
                 active
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                  ? "border-[#FACC15] bg-[#FACC15]/10 text-[#FACC15]"
+                  : "border-[#363636] bg-[#171717] text-[#D0D0D0] hover:border-[#363636] hover:bg-[#242424]"
               } ${optionDisabled ? "cursor-not-allowed opacity-50" : ""}`}
             >
               {option.icon}

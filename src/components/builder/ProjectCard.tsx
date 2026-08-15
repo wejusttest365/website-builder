@@ -11,18 +11,18 @@ export function PropertyCard({
   const [open, setOpen] = useState(true);
 
   return (
-    <div className="mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="mb-3 overflow-hidden rounded-2xl border border-[#363636] bg-[#1F1F1F] shadow-sm">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between bg-slate-50 px-4 py-3 transition hover:bg-slate-100"
+        className="flex w-full items-center justify-between bg-[#242424] px-4 py-3 transition hover:bg-[#2B2B2B]"
       >
-        <span className="text-sm font-semibold text-slate-800">
+        <span className="text-sm font-semibold text-[#F5F5F5]">
           {title}
         </span>
 
         <ChevronDown
-          className={`h-4 w-4 text-slate-500 transition-transform ${
+          className={`h-4 w-4 text-[#969696] transition-transform ${
             open ? "rotate-180" : ""
           }`}
         />
@@ -46,7 +46,7 @@ export function PropertyField({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+      <label className="text-xs font-medium uppercase tracking-wide text-[#969696]">
         {label}
       </label>
 

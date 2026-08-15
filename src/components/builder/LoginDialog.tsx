@@ -118,11 +118,11 @@ export function LoginDialog({
     >
       <DialogContent className="w-[min(100vw-1rem,28rem)] max-h-[calc(100vh-1.5rem)] overflow-y-auto p-0">
 
-        <div className="overflow-hidden rounded-[26px] bg-white">
+        <div className="overflow-hidden rounded-[26px] bg-[#1F1F1F]">
 
-          <div className="border-b border-slate-200 px-6 py-5">
+          <div className="border-b border-[#363636] px-6 py-5">
 
-            <DialogTitle className="text-2xl font-semibold">
+            <DialogTitle className="text-2xl font-semibold text-[#F5F5F5]">
 
               {authMode === "sign-in"
                 ? "Welcome back"
@@ -130,7 +130,7 @@ export function LoginDialog({
 
             </DialogTitle>
 
-            <DialogDescription>
+            <DialogDescription className="text-[#969696]">
 
               {authMode === "sign-in"
                 ? "Sign in to continue your projects."
@@ -151,7 +151,7 @@ export function LoginDialog({
                   toast.error("Google sign in failed");
                 }
               }}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#363636] bg-[#1F1F1F] px-4 py-3 text-sm font-semibold text-[#F5F5F5] transition hover:bg-[#242424]"
             >
               <GoogleLogo className="h-5 w-5" />
               Continue with Google
@@ -159,9 +159,9 @@ export function LoginDialog({
 
             <div className="relative my-5">
 
-              <div className="absolute left-0 right-0 top-1/2 h-px bg-slate-200"/>
+              <div className="absolute left-0 right-0 top-1/2 h-px bg-[#363636]"/>
 
-              <div className="relative mx-auto w-max bg-white px-3 text-xs text-slate-400">
+              <div className="relative mx-auto w-max bg-[#1F1F1F] px-3 text-xs text-[#969696]">
 
                 OR
 
@@ -173,16 +173,16 @@ export function LoginDialog({
               onSubmit={handleSubmit}
               className="space-y-4"
             >
-                
+                 
                          {authMode === "sign-up" && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs font-medium">
+                    <label className="mb-1 block text-xs font-medium text-[#D0D0D0]">
                       First Name
                     </label>
 
                     <div className="relative">
-                      <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <User className="absolute left-3 top-3 h-4 w-4 text-[#969696]" />
 
                       <Input
                         value={credentials.firstName}
@@ -199,12 +199,12 @@ export function LoginDialog({
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-medium">
+                    <label className="mb-1 block text-xs font-medium text-[#D0D0D0]">
                       Last Name
                     </label>
 
                     <div className="relative">
-                      <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <User className="absolute left-3 top-3 h-4 w-4 text-[#969696]" />
 
                       <Input
                         value={credentials.lastName}
@@ -223,12 +223,12 @@ export function LoginDialog({
               )}
 
               <div>
-                <label className="mb-1 block text-xs font-medium">
+                <label className="mb-1 block text-xs font-medium text-[#D0D0D0]">
                   Email
                 </label>
 
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-[#969696]" />
 
                   <Input
                     type="email"
@@ -246,12 +246,12 @@ export function LoginDialog({
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium">
+                <label className="mb-1 block text-xs font-medium text-[#D0D0D0]">
                   Password
                 </label>
 
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-[#969696]" />
 
                   <Input
                     type={showPassword ? "text" : "password"}
@@ -282,7 +282,7 @@ export function LoginDialog({
                 </div>
               </div>
 
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm text-[#D0D0D0]">
                 <input
                   type="checkbox"
                   checked={credentials.remember}
@@ -309,7 +309,7 @@ export function LoginDialog({
               </Button>
             </form>
 
-            <div className="mt-5 text-center text-sm">
+            <div className="mt-5 text-center text-sm text-[#D0D0D0]">
 
               {authMode === "sign-in" ? (
                 <>
@@ -317,7 +317,7 @@ export function LoginDialog({
 
                   <button
                     type="button"
-                    className="font-semibold text-primary"
+                    className="font-semibold text-[#FACC15]"
                     onClick={() =>
                       setAuthMode("sign-up")
                     }
@@ -331,7 +331,7 @@ export function LoginDialog({
 
                   <button
                     type="button"
-                    className="font-semibold text-primary"
+                    className="font-semibold text-[#FACC15]"
                     onClick={() =>
                       setAuthMode("sign-in")
                     }

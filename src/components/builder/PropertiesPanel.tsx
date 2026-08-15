@@ -18,7 +18,7 @@ import { createPortal } from "react-dom";
 import type { ContainerChildItem } from "@/components/builder/widgets/Container/ContainerTypes";
 
 const inputCls =
-  "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm transition-all outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100";
+  "h-10 w-full rounded-xl border border-[#363636] bg-[#171717] px-3 text-sm text-[#F5F5F5] shadow-sm transition-all outline-none focus:border-[#FACC15] focus:ring-2 focus:ring-[#FACC15]/20";
 const selectCls = inputCls + " max-w-[10rem]";
  
 type PropertyFieldConfig = {
@@ -161,7 +161,7 @@ function colorField(label: string, value: string, onChange: (value: string) => v
   };
 }
 
-function PropertyCheckbox({
+function PropertyToggle({
   label,
   checked,
   onChange,
@@ -173,15 +173,24 @@ function PropertyCheckbox({
   onBlur?: () => void;
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-muted-foreground">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
+    <label className="flex items-center justify-between gap-3 rounded-lg border border-[#363636] bg-[#1F1F1F] px-3 py-2 transition-all duration-150 hover:border-[#4A4A4A]">
+      <span className="text-sm text-[#D0D0D0]">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
         onBlur={onBlur}
-        className="h-4 w-4 rounded border-input text-primary"
-      />
-      <span>{label}</span>
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#FACC15]/30 ${
+          checked ? "border-[#FACC15] bg-[#FACC15]/15" : "border-[#3A3A3A] bg-[#2A2A2A]"
+        }`}
+      >
+        <span
+          className={`inline-block h-3.5 w-3.5 rounded-full transition-all duration-200 ${
+            checked ? "translate-x-4 bg-[#FACC15] shadow-sm" : "translate-x-0.5 bg-[#9A9A9A]"
+          }`}
+        />
+      </button>
     </label>
   );
 }
@@ -427,7 +436,7 @@ function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: 
         ref={triggerRef}
         onClick={() => setOpen((prev) => !prev)}
         onBlur={onBlur}
-        className="h-8 w-9 shrink-0 rounded border border-input bg-background p-1 shadow-sm transition hover:bg-accent"
+        className="h-8 w-9 shrink-0 rounded border border-[#363636] bg-[#1F1F1F] p-1 shadow-sm transition hover:bg-[#252525]"
         aria-label="Open color picker"
       >
         <span className="block h-full w-full rounded-sm border border-black/10" style={{ backgroundColor: swatchValue }} />
@@ -453,17 +462,17 @@ function ColorInput({ value, onChange, onBlur }: { value: string; onChange: (v: 
                   value={swatchValue}
                   onChange={(e) => onChange(e.target.value)}
                   onBlur={onBlur}
-                  className="h-9 w-9 cursor-pointer rounded border border-input bg-background p-0"
+                  className="h-9 w-9 cursor-pointer rounded border border-[#363636] bg-[#1F1F1F] p-0"
                 />
                 <input
-                  className="h-9 w-full rounded border border-input bg-background px-2 text-sm"
+                  className="h-9 w-full rounded border border-[#363636] bg-[#1F1F1F] px-2 text-sm"
                   value={normalizedValue || ""}
                   onChange={(e) => onChange(e.target.value)}
                   onBlur={onBlur}
                   placeholder="#ffffff"
                 />
               </div>
-              <div className="mt-2 text-[11px] text-muted-foreground">The picker stays inside the builder window.</div>
+              <div className="mt-2 text-[11px] text-[#969696]">The picker stays inside the builder window.</div>
             </div>,
             document.body,
           )
@@ -546,7 +555,7 @@ export function PropertiesPanel() {
 
   if (!section) {
     return (
-      <div className="h-full bg-card p-1 text-sm text-muted-foreground">
+      <div className="h-full bg-card p-1 text-sm text-[#969696]">
         <div className="font-semibold text-foreground text-base mb-2">Properties</div>
         Select a section on the canvas to edit its properties.
       </div>
@@ -805,7 +814,7 @@ export function PropertiesPanel() {
   const contentTabContent = (
     <div className="space-y-4">
       {widgetInstance && WidgetPropertiesComponent ? (
-        <div className="rounded-md border border-input bg-background p-2">
+        <div className="rounded-md border border-[#363636] bg-[#1F1F1F] p-2">
           <div className="font-semibold text-foreground text-sm mb-2">Widget Properties</div>
           <WidgetPropertiesComponent
             value={widgetInstance}
@@ -822,8 +831,8 @@ export function PropertiesPanel() {
         if (!brand) return null;
         const brandMode = brand.mode || (brand.src ? "logo" : brand.text ? "text" : "hidden");
         return (
-          <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground">Brand / Logo</div>
+          <div className="rounded-xl border border-[#363636] bg-[#1F1F1F] p-4">
+            <div className="text-xs uppercase tracking-wider text-[#969696]">Brand / Logo</div>
             <div className="mt-2 space-y-3">
               <Field label="Display">
                 <select
@@ -861,11 +870,11 @@ export function PropertiesPanel() {
               {brandMode === "logo" ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <div className="h-12 w-32 overflow-hidden rounded-md border border-input bg-background flex items-center justify-center">
+                    <div className="h-12 w-32 overflow-hidden rounded-md border border-[#363636] bg-[#1F1F1F] flex items-center justify-center">
                       {brand.src ? (
                         <img src={resolveAssetSrc(brand.src)} alt="logo" className="max-h-full max-w-full object-contain" />
                       ) : brand.hasPlaceholder ? (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#111111] text-white">
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M3 21h18" />
                             <path d="M7 17V8" />
@@ -874,16 +883,16 @@ export function PropertiesPanel() {
                           </svg>
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground">No logo</span>
+                        <span className="text-xs text-[#969696]">No logo</span>
                       )}
                     </div>
                     {brand.src && /^images\//.test(normalizeAssetPath(brand.src)) && (
-                      <button className="px-2 py-1 rounded-md border border-input text-xs" onClick={() => downloadAssetByPath(brand.src)}>
+                      <button className="px-2 py-1 rounded-md border border-[#363636] text-xs" onClick={() => downloadAssetByPath(brand.src)}>
                         Download
                       </button>
                     )}
                   </div>
-                  <label className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground cursor-pointer hover:bg-accent">
+                  <label className="inline-flex items-center gap-2 rounded-md border border-[#363636] bg-[#1F1F1F] px-3 py-2 text-sm text-[#969696] cursor-pointer hover:bg-[#252525]">
                     <UploadCloud className="h-4 w-4" />
                     Upload logo
                     <input
@@ -919,17 +928,17 @@ export function PropertiesPanel() {
         <Section title="Section CTAs">
           <div className="space-y-3">
             {sectionLinkItems.map((link, index) => (
-              <div key={`${link.text || "action"}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition-all duration-200 hover:border-violet-300 hover:bg-white hover:shadow-sm">
+              <div key={`${link.text || "action"}-${index}`} className="rounded-xl border border-[#363636] bg-[#1F1F1F] p-4 transition-all duration-200 hover:border-[#4A4A4A] hover:bg-white hover:shadow-sm">
                 <div className="mb-4 flex items-center justify-between">
                   <div className="min-w-0">
-                    <h4 className="truncate text-sm font-semibold text-slate-800">{link.text || `CTA ${index + 1}`}</h4>
-                    <p className="truncate text-xs text-slate-500">{link.href || "#"}</p>
+                    <h4 className="truncate text-sm font-semibold text-[#F5F5F5]">{link.text || `CTA ${index + 1}`}</h4>
+                    <p className="truncate text-xs text-[#969696]">{link.href || "#"}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-600" title={link.hidden ? "Show CTA" : "Hide CTA"} onClick={() => { updateHtml(toggleLinkVisibility(section.html, index)); pushHistory(); }}>
+                    <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#363636] bg-white text-[#D0D0D0] transition hover:border-[#4A4A4A] hover:bg-[#252525] hover:text-[#FACC15]" title={link.hidden ? "Show CTA" : "Hide CTA"} onClick={() => { updateHtml(toggleLinkVisibility(section.html, index)); pushHistory(); }}>
                       {link.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
-                    <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600" title="Delete CTA" onClick={() => { updateHtml(removeLinkItem(section.html, index)); pushHistory(); }}>
+                    <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#363636] bg-white text-[#D0D0D0] transition hover:border-[#4A4A4A] hover:bg-[#2A2A2A] hover:text-[#FACC15]" title="Delete CTA" onClick={() => { updateHtml(removeLinkItem(section.html, index)); pushHistory(); }}>
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -956,15 +965,15 @@ export function PropertiesPanel() {
                 <div key={`${item.text}-${index}`} className="grid grid-cols-[1fr_74px_28px] gap-1.5">
                   <input className={inputCls} value={item.text} aria-label={`Menu item ${index + 1} label`} onChange={(e) => updateHtml(updateMenuItem(section.html, index, { text: e.target.value }))} onBlur={pushHistory} />
                   <input className={inputCls} value={item.href} aria-label={`Menu item ${index + 1} link`} onChange={(e) => updateHtml(updateMenuItem(section.html, index, { href: e.target.value }))} onBlur={pushHistory} />
-                  <button type="button" className="inline-flex h-8 items-center justify-center rounded-md border border-input text-destructive hover:bg-destructive/10" title="Remove menu item" onClick={() => { updateHtml(removeMenuItem(section.html, index)); pushHistory(); }}>
+                  <button type="button" className="inline-flex h-8 items-center justify-center rounded-md border border-[#363636] text-[#FACC15] hover:bg-destructive/10" title="Remove menu item" onClick={() => { updateHtml(removeMenuItem(section.html, index)); pushHistory(); }}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ))
             ) : (
-              <div className="rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground">No menu items detected in this header. Add one below to edit it here.</div>
+              <div className="rounded-md border border-[#363636] bg-[#1F1F1F] px-3 py-2 text-sm text-[#969696]">No menu items detected in this header. Add one below to edit it here.</div>
             )}
-            <button type="button" className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-input bg-background text-xs font-medium hover:bg-accent" onClick={() => { updateHtml(addMenuItem(section.html)); pushHistory(); }}>
+            <button type="button" className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-[#363636] bg-[#1F1F1F] text-xs font-medium hover:bg-[#252525]" onClick={() => { updateHtml(addMenuItem(section.html)); pushHistory(); }}>
               <Plus className="h-3.5 w-3.5" /> Add menu item
             </button>
           </div>
@@ -978,10 +987,10 @@ export function PropertiesPanel() {
               <div key={index} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-1.5">
                 <input className={inputCls} value={item.text} aria-label={`Link ${index + 1} label`} onChange={(e) => updateHtml(updateLinkItem(section.html, index, { text: e.target.value }))} onBlur={pushHistory} />
                 <input className={inputCls} value={item.href} aria-label={`Link ${index + 1} URL`} placeholder="https://â€¦" onChange={(e) => updateHtml(updateLinkItem(section.html, index, { href: e.target.value }))} onBlur={pushHistory} />
-                <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent" title={item.hidden ? "Show element" : "Hide element"} onClick={() => { updateHtml(toggleLinkVisibility(section.html, index)); pushHistory(); }}>
+                <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#363636] bg-[#1F1F1F] text-[#969696] hover:bg-[#252525]" title={item.hidden ? "Show element" : "Hide element"} onClick={() => { updateHtml(toggleLinkVisibility(section.html, index)); pushHistory(); }}>
                   {item.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
-                <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground hover:bg-accent" title="Remove button" onClick={() => { updateHtml(removeLinkItem(section.html, index)); pushHistory(); }}>
+                <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#363636] bg-[#1F1F1F] text-[#969696] hover:bg-[#252525]" title="Remove button" onClick={() => { updateHtml(removeLinkItem(section.html, index)); pushHistory(); }}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -992,7 +1001,7 @@ export function PropertiesPanel() {
 
       {selectedElement?.kind === "text" && selectedTextItem && (
         <Section title="Text">
-          <div className="space-y-2 rounded-md border border-input bg-background p-2">
+          <div className="space-y-2 rounded-md border border-[#363636] bg-[#1F1F1F] p-2">
             <Field label={selectedTextItem.label}>
               <input className={inputCls} value={selectedTextItem.text} aria-label={`${selectedTextItem.label} text`} onChange={(e) => updateHtml(updateTextItem(section.html, selectedElement.index ?? 0, e.target.value))} onBlur={pushHistory} />
             </Field>
@@ -1002,8 +1011,8 @@ export function PropertiesPanel() {
 
       {selectedElement?.kind === "image" && selectedImageItem ? (
         <Section title="Image">
-          <div className="space-y-2 rounded-md border border-input bg-background p-2">
-            <div className="text-xs font-semibold text-muted-foreground">{selectedImageItem.label}</div>
+          <div className="space-y-2 rounded-md border border-[#363636] bg-[#1F1F1F] p-2">
+            <div className="text-xs font-semibold text-[#969696]">{selectedImageItem.label}</div>
             <Field label="ALT">
               <input className={inputCls} value={selectedImageItem.alt} placeholder="ALT" onChange={(e) => updateHtml(updateImageItem(section.html, selectedElement.index ?? 0, { alt: e.target.value }))} onBlur={pushHistory} />
             </Field>
@@ -1012,8 +1021,8 @@ export function PropertiesPanel() {
       ) : !isElementSelected && imageItems.length > 0 && (
         <Section title="Images">
           {imageItems.map((item, index) => (
-            <div key={`${item.label}-${index}`} className="space-y-2 rounded-md border border-input bg-background p-2">
-              <div className="text-xs font-semibold text-muted-foreground">{item.label}</div>
+            <div key={`${item.label}-${index}`} className="space-y-2 rounded-md border border-[#363636] bg-[#1F1F1F] p-2">
+              <div className="text-xs font-semibold text-[#969696]">{item.label}</div>
               <Field label="ALT">
                 <input className={inputCls} value={item.alt} placeholder="ALT" onChange={(e) => updateHtml(updateImageItem(section.html, index, { alt: e.target.value }))} onBlur={pushHistory} />
               </Field>
@@ -1030,7 +1039,7 @@ export function PropertiesPanel() {
           if (idx < 0) return null;
           return (
             <Section title="Link">
-              <div className="space-y-2 rounded-md border border-input bg-background p-2">
+              <div className="space-y-2 rounded-md border border-[#363636] bg-[#1F1F1F] p-2">
                 <Field label="Href">
                   <input className={inputCls} value={curHref} placeholder="#" onChange={(e) => updateHtml(updateLinkItem(section.html, idx, { href: e.target.value }))} onBlur={pushHistory} />
                 </Field>
@@ -1194,10 +1203,10 @@ export function PropertiesPanel() {
           </Field>
           <Field label="Visibility">
             <div className="space-y-2">
-              <PropertyCheckbox label="Hide on mobile" checked={Boolean((section as any).hiddenOnMobile)} onChange={(value) => updateSection(section.id, { hiddenOnMobile: value } as any)} onBlur={pushHistory} />
-              <PropertyCheckbox label="Hide on tablet" checked={Boolean((section as any).hiddenOnTablet)} onChange={(value) => updateSection(section.id, { hiddenOnTablet: value } as any)} onBlur={pushHistory} />
-              <PropertyCheckbox label="Hide on desktop" checked={Boolean((section as any).hiddenOnDesktop)} onChange={(value) => updateSection(section.id, { hiddenOnDesktop: value } as any)} onBlur={pushHistory} />
-              <PropertyCheckbox label="Sticky" checked={Boolean((section as any).sticky)} onChange={(value) => updateSection(section.id, { sticky: value } as any)} onBlur={pushHistory} />
+              <PropertyToggle label="Hide on mobile" checked={Boolean((section as any).hiddenOnMobile)} onChange={(value) => updateSection(section.id, { hiddenOnMobile: value } as any)} onBlur={pushHistory} />
+              <PropertyToggle label="Hide on tablet" checked={Boolean((section as any).hiddenOnTablet)} onChange={(value) => updateSection(section.id, { hiddenOnTablet: value } as any)} onBlur={pushHistory} />
+              <PropertyToggle label="Hide on desktop" checked={Boolean((section as any).hiddenOnDesktop)} onChange={(value) => updateSection(section.id, { hiddenOnDesktop: value } as any)} onBlur={pushHistory} />
+              <PropertyToggle label="Sticky" checked={Boolean((section as any).sticky)} onChange={(value) => updateSection(section.id, { sticky: value } as any)} onBlur={pushHistory} />
             </div>
           </Field>
         </Section>

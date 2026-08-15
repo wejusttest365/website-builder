@@ -1,145 +1,121 @@
-import { useEffect, useRef } from "react";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import { useMounted } from "@/hooks/use-mounted";
 import { useBuilder } from "@/lib/builder/store";
+import { useAuth } from "@/lib/auth";
 import { CenteredLoader } from "@/components/ui/CenteredLoader";
 import { Canvas } from "./Canvas";
-import { PropertiesPanel } from "./PropertiesPanel";
+import { AddPageDialog } from "./AddPageDialog";
+import { SeoDialog } from "./SeoDialog";
+import { RightContextPanel } from "./RightContextPanel";
+import { CanvasToolbar } from "./CanvasToolbar";
+import type { Page } from "@/lib/builder/store";
+import { AppNav } from "@/components/layout/AppNav";
 
 export function BuilderShell() {
   const hydrate = useBuilder((s) => s.hydrate);
   const hydrated = useBuilder((s) => s.hydrated);
   const dark = useBuilder((s) => s.dark);
-  const undo = useBuilder((s) => s.undo);
-  const redo = useBuilder((s) => s.redo);
-  const persistWithStatus = useBuilder((s) => s.persistWithStatus);
-  const saveStatus = useBuilder((s) => s.saveStatus);
-  const setSaveStatus = useBuilder((s) => s.setSaveStatus);
   const project = useBuilder((s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null));
-  const leftPanelOpen = useBuilder((s) => s.leftPanelOpen);
-  const leftPanelView = useBuilder((s) => s.leftPanelView);
-  const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
+  const currentProjectId = useBuilder((s) => s.currentProjectId);
+  const currentPageId = project?.currentPageId ?? null;
+  const pages = project?.pages ?? null;
+  const [localSeoModalPageId, setLocalSeoModalPageId] = useState<string | null>(null);
   const autosaveTimerRef = useRef<number | null>(null);
-  const saveStatusResetTimerRef = useRef<number | null>(null);
   const hasInitialProjectRef = useRef(false);
   const mounted = useMounted();
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
 
   useEffect(() => {
-    if (typeof document === "undefined") return;
-    document.documentElement.classList.toggle("dark", dark);
-  }, [dark]);
-
-  const initialProjectSeenRef = useRef(false);
-
-  useEffect(() => {
-    if (!project) return;
-    if (!initialProjectSeenRef.current) {
-      initialProjectSeenRef.current = true;
-      if (!leftPanelOpen) {
-        setLeftPanelOpen(true);
-      }
-    }
-  }, [project, leftPanelOpen, setLeftPanelOpen]);
-
-  // Autosave with compact feedback
-  useEffect(() => {
     if (!hydrated || !project) return;
-
     if (!hasInitialProjectRef.current) {
       hasInitialProjectRef.current = true;
       return;
     }
-
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current);
       autosaveTimerRef.current = null;
     }
-
-    autosaveTimerRef.current = window.setTimeout(() => {
-      const ok = persistWithStatus();
-      if (!ok) {
-        console.error("Autosave failed");
-      }
-    }, 2500);
-
-    return () => {
-      if (autosaveTimerRef.current) {
-        window.clearTimeout(autosaveTimerRef.current);
-        autosaveTimerRef.current = null;
-      }
-    };
-  }, [project, persistWithStatus, hydrated]);
+  }, [project, hydrated]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onBeforeUnload = () => {
-      persistWithStatus();
-    };
+    const onBeforeUnload = () => {};
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [hydrated, persistWithStatus]);
+  }, [hydrated]);
 
   useEffect(() => {
-    if (saveStatusResetTimerRef.current) {
-      window.clearTimeout(saveStatusResetTimerRef.current);
-      saveStatusResetTimerRef.current = null;
-    }
-
-    if (saveStatus !== "saved") return;
-
-    saveStatusResetTimerRef.current = window.setTimeout(() => {
-      setSaveStatus("idle");
-      saveStatusResetTimerRef.current = null;
-    }, 2200);
-
-    return () => {
-      if (saveStatusResetTimerRef.current) {
-        window.clearTimeout(saveStatusResetTimerRef.current);
-        saveStatusResetTimerRef.current = null;
-      }
-    };
-  }, [saveStatus, setSaveStatus]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    function onKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-      } else if (
-        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")
-      ) {
-        e.preventDefault();
-        redo();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo]);
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.toggle("dark", dark);
+  }, [dark]);
 
   if (!mounted || !hydrated) {
-    return <CenteredLoader details="Initializing editor…" className="bg-background/50" />;
+    return <CenteredLoader details="Initializing editor…" className="bg-[#171717]/50" />;
   }
 
+  const handleSelectPage = (pageId: string) => {
+    useBuilder.getState().selectPage(pageId);
+    if (currentProjectId) {
+      window.history.replaceState(null, "", `/editor/${currentProjectId}?pageId=${pageId}`);
+    }
+  };
+
+  const handleAddPage = (name: string, slug: string) => {
+    const addPage = useBuilder.getState().addPage;
+    const newId = addPage(name, slug);
+    if (newId && currentProjectId) {
+      window.history.replaceState(null, "", `/editor/${currentProjectId}?pageId=${newId}`);
+    }
+    return newId;
+  };
+
   return (
-    <div className="h-full w-full flex flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.09),_transparent_32%),linear-gradient(135deg,_rgba(248,250,252,0.98),_rgba(241,245,249,0.95))] text-foreground">
-      <div className="p-2 h-full min-h-0 flex flex-col">
-        <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded border border-border/70 bg-background/70 shadow-[0_25px_80px_-35px_rgba(15,23,42,0.35)] backdrop-blur">
-          <div className="flex h-full min-h-0 min-w-0 overflow-hidden">
-            <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,_rgba(248,250,252,0.65),_rgba(255,255,255,0.98))]">
+    <div className="builder-shell flex h-screen w-full bg-[#171717] text-[#F5F5F5]">
+      {/* LEFT SIDEBAR */}
+      <AppNav fixed={false} />
+
+      {/* CANVAS SECTION */}
+      <div className="builder-canvas-section flex flex-1 min-w-0 flex-col">
+        <CanvasToolbar
+          project={project}
+          pages={pages}
+          currentPageId={currentPageId}
+          onSelectPage={handleSelectPage}
+        />
+        <div className="canvas-workspace flex flex-1 min-h-0 overflow-auto">
+          <div className="flex flex-1 min-h-0 items-center justify-center p-6">
+            <div className="relative h-full w-full   overflow-hidden rounded-lg border border-[#2B2B2B] bg-white shadow-2xl">
               <Canvas />
-            </div>
-            <div className="flex w-[280px] flex-shrink-0 flex-col overflow-hidden border-l border-slate-200/80 bg-[linear-gradient(180deg,_rgba(248,250,252,0.92),_rgba(255,255,255,0.98))]">
-              <PropertiesPanel />
             </div>
           </div>
         </div>
       </div>
+
+      {/* RIGHT PANEL */}
+      <RightContextPanel />
+
+      {/* DIALOGS */}
+      {pages && (
+        <>
+          <AddPageDialog
+            open={addDialogOpen}
+            onOpenChange={setAddDialogOpen}
+            onAddPage={handleAddPage}
+          />
+          <SeoDialog
+            page={pages.find((pg: Page) => pg.id === localSeoModalPageId) ?? null}
+            project={project}
+            open={Boolean(localSeoModalPageId)}
+            onClose={() => setLocalSeoModalPageId(null)}
+          />
+        </>
+      )}
     </div>
   );
 }

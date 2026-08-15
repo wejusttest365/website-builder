@@ -1,26 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMounted } from "@/hooks/use-mounted";
-import { useBuilder, type Project as BuilderProject } from "@/lib/builder/store";
 import { useAuth } from "@/lib/auth";
-import { buildSiteExport } from "@/lib/builder/preview";
-import JSZip from "jszip";
-import {
-  ChevronDown,
-  CreditCard,
-  Download,
-  LogOut,
-  Monitor,
-  Settings,
-  Smartphone,
-  Tablet,
-  Undo2,
-  User,
-  Redo2,
-} from "lucide-react";
-import { SaveStatus } from "@/components/builder/SaveStatus";
-import { EditorTopMenu } from "@/components/builder/EditorTopMenu";
-import { toast } from "sonner";
+import { useBuilder } from "@/lib/builder/store";
+import { LogOut, User, Settings, CreditCard } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -30,38 +13,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LoginDialog } from "@/components/builder/LoginDialog";
-import { nanoid } from 'nanoid';
 
-export function Header() {
+export function Header({ hideBranding, hideProfile }: { hideBranding?: boolean; hideProfile?: boolean } = {}) {
   const mounted = useMounted();
   const navigate = useNavigate();
 
   const { user, logout, authReady } = useAuth();
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-in");
+  const showProjectDashboard = useBuilder((s) => s.showProjectDashboard);
+  const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
 
   useEffect(() => {
     if (user && authDialogOpen) {
       setAuthDialogOpen(false);
     }
   }, [user, authDialogOpen]);
-
-  const project = useBuilder(
-    (s) => (s.currentProjectId ? s.projects[s.currentProjectId] : null)
-  ) as BuilderProject | null;
-  const showProjectDashboard = useBuilder((s) => s.showProjectDashboard);
-
-  const device = useBuilder((s) => s.device);
-  const undo = useBuilder((s) => s.undo);
-  const redo = useBuilder((s) => s.redo);
-  const toggleLeftPanel = useBuilder((s) => s.toggleLeftPanel);
-  const persistWithStatus = useBuilder((s) => s.persistWithStatus);
-  const saveStatus = useBuilder((s) => s.saveStatus);
-  const saveErrorMessage = useBuilder((s) => s.saveErrorMessage);
-  const setDevice = useBuilder((s) => s.setDevice);
-  const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
-
-  const showCanvasControls = Boolean(user) && !showProjectDashboard && Boolean(project);
 
   const handleLogout = async () => {
     await logout();
@@ -73,324 +40,141 @@ export function Header() {
     setAuthDialogOpen(true);
   };
 
-  const mapBuilderProjectToDashboardMetadata = (project: BuilderProject) => ({
-    id: project.id,
-    name: project.name,
-    templateId: project.selectedTemplateId ?? null,
-    thumbnail: project.thumbnail ?? "",
-    description: project.description,
-    favorite: false,
-    status: "draft",
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
-    pages: project.pages.map((page: { slug: string }) => page.slug),
-    isPublic: false,
-  });
-
-  async function downloadZip() {
-    if (!project || !mounted) return;
-
-    const exportData = await buildSiteExport(project);
-    const zip = new JSZip();
-
-    for (const file of exportData.files) {
-      if (file.base64) {
-        zip.file(file.path, file.base64, { base64: true });
-      } else {
-        zip.file(file.path, file.content);
-      }
-    }
-
-    const blob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(blob);
-
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${project.name
-      .replace(/\s+/g, "-")
-      .toLowerCase()}.zip`;
-
-    link.click();
-
-    URL.revokeObjectURL(url);
-  }
-
-  function slugifyName(name: string) {
-    return name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "project";
-  }
-
-  async function openPreview() {
-    if (!project || !mounted) return;
-
-    const currentPage = project.pages.find((p) => p.id === project.currentPageId) || project.pages[0];
-    if (!currentPage) {
-      toast.error('Preview failed: No current page available for preview');
-      return;
-    }
-
-    const previewSlug = `${slugifyName(project.name)}-${project.id}`;
-    const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
-    const previewWindow = window.open(previewUrl, '_blank');
-    if (!previewWindow) {
-      toast.error('Preview failed: Unable to open preview window');
-      return;
-    }
-
-    const payload = {
-      __lovablePreviewPayload: true,
-      projectId: project.id,
-      project,
-      pageId: currentPage.id,
-    };
-
-    previewWindow.postMessage(payload, window.location.origin);
-    const postInterval = window.setInterval(() => {
-      if (previewWindow.closed) {
-        window.clearInterval(postInterval);
-        return;
-      }
-      try {
-        previewWindow.postMessage(payload, window.location.origin);
-      } catch (_) {
-        // ignore while the preview window loads
-      }
-    }, 250);
-    window.setTimeout(() => window.clearInterval(postInterval), 2000);
-    previewWindow.focus();
-
-    toast.success('Preview opened', { duration: 2000, position: 'top-center' });
-  }
-
   if (!mounted) {
     return (
-      <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-xl">
-        <div className="mx-auto flex h-12 max-w-[1600px] items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3 text-slate-900">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold uppercase tracking-tight text-white shadow-sm">
-              W
-            </div>
-
-            <div className="hidden sm:block">
-              <p className="text-sm font-semibold leading-none">
-                WebToolOcean
-              </p>
-              <p className="text-xs text-slate-500">
-                Website Builder
-              </p>
-            </div>
-          </div>
-
-          <div className="hidden items-center gap-2 md:flex">
-            <div className="h-9 w-20 rounded-md bg-slate-100" />
-            <div className="h-9 w-20 rounded-md bg-slate-100" />
-          </div>
-
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white md:hidden" />
+      <header className="sticky top-0 z-50 h-12 w-full border-b border-[#363636] bg-[#1F1F1F]/95">
+        <div className="flex h-full items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="h-8 w-32 rounded-md bg-[#2B2B2B]" />
+          <div className="h-8 w-8 rounded-full bg-[#2B2B2B]" />
         </div>
       </header>
     );
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-xl">
-      <div className="mx-auto flex h-12 max-w-[1600px] items-center justify-between px-4 sm:px-6 lg:px-8">
-
-        <button
-          type="button"
-          onClick={() => {
-            setShowProjectDashboard(true);
-            navigate({ to: "/" });
-          }}
-          className="flex items-center gap-3 text-slate-900 hover:text-slate-900"
-        >
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold uppercase tracking-tight text-white shadow-sm">
-            W
-          </div>
-
-          <div className="hidden sm:block">
-            <p className="text-sm font-semibold leading-none">
-              WebToolOcean
-            </p>
-            <p className="text-xs text-slate-500">
-              Website Builder
-            </p>
-          </div>
-        </button>
-
-        {showCanvasControls ? (
-          <div className="hidden items-center gap-4 md:flex">
-
-            <button
-              type="button"
-              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-              title="Undo"
-              onClick={undo}
-            >
-              <Undo2 className="w-4 h-4" />
-            </button>
-
-            <button
-              type="button"
-              className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-              title="Redo"
-              onClick={redo}
-            >
-              <Redo2 className="w-4 h-4" />
-            </button>
-
-            <button
-              type="button"
-              className={`inline-flex h-10 items-center justify-center rounded-md border transition ${
-                device === "desktop"
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-              } px-3`}
-              onClick={() => setDevice("desktop")}
-            >
-              <Monitor className="w-4 h-4" />
-            </button>
-
-            <button
-              type="button"
-              className={`inline-flex h-10 items-center justify-center rounded-md border transition ${
-                device === "tablet"
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-              } px-3`}
-              onClick={() => setDevice("tablet")}
-            >
-              <Tablet className="w-4 h-4" />
-            </button>
-
-            <button
-              type="button"
-              className={`inline-flex h-10 items-center justify-center rounded-md border transition ${
-                device === "mobile"
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-              } px-3`}
-              onClick={() => setDevice("mobile")}
-            >
-              <Smartphone className="w-4 h-4" />
-            </button>
-
-            <div className="h-6 w-px bg-slate-200/70" />
-
-            <SaveStatus status={saveStatus} errorMessage={saveErrorMessage ?? undefined} onRetry={persistWithStatus} />
-
-            <EditorTopMenu />
-          </div>
-        ) : null}
-
-        <div className="flex items-center gap-2">
-
-          {showCanvasControls && user && project && (
-            <>
+    <header className="sticky top-0 z-50 h-12 w-full border-b border-[#363636] bg-[#1F1F1F]/95">
+      <div className="flex h-full items-center justify-between px-4 sm:px-6 lg:px-8">
+        {!hideBranding ? (
+          <div className="flex items-center gap-3 text-[#F5F5F5]">
+            {showProjectDashboard ? (
               <button
                 type="button"
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50"
-                onClick={openPreview}
+                onClick={() => navigate({ to: "/" })}
+                className="flex items-center gap-3 text-[#F5F5F5] hover:text-[#F5F5F5]"
               >
-                <Monitor className="w-4 h-4" />
-                <span className="hidden md:inline">Preview</span>
-              </button>
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FACC15] text-sm font-semibold uppercase tracking-tight text-[#111111] shadow-sm">
+                  W
+                </div>
 
-              <button
-                type="button"
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-violet-600 px-3 text-sm font-medium text-white shadow-sm transition hover:bg-violet-700"
-                onClick={downloadZip}
-              >
-                <Download className="w-4 h-4" />
-                <span className="hidden md:inline">Export ZIP</span>
+                <div className="hidden sm:block">
+                  <p className="text-sm font-semibold leading-none">
+                    WebToolOcean
+                  </p>
+                  <p className="text-xs text-[#969696]">
+                    Website Builder
+                  </p>
+                </div>
               </button>
-            </>
-          )}
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FACC15] text-sm font-semibold uppercase tracking-tight text-[#111111] shadow-sm">
+                  W
+                </div>
+                <div className="hidden sm:block">
+                  <p className="text-sm font-semibold leading-none">
+                    WebToolOcean
+                  </p>
+                  <p className="text-xs text-[#969696]">
+                    Website Builder
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : <div />}
 
-          {authReady ? (
-            user ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+        {!hideProfile ? (
+          <div className="flex items-center gap-2">
+            {authReady ? (
+              user ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#363636] bg-[#1F1F1F] text-[#F5F5F5] transition hover:border-[#FACC15]"
+                    >
+                      <Avatar className="h-8 w-8">
+                        {user.photoURL ? (
+                          <AvatarImage src={user.photoURL} alt={user.name} />
+                        ) : (
+                          <AvatarFallback>{user.initials}</AvatarFallback>
+                        )}
+                      </Avatar>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent sideOffset={8} align="end" className="w-56 bg-[#1F1F1F] border-[#363636] text-[#F5F5F5]">
+                    <div className="px-3 py-2 text-sm">
+                      <p className="font-semibold text-[#F5F5F5]">{user.name}</p>
+                      <p className="text-xs text-[#969696]">{user.email}</p>
+                    </div>
+                    <DropdownMenuSeparator className="bg-[#363636]" />
+                    <DropdownMenuItem onSelect={handleSwitchAccount} className="text-[#D0D0D0] hover:bg-[#242424] hover:text-[#F5F5F5]">
+                      <User className="mr-2 h-4 w-4 text-[#969696]" />
+                      Switch Account
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        setShowProjectDashboard(true);
+                        navigate({ to: '/' });
+                      }}
+                      className="text-[#D0D0D0] hover:bg-[#242424] hover:text-[#F5F5F5]"
+                    >
+                      <User className="mr-2 h-4 w-4 text-[#969696]" />
+                      Dashboard
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => void 0} className="text-[#D0D0D0] hover:bg-[#242424] hover:text-[#F5F5F5]">
+                      <Settings className="mr-2 h-4 w-4 text-[#969696]" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => void 0} className="text-[#D0D0D0] hover:bg-[#242424] hover:text-[#F5F5F5]">
+                      <CreditCard className="mr-2 h-4 w-4 text-[#969696]" />
+                      Billing
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-[#363636]" />
+                    <DropdownMenuItem onSelect={handleLogout} className="text-[#D0D0D0] hover:bg-[#242424] hover:text-[#F5F5F5]">
+                      <LogOut className="mr-2 h-4 w-4 text-[#969696]" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <div className="hidden items-center gap-2 md:flex">
                   <button
                     type="button"
-                    className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    <Avatar className="h-9 w-9">
-                      {user.photoURL ? (
-                        <AvatarImage src={user.photoURL} alt={user.name} />
-                      ) : (
-                        <AvatarFallback>{user.initials}</AvatarFallback>
-                      )}
-                    </Avatar>
-                    <span className="hidden sm:inline">{user.name.split(" ")[0]}</span>
-                    <ChevronDown className="h-4 w-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent sideOffset={8} align="end" className="w-56">
-                  <div className="px-3 py-2 text-sm">
-                    <p className="font-semibold text-slate-900">{user.name}</p>
-                    <p className="text-xs text-slate-500">{user.email}</p>
-                  </div>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={handleSwitchAccount}>
-                    <User className="mr-2 h-4 w-4 text-slate-500" />
-                    Switch Account
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      setShowProjectDashboard(true);
-                      navigate({ to: '/' });
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-[#363636] bg-[#1F1F1F] px-4 text-sm font-semibold text-[#F5F5F5] transition hover:border-[#FACC15] hover:text-[#FACC15]"
+                    onClick={() => {
+                      setAuthMode("sign-in");
+                      setAuthDialogOpen(true);
                     }}
                   >
-                    <User className="mr-2 h-4 w-4 text-slate-500" />
-                    Dashboard
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void 0}>
-                    <Settings className="mr-2 h-4 w-4 text-slate-500" />
-                    Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void 0}>
-                    <CreditCard className="mr-2 h-4 w-4 text-slate-500" />
-                    Billing
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4 text-slate-500" />
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <div className="hidden items-center gap-2 md:flex">
-                <button
-                  type="button"
-                  className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                  onClick={() => {
-                    setAuthMode("sign-in");
-                    setAuthDialogOpen(true);
-                  }}
-                >
-                  Log in
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-10 items-center justify-center rounded-md bg-violet-950 px-4 text-sm font-semibold text-white transition hover:bg-violet-900"
-                  onClick={() => {
-                    setAuthMode("sign-up");
-                    setAuthDialogOpen(true);
-                  }}
-                >
-                  Sign Up
-                </button>
-              </div>
-            )
-          ) : null}
+                    Log in
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-[#FACC15] px-4 text-sm font-semibold text-[#111111] transition hover:bg-[#FDE047]"
+                    onClick={() => {
+                      setAuthMode("sign-up");
+                      setAuthDialogOpen(true);
+                    }}
+                  >
+                    Sign Up
+                  </button>
+                </div>
+              )
+            ) : null}
 
-        </div>
-
+          </div>
+        ) : null}
       </div>
       <LoginDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} initialMode={authMode} />
     </header>

@@ -56,13 +56,18 @@ function EditorRoute() {
           useBuilder.setState({
             projects: storedState.projects,
             hydrated: true,
-            leftPanelOpen: storedState.leftPanelOpen ?? builderState.leftPanelOpen,
+            leftPanelOpen: (storedState.leftPanelOpen ?? builderState.leftPanelOpen) as "widgets" | "pages" | "layers" | null,
             leftPanelView: storedState.leftPanelView ?? builderState.leftPanelView,
             showProjectDashboard: false,
           });
           builderState = useBuilder.getState();
           localProject = builderState.projects[projectId];
         }
+      }
+
+      // Collapse library panel by default in editor
+      if (!localProject && builderState.leftPanelOpen) {
+        useBuilder.setState({ leftPanelOpen: null });
       }
 
       // console.log("EditorRoute loadProject", {
@@ -80,6 +85,7 @@ function EditorRoute() {
         if (pageIdFromSearch) {
           selectPage(pageIdFromSearch);
         }
+        useBuilder.setState({ leftPanelOpen: null });
         return;
       }
 
@@ -95,6 +101,7 @@ function EditorRoute() {
         if (pageIdFromSearch) {
           selectPage(pageIdFromSearch);
         }
+        useBuilder.setState({ leftPanelOpen: null });
       } catch (error) {
         console.error("EditorRoute loadProject failed", error);
         navigate({ to: "/" });
@@ -106,9 +113,9 @@ function EditorRoute() {
 
   if (!authReady) {
     return (
-      <MainLayout>
+      <div className="flex h-screen w-full items-center justify-center bg-[#171717] text-[#F5F5F5]">
         <CenteredLoader message="Preparing your website builder…" details="This will only take a moment." />
-      </MainLayout>
+      </div>
     );
   }
 
@@ -117,16 +124,6 @@ function EditorRoute() {
   }
 
   return (
-    <MainLayout>
-      <AppSidebar>
-        <ClientOnly
-          fallback={
-            <CenteredLoader details="Initializing editor…" className="bg-background/50" />
-          }
-        >
-          <BuilderShell />
-        </ClientOnly>
-      </AppSidebar>
-    </MainLayout>
+    <BuilderShell />
   );
 }

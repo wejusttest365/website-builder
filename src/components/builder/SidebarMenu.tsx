@@ -24,9 +24,9 @@ const MENU_ITEMS: {
 ];
 
 interface SidebarMenuProps {
-  leftPanelOpen: boolean;
+  leftPanelOpen: "widgets" | "pages" | "layers" | null;
   leftPanelView: LeftPanelView;
-  setLeftPanelOpen: (open: boolean) => void;
+  setLeftPanelOpen: (open: "widgets" | "pages" | "layers" | null) => void;
   setLeftPanelView: (view: LeftPanelView) => void;
 }
 
@@ -36,6 +36,7 @@ export function SidebarMenu({
   setLeftPanelOpen,
   setLeftPanelView,
 }: SidebarMenuProps) {
+  const isOpen = (view: LeftPanelView) => leftPanelOpen === view;
   return (
     <TooltipProvider delayDuration={300}>
       <div className="px-3 py-3">
@@ -46,13 +47,15 @@ export function SidebarMenu({
                 <button
                   onClick={() => {
                     setLeftPanelView(key);
-                    setLeftPanelOpen(true);
+                    if (key === "widgets" || key === "pages") {
+                      setLeftPanelOpen(key);
+                    }
                   }}
                   className="flex flex-col items-center gap-1 px-1 py-0.5 rounded-md transition"
                 >
                   <div
                     className={`inline-flex h-10 w-10 items-center justify-center rounded-xl transition ${
-                      leftPanelOpen && leftPanelView === key
+                      isOpen(key)
                         ? "bg-primary text-primary-foreground shadow-md"
                         : "bg-background border border-border"
                     }`}
@@ -62,7 +65,7 @@ export function SidebarMenu({
 
                   <span
                     className={`text-[10px] ${
-                      leftPanelOpen && leftPanelView === key
+                      isOpen(key)
                         ? "font-semibold text-foreground"
                         : "text-foreground"
                     }`}

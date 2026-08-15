@@ -57,12 +57,12 @@ export function SpacingControl({ label = "Spacing", value = "0px", onChange }: S
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#969696]">{label}</div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setDevice("desktop")}
-            className={`rounded-md p-2 ${device === "desktop" ? "border border-violet-500 bg-white text-violet-600" : "text-slate-400"}`}
+            className={`rounded-md p-2 ${device === "desktop" ? "border border-[#FACC15] bg-[#1F1F1F] text-[#FACC15]" : "text-[#969696]"}`}
             aria-label="Desktop spacing"
           >
             <FontAwesomeIcon icon={faDesktop} className="h-4 w-4" />
@@ -70,7 +70,7 @@ export function SpacingControl({ label = "Spacing", value = "0px", onChange }: S
           <button
             type="button"
             onClick={() => setDevice("tablet")}
-            className={`rounded-md p-2 ${device === "tablet" ? "border border-violet-500 bg-white text-violet-600" : "text-slate-400"}`}
+            className={`rounded-md p-2 ${device === "tablet" ? "border border-[#FACC15] bg-[#1F1F1F] text-[#FACC15]" : "text-[#969696]"}`}
             aria-label="Tablet spacing"
           >
             <FontAwesomeIcon icon={faTablet} className="h-4 w-4" />
@@ -78,7 +78,7 @@ export function SpacingControl({ label = "Spacing", value = "0px", onChange }: S
           <button
             type="button"
             onClick={() => setDevice("mobile")}
-            className={`rounded-md p-2 ${device === "mobile" ? "border border-violet-500 bg-white text-violet-600" : "text-slate-400"}`}
+            className={`rounded-md p-2 ${device === "mobile" ? "border border-[#FACC15] bg-[#1F1F1F] text-[#FACC15]" : "text-[#969696]"}`}
             aria-label="Mobile spacing"
           >
             <FontAwesomeIcon icon={faMobile} className="h-4 w-4" />
@@ -89,52 +89,52 @@ export function SpacingControl({ label = "Spacing", value = "0px", onChange }: S
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div>
           <input
-            className={`h-9 w-full min-w-0 rounded-md border px-2 text-[13px] text-slate-700 ${inherited ? "border-dashed border-slate-300 bg-slate-50" : "border-slate-200 bg-white"}`}
+            className={`h-9 w-full min-w-0 rounded-md border px-2 text-[13px] text-[#F5F5F5] ${inherited ? "border-dashed border-[#363636] bg-[#242424]" : "border-[#363636] bg-[#1F1F1F]"}`}
             value={String(activeValue.top)}
             onChange={(e) => handleChangeSide("top", e.target.value)}
           />
-          <div className="mt-1 text-[11px] text-slate-400">Top</div>
+          <div className="mt-1 text-[11px] text-[#969696]">Top</div>
         </div>
         <div>
           <input
-            className={`h-9 w-full min-w-0 rounded-md border px-2 text-[13px] text-slate-700 ${inherited ? "border-dashed border-slate-300 bg-slate-50" : "border-slate-200 bg-white"}`}
+            className={`h-9 w-full min-w-0 rounded-md border px-2 text-[13px] text-[#F5F5F5] ${inherited ? "border-dashed border-[#363636] bg-[#242424]" : "border-[#363636] bg-[#1F1F1F]"}`}
             value={String(activeValue.right)}
             onChange={(e) => handleChangeSide("right", e.target.value)}
           />
-          <div className="mt-1 text-[11px] text-slate-400">Right</div>
+          <div className="mt-1 text-[11px] text-[#969696]">Right</div>
         </div>
         <div>
           <input
-            className={`h-9 w-full min-w-0 rounded-md border px-2 text-[13px] text-slate-700 ${inherited ? "border-dashed border-slate-300 bg-slate-50" : "border-slate-200 bg-white"}`}
+            className={`h-9 w-full min-w-0 rounded-md border px-2 text-[13px] text-[#F5F5F5] ${inherited ? "border-dashed border-[#363636] bg-[#242424]" : "border-[#363636] bg-[#1F1F1F]"}`}
             value={String(activeValue.bottom)}
             onChange={(e) => handleChangeSide("bottom", e.target.value)}
           />
-          <div className="mt-1 text-[11px] text-slate-400">Bottom</div>
+          <div className="mt-1 text-[11px] text-[#969696]">Bottom</div>
         </div>
         <div>
           <input
-            className={`h-9 w-full min-w-0 rounded-md border px-2 text-[13px] text-slate-700 ${inherited ? "border-dashed border-slate-300 bg-slate-50" : "border-slate-200 bg-white"}`}
+            className={`h-9 w-full min-w-0 rounded-md border px-2 text-[13px] text-[#F5F5F5] ${inherited ? "border-dashed border-[#363636] bg-[#242424]" : "border-[#363636] bg-[#1F1F1F]"}`}
             value={String(activeValue.left)}
             onChange={(e) => handleChangeSide("left", e.target.value)}
           />
-          <div className="mt-1 text-[11px] text-slate-400">Left</div>
+          <div className="mt-1 text-[11px] text-[#969696]">Left</div>
         </div>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <div className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 text-[12px] font-medium text-slate-600">
+        <div className="inline-flex h-9 items-center rounded-md border border-[#363636] bg-[#1F1F1F] px-2.5 text-[12px] font-medium text-[#D0D0D0]">
           px
         </div>
         <button
           type="button"
           onClick={() => setLinked((s) => !s)}
-          className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white p-2 text-slate-500"
+          className="inline-flex h-9 items-center justify-center rounded-md border border-[#363636] bg-[#1F1F1F] p-2 text-[#969696]"
           aria-label={linked ? "Unlink spacing values" : "Link spacing values"}
         >
           <FontAwesomeIcon icon={linked ? faLink : faLinkSlash} className="h-4 w-4" />
         </button>
       </div>
-      {inherited ? <div className="mt-2 text-[11px] text-slate-400">Inherited from the previous breakpoint.</div> : null}
+      {inherited ? <div className="mt-2 text-[11px] text-[#969696]">Inherited from the previous breakpoint.</div> : null}
     </div>
   );
 }

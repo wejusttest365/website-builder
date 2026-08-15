@@ -59,8 +59,6 @@ export function MyProjects({
   const [viewMode, setViewMode] = useState("grid" as "grid"|"list");
   const [statusFilter, setStatusFilter] = useState("all" as "all"|"published"|"draft"|"private");
   const [createOpen, setCreateOpen] = useState(false);
-  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
-  const [projectName, setProjectName] = useState("My Project");
   const [exportLoading, setExportLoading] = useState(false);
   const [animatingFavoriteId, setAnimatingFavoriteId] = useState<string | null>(null);
   const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
@@ -348,7 +346,7 @@ export function MyProjects({
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {[...Array(6)].map((_, index) => (
-          <div key={index} className="animate-pulse rounded-2xl border border-border/70 bg-card p-4 h-36" />
+          <div key={index} className="animate-pulse rounded-sm border border-border/70 bg-card p-4 h-36" />
         ))}
       </div>
     );
@@ -375,16 +373,16 @@ export function MyProjects({
   if (!filteredProjects.length) {
     return (
       <div className="p-6">
-        <div className="rounded-[32px] border border-dashed border-border/70 bg-slate-50 p-10 text-center shadow-sm">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-violet-100 text-violet-700">
+        <div className="rounded-sm border border-dashed border-[#363636] bg-[#1F1F1F] p-10 text-center shadow-sm">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-[#FACC15]/10 text-[#FACC15]">
             <Folder className="h-10 w-10" />
           </div>
 
-          <div className="mt-6 text-2xl font-semibold text-foreground">
+          <div className="mt-6 text-2xl font-semibold text-[#F5F5F5]">
             {showOnlyTrashed ? "Trash is empty" : showOnlyFavorites ? "No favorite projects yet" : "No projects yet"}
           </div>
 
-          <p className="mx-auto mt-3 max-w-xs text-sm text-muted-foreground">
+          <p className="mx-auto mt-3 max-w-xs text-sm text-[#969696]">
             {showOnlyTrashed
               ? "Deleted projects will appear here until you restore or permanently delete them."
               : showOnlyFavorites
@@ -396,14 +394,14 @@ export function MyProjects({
             <div className="mt-6 flex items-center justify-center gap-3">
               <Button
                 type="button"
-                className="my-2 inline-flex items-center justify-center rounded bg-violet-950 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-950/10 transition hover:bg-violet-900 hover:text-white"
+                className="my-2 inline-flex items-center justify-center rounded bg-[#FACC15] px-5 py-2 text-sm font-semibold text-[#111111] shadow-lg shadow-[#FACC15]/10 transition hover:bg-[#FDE047]"
                 variant="ghost"
                 onClick={() => {
                   const id = newProject("My Project");
                   navigate({ to: "/editor/$projectId", params: { projectId: id } });
                 }}
               >
-                <Plus className="h-5 w-5 text-white" />
+                <Plus className="h-5 w-5 text-[#111111]" />
                 Create Project
               </Button>
             </div>
@@ -414,38 +412,22 @@ export function MyProjects({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
+    <div className="min-h-screen bg-[#171717] p-6">
       <CreateProjectDialog
         open={createOpen}
-        projectName={projectName}
-        step={wizardStep}
-        onProjectNameChange={setProjectName}
-        onNext={() => setWizardStep(2)}
-        onCancel={() => { setCreateOpen(false); setWizardStep(1); }}
-        onCreateCustom={() => {
-          const name = projectName.trim() || "My Project";
-          const createdId = newProject(name);
-          setShowProjectDashboard(false);
-          navigate({ to: "/editor/$projectId", params: { projectId: createdId } });
-          setCreateOpen(false);
-          setWizardStep(1);
-        }}
-        onCreateTemplate={() => {
-          setCreateOpen(false);
-          navigate({ to: "/dashboard/templates" as never });
-        }}
+        onOpenChange={setCreateOpen}
       />
       <div className="mx-auto max-w-7xl">
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <div className="rounded-sm bg-[#1F1F1F] p-6 shadow-sm ring-1 ring-[#363636]">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-              <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+              <h1 className="text-2xl font-bold text-[#F5F5F5]">{title}</h1>
+              <p className="mt-1 text-sm text-[#969696]">{subtitle}</p>
             </div>
 
             <div className="flex items-center gap-4">
               {!hideCreateAction && !showOnlyFavorites && !showOnlyTrashed ? (
-                <Button className="h-12 rounded-lg bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-md hover:brightness-105" onClick={() => { setProjectName("My Project"); setWizardStep(1); setCreateOpen(true); }}>
+                <Button className="h-12 rounded-sm bg-[#FACC15] text-[#111111] shadow-md hover:bg-[#FDE047]" onClick={() => setCreateOpen(true)}>
                   <Plus className="h-4 w-4" />
                   <span className="ml-2">Create New Project</span>
                 </Button>
@@ -456,29 +438,29 @@ export function MyProjects({
           <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <div className="relative w-full sm:w-[420px]">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search projects..." className="pl-12 pr-4 h-12 rounded-2xl bg-white border" />
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#969696]" />
+                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search projects..." className="pl-12 pr-4 h-12 rounded-sm bg-[#1F1F1F] border-[#363636] text-[#F5F5F5]" />
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as any)} className="h-10 rounded-xl border px-3">
+              <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as any)} className="h-10 rounded-xl border border-[#363636] bg-[#1F1F1F] px-3 text-[#F5F5F5]">
                 <option value="newest">Sort: Newest</option>
                 <option value="oldest">Sort: Oldest</option>
                 <option value="az">Sort: A - Z</option>
                 <option value="recent">Sort: Recently Edited</option>
               </select>
 
-              <select aria-label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="h-10 rounded-xl border px-3">
+              <select aria-label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="h-10 rounded-xl border border-[#363636] bg-[#1F1F1F] px-3 text-[#F5F5F5]">
                 <option value="all">All Status</option>
                 <option value="published">Published</option>
                 <option value="draft">Draft</option>
                 <option value="private">Private</option>
               </select>
 
-              <div className="inline-flex items-center rounded-xl border bg-white p-1">
-                <button onClick={() => setViewMode("grid")} className={`p-2 rounded-lg ${viewMode === "grid" ? "bg-violet-50 text-violet-600" : "text-slate-500"}`}><LayoutGrid className="h-4 w-4" /></button>
-                <button onClick={() => setViewMode("list")} className={`p-2 rounded-lg ${viewMode === "list" ? "bg-violet-50 text-violet-600" : "text-slate-500"}`}><List className="h-4 w-4" /></button>
+              <div className="inline-flex items-center rounded-xl border border-[#363636] bg-[#1F1F1F] p-1">
+                <button onClick={() => setViewMode("grid")} className={`p-2 rounded-lg ${viewMode === "grid" ? "bg-[#FACC15] text-[#111111]" : "text-[#969696]"}`}><LayoutGrid className="h-4 w-4" /></button>
+                <button onClick={() => setViewMode("list")} className={`p-2 rounded-lg ${viewMode === "list" ? "bg-[#FACC15] text-[#111111]" : "text-[#969696]"}`}><List className="h-4 w-4" /></button>
               </div>
             </div>
           </div>
@@ -528,7 +510,7 @@ export function MyProjects({
           const isSelected = projectRecord.id === currentProjectId;
           const pagesCount = Array.isArray(projectRecord.pages) ? projectRecord.pages.length : 0;
           return (
-            <div key={projectRecord.id} className={`group w-full rounded-[20px] border bg-white transition transform hover:-translate-y-1 hover:shadow-xl overflow-hidden ${showOnlyTrashed ? "cursor-default" : "cursor-pointer"}`}> 
+            <div key={projectRecord.id} className={`group w-full rounded-sm border border-[#363636] bg-[#1F1F1F] transition transform hover:-translate-y-1 hover:shadow-xl overflow-hidden ${showOnlyTrashed ? "cursor-default" : "cursor-pointer"}`}> 
               <div className="relative h-44">
                 {projectRecord.thumbnail ? (
                   <img src={projectRecord.thumbnail} alt={projectRecord.name} className="h-44 w-full object-cover" />
@@ -543,7 +525,7 @@ export function MyProjects({
                 <div className="absolute right-3 top-3 flex items-center gap-2">
                   {!showOnlyTrashed ? (
                     <button
-                      className="rounded-full bg-white p-2 shadow-sm transition-transform duration-150"
+                      className="rounded-full bg-[#1F1F1F] p-2 shadow-sm transition-transform duration-150"
                       style={{ transform: animatingFavoriteId === projectRecord.id ? "scale(1.15)" : "scale(1)" }}
                       onClick={async (e) => {
                         e.stopPropagation();
@@ -551,7 +533,7 @@ export function MyProjects({
                       }}
                     >
                       <Star
-                        className={`h-4 w-4 transition-all duration-200 ${projectRecord.favorite ? "text-yellow-400" : "text-slate-400"}`}
+                        className={`h-4 w-4 transition-all duration-200 ${projectRecord.favorite ? "text-[#FACC15]" : "text-[#969696]"}`}
                         fill={projectRecord.favorite ? "currentColor" : "none"}
                         strokeWidth={projectRecord.favorite ? 1.8 : 1.8}
                       />
@@ -559,13 +541,13 @@ export function MyProjects({
                   ) : null}
 
                   {showOnlyTrashed ? (
-                    <div className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-700">
+                    <div className="rounded-full bg-[#F87171]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#F87171]">
                       Deleted
                     </div>
                   ) : (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button className="rounded-full bg-white p-2 shadow-sm text-slate-500 hover:bg-slate-100">
+                        <button className="rounded-full bg-[#1F1F1F] p-2 shadow-sm text-[#969696] hover:text-[#F5F5F5]">
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
                       </DropdownMenuTrigger>
@@ -589,22 +571,22 @@ export function MyProjects({
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="text-lg font-semibold text-slate-900 leading-6 truncate">{projectRecord.name}</h3>
-                    <div className="mt-1 text-sm text-violet-600">{projectRecord.templateId ?? "Custom"}</div>
+                    <h3 className="text-lg font-semibold text-[#F5F5F5] leading-6 truncate">{projectRecord.name}</h3>
+                    <div className="mt-1 text-sm text-[#969696]">{projectRecord.templateId ?? "Custom"}</div>
                   </div>
 
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${projectRecord.status === "published" ? "bg-emerald-100 text-emerald-700 border border-emerald-200" : projectRecord.status === "private" ? "bg-slate-900 text-white" : "bg-amber-100 text-amber-800"}`}>
+                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${projectRecord.status === "published" ? "bg-emerald-100 text-emerald-700 border border-emerald-200" : projectRecord.status === "private" ? "bg-[#2B2B2B] text-[#D0D0D0]" : "bg-[#2B2B2B] text-[#D0D0D0]"}`}>
                     {projectRecord.status === "published" ? "Published" : projectRecord.status === "private" ? "Private" : "Draft"}
                   </span>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
+                <div className="mt-4 flex items-center justify-between text-sm text-[#969696]">
                   <div className="flex items-center gap-4">
-                    <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-slate-600">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-[#242424] px-3 py-2 text-[#969696]">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none"><path d="M12 8v4l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       <span>{pagesCount} Page{pagesCount === 1 ? "" : "s"}</span>
                     </div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-slate-600">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-[#242424] px-3 py-2 text-[#969696]">
                       <Clock3 className="h-4 w-4" />
                       <ClientOnly><span>{formatUpdatedAt(projectRecord.updatedAt)}</span></ClientOnly>
                     </div>
@@ -626,7 +608,7 @@ export function MyProjects({
                       <Button size="sm" variant="outline" className="h-11 w-full flex items-center justify-center gap-2" onClick={async () => { await loadCloudProject(projectRecord.id); navigate({ to: "/editor/$projectId", params: { projectId: projectRecord.id } }); }}>
                         <Edit2 className="h-4 w-4" /> Edit
                       </Button>
-                      <Button size="sm" className="h-11 w-full bg-violet-600 text-white hover:bg-violet-700 flex items-center justify-center gap-2" onClick={async () => { await handlePreviewProject(projectRecord.id); }}>
+                      <Button size="sm" className="h-11 w-full bg-[#FACC15] text-[#111111] hover:bg-[#FDE047] flex items-center justify-center gap-2" onClick={async () => { await handlePreviewProject(projectRecord.id); }}>
                         <Eye className="h-4 w-4" /> Preview
                       </Button>
                       <Button size="sm" variant="outline" className="h-11 w-full flex items-center justify-center gap-2" onClick={() => handleExportProject(projectRecord.id)} disabled={exportLoading}>
@@ -644,16 +626,16 @@ export function MyProjects({
         })}
 
         {!showOnlyFavorites && !showOnlyTrashed ? (
-          <div className="group w-full rounded-[20px] border-2 border-dashed border-border bg-white transition transform hover:-translate-y-1 hover:shadow-xl flex flex-col items-center justify-center p-6">
+          <div className="group w-full rounded-sm border-2 border-dashed border-[#363636] bg-[#1F1F1F] transition transform hover:-translate-y-1 hover:shadow-xl flex flex-col items-center justify-center p-6">
             <div className="h-36 w-full flex items-center justify-center bg-transparent">
               <div className="flex flex-col items-center justify-center">
-                <div className="h-12 w-12 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center">
+                <div className="h-12 w-12 rounded-full bg-[#FACC15] text-[#111111] flex items-center justify-center">
                   <Plus className="h-6 w-6" />
                 </div>
-                <h3 className="mt-4 text-lg font-semibold text-slate-900">Create New Project</h3>
-                <p className="mt-1 text-sm text-slate-500">Start building your next amazing website</p>
+                <h3 className="mt-4 text-lg font-semibold text-[#F5F5F5]">Create New Project</h3>
+                <p className="mt-1 text-sm text-[#969696]">Start building your next amazing website</p>
                 <div className="mt-4">
-                  <Button onClick={() => { setProjectName("My Project"); setWizardStep(1); setCreateOpen(true); }} className="bg-gradient-to-r from-violet-600 to-violet-500 text-white">Create New Project</Button>
+                   <Button onClick={() => setCreateOpen(true)} className="bg-[#FACC15] text-[#111111] hover:bg-[#FDE047]">Create New Project</Button>
                 </div>
               </div>
             </div>
@@ -664,6 +646,3 @@ export function MyProjects({
     </div>
   );
 }
-
-  // Create modal shared with dashboard
-  

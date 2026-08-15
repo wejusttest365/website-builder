@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { slugify } from "@/lib/builder/store";
 import type { Page } from "@/lib/builder/store";
 
 interface PageActionsMenuProps {
@@ -25,16 +26,6 @@ interface PageActionsMenuProps {
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onSeo: (id: string) => void;
-}
-
-function slugify(value: string) {
-  return (
-    value
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "page"
-  );
 }
 
 export function PageActionsMenu({ page, pageCount, onRename, onSetSlug, onDuplicate, onDelete, onSeo }: PageActionsMenuProps) {
@@ -69,7 +60,7 @@ export function PageActionsMenu({ page, pageCount, onRename, onSetSlug, onDuplic
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border/70 bg-white text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-primary"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[#363636] bg-[#1F1F1F] text-[#969696] transition hover:border-[#FACC15] hover:bg-[#FACC15]/10 hover:text-[#FACC15]"
             aria-label="Page actions"
           >
             <MoreVertical className="h-4 w-4" />
@@ -109,7 +100,7 @@ export function PageActionsMenu({ page, pageCount, onRename, onSetSlug, onDuplic
           </DialogHeader>
 
           <div className="mt-4 space-y-2">
-            <label className="text-sm font-medium text-muted-foreground" htmlFor="page-rename-input">
+            <label className="text-sm font-medium text-[#969696]" htmlFor="page-rename-input">
               Page name
             </label>
             <Input
@@ -126,7 +117,7 @@ export function PageActionsMenu({ page, pageCount, onRename, onSetSlug, onDuplic
             />
           </div>
           <div className="space-y-4">
-            <label className="block text-sm font-medium text-muted-foreground" htmlFor="page-slug-input">
+            <label className="block text-sm font-medium text-[#969696]" htmlFor="page-slug-input">
               Page slug
             </label>
             <Input
@@ -142,14 +133,14 @@ export function PageActionsMenu({ page, pageCount, onRename, onSetSlug, onDuplic
           <DialogFooter className="mt-6">
             <button
               type="button"
-              className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-4 text-sm transition hover:bg-muted"
+              className="inline-flex h-9 items-center justify-center rounded-md border border-[#363636] bg-[#1F1F1F] px-4 text-sm text-[#D0D0D0] transition hover:bg-[#242424]"
               onClick={() => setRenameOpen(false)}
             >
               Cancel
             </button>
             <button
               type="button"
-              className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm text-primary-foreground transition hover:bg-primary/90"
+              className="inline-flex h-9 items-center justify-center rounded-md bg-[#FACC15] px-4 text-sm text-[#111111] transition hover:bg-[#FDE047]"
               onClick={handleRenameSave}
             >
               Save
@@ -169,7 +160,7 @@ export function PageActionsMenu({ page, pageCount, onRename, onSetSlug, onDuplic
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setDeleteOpen(false)}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground"
+              className="bg-[#F87171] text-white hover:bg-[#F87171]/90"
               onClick={(e: any) => {
                 try { e?.preventDefault(); } catch (_) {}
                 onDelete(page.id);

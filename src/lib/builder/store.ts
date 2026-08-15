@@ -148,7 +148,7 @@ interface HistoryEntry {
 }
 
 interface SelectedElementInfo {
-  kind: "section" | "widget" | "text" | "image" | "link" | "container";
+  kind: "section" | "widget" | "text" | "image" | "link" | "container" | "dom";
   index: number | null;
   tag?: string;
   sectionId?: string | null;
@@ -175,7 +175,7 @@ interface BuilderState {
   future: HistoryEntry[];
   clipboard: { items: WidgetInstance[]; type: "copy" | "cut"; sourceSectionId?: string } | null;
   hydrated: boolean;
-  leftPanelOpen: boolean;
+  leftPanelOpen: "widgets" | "pages" | "layers" | null;
   leftPanelView:
    | "dashboard"
   | "projects"
@@ -189,8 +189,9 @@ interface BuilderState {
   showProjectDashboard: boolean;
   saveStatus: "idle" | "saving" | "saved" | "failed";
   saveErrorMessage: string | null;
+  breadcrumb: string[];
 
-  setLeftPanelOpen: (v: boolean) => void;
+  setLeftPanelOpen: (v: "widgets" | "pages" | "layers" | null) => void;
   toggleLeftPanel: () => void;
   setLeftPanelView: (
     view:
@@ -207,6 +208,7 @@ interface BuilderState {
   setShowProjectDashboard: (show: boolean) => void;
   setSaveStatus: (status: "idle" | "saving" | "saved" | "failed") => void;
   setSaveErrorMessage: (message: string | null) => void;
+  setBreadcrumb: (v: string[]) => void;
   persistWithStatus: () => boolean;
   saveProjectToCloud: () => Promise<boolean>;
   setSelectedWidgetId: (id: string | null) => void;
@@ -287,7 +289,7 @@ const FALLBACK_KEY = "wto-builder-state";
 const DB_NAME = "wto-builder-db";
 const DB_STORE = "projects";
 
-function slugify(s: string) {
+export function slugify(s: string) {
   return (
     s
       .toLowerCase()
@@ -384,7 +386,7 @@ function normalizeStoredLeftPanelView(
   return view;
 }
 
-function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null; leftPanelOpen?: boolean; leftPanelView?: StoredLeftPanelView; showProjectDashboard?: boolean } {
+function loadFromStorage(): { projects: Record<string, Project>; currentProjectId: string | null; leftPanelOpen?: "widgets" | "pages" | "layers" | null | boolean; leftPanelView?: StoredLeftPanelView; showProjectDashboard?: boolean } {
   if (typeof window === "undefined") return { projects: {}, currentProjectId: null };
   try {
     const raw =
@@ -395,17 +397,21 @@ function loadFromStorage(): { projects: Record<string, Project>; currentProjectI
       sessionStorage.getItem(LEGACY_KEY) ??
       sessionStorage.getItem(FALLBACK_KEY);
     if (!raw) return { projects: {}, currentProjectId: null };
-    const parsed = JSON.parse(raw) as { projects: Record<string, unknown>; currentProjectId: string | null; leftPanelOpen?: boolean; leftPanelView?: StoredLeftPanelView; showProjectDashboard?: boolean };
+    const parsed = JSON.parse(raw) as { projects: Record<string, unknown>; currentProjectId: string | null; leftPanelOpen?: "widgets" | "pages" | "layers" | null | boolean; leftPanelView?: StoredLeftPanelView; showProjectDashboard?: boolean };
     const projects: Record<string, Project> = {};
     for (const [id, p] of Object.entries(parsed.projects || {})) {
       const migrated = migrateProject(p);
       migrated.assets = normalizeAssetMap(migrated.assets as Record<string, unknown> | undefined) as Record<string, BuilderAssetEntry> | undefined;
       projects[id] = migrated;
     }
+    let leftPanelOpen = parsed.leftPanelOpen;
+    if (typeof leftPanelOpen === "boolean") {
+      leftPanelOpen = leftPanelOpen ? (parsed.leftPanelView === "pages" ? "pages" : "widgets") : null;
+    }
     return {
       projects,
       currentProjectId: parsed.currentProjectId ?? null,
-      leftPanelOpen: parsed.leftPanelOpen,
+      leftPanelOpen: leftPanelOpen ?? null,
       leftPanelView: parsed.leftPanelView,
       showProjectDashboard: parsed.showProjectDashboard,
     };
@@ -417,7 +423,7 @@ function loadFromStorage(): { projects: Record<string, Project>; currentProjectI
 export function getStoredBuilderState(): {
   projects: Record<string, Project>;
   currentProjectId: string | null;
-  leftPanelOpen?: boolean;
+  leftPanelOpen?: "widgets" | "pages" | "layers" | null | boolean;
   leftPanelView?: StoredLeftPanelView;
   showProjectDashboard?: boolean;
 } {
@@ -614,6 +620,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   showProjectDashboard: false,
   saveStatus: "idle",
   saveErrorMessage: null,
+  breadcrumb: [],
 
   setShowProjectDashboard: (show) => {
     set({ showProjectDashboard: show });
@@ -635,24 +642,17 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     let pid = currentProjectId;
     let projs = projects;
     if (!pid || !projs[pid]) {
-      // Don't create a new project here.
-      // Editor route will load the project (local/cloud).
       set({
         projects: projs,
         currentProjectId: null,
         hydrated: true,
-        leftPanelOpen: leftPanelOpen ?? true,
+        leftPanelOpen: (leftPanelOpen ?? null) as BuilderState["leftPanelOpen"],
         leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages",
         showProjectDashboard: showProjectDashboard ?? false,
       });
-      //  console.log("hydrate() after set (no current project)", {
-      //   hydrated: get().hydrated,
-      //   projectIds: Object.keys(get().projects),
-      //   currentProjectId: get().currentProjectId,
-      // });
       return;
     }
-    set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: leftPanelOpen ?? true, leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages", showProjectDashboard: showProjectDashboard ?? false });
+    set({ projects: projs, currentProjectId: pid, hydrated: true, leftPanelOpen: (leftPanelOpen ?? null) as BuilderState["leftPanelOpen"], leftPanelView: normalizeStoredLeftPanelView(leftPanelView) ?? "pages", showProjectDashboard: showProjectDashboard ?? false });
     // console.log("hydrate() after set (with current project)", {
     //   hydrated: get().hydrated,
     //   projectIds: Object.keys(get().projects),
@@ -708,6 +708,7 @@ export const useBuilder = create<BuilderState>((set, get) => ({
 
   setSaveStatus: (status) => set({ saveStatus: status }),
   setSaveErrorMessage: (message) => set({ saveErrorMessage: message }),
+  setBreadcrumb: (v) => set({ breadcrumb: v }),
   persistWithStatus: () => {
     set({ saveStatus: "saving", saveErrorMessage: null });
     const ok = get().persist();
@@ -727,10 +728,13 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     return persistProjectToCloud(currentProject);
   },
 
-  leftPanelOpen: true,
+  leftPanelOpen: null,
   leftPanelView: "pages",
   setLeftPanelOpen: (v) => set({ leftPanelOpen: v }),
-  toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
+  toggleLeftPanel: () => set((s) => {
+    if (s.leftPanelOpen === null) return { leftPanelOpen: "widgets" };
+    return { leftPanelOpen: null };
+  }),
   setLeftPanelView: (view) => set({ leftPanelView: view }),
   setSelectedElementStyle: (style) => set({ selectedElementStyle: style }),
   setSelectedWidgetId: (id) => set({ selectedWidgetId: id }),
@@ -754,9 +758,9 @@ export const useBuilder = create<BuilderState>((set, get) => ({
     projects: { ...s.projects, [p.id]: p },
     currentProjectId: p.id,
     selectedSectionId: null,
-    showProjectDashboard: false,      // <-- ADD THIS
-    leftPanelOpen: true,              // <-- ADD THIS
-    leftPanelView: "widgets",         // <-- ADD THIS
+    showProjectDashboard: false,
+    leftPanelOpen: null,
+    leftPanelView: "widgets",
 
     history: [{
       pageId: page.id,
@@ -1394,11 +1398,11 @@ export const useBuilder = create<BuilderState>((set, get) => ({
       page?.sections.find((s) => s.id === id) ??
       null;
     const widgetInstanceId = section?.widgetInstance?.id ?? null;
-    set({ selectedSectionId: id, selectedWidgetId: widgetInstanceId, selectedElement: null, selectedElementStyle: null });
+    set({ selectedSectionId: id, selectedWidgetId: widgetInstanceId, selectedElement: null, selectedElementStyle: null, breadcrumb: [] });
   },
   selectElement: (value) => {
     const nextWidgetId = value ? (value.parentWidgetId ?? value.widgetId ?? get().selectedWidgetId) : null;
-    set({ selectedElement: value, selectedElementStyle: null, selectedWidgetId: nextWidgetId ?? null });
+    set({ selectedElement: value, selectedElementStyle: null, selectedWidgetId: nextWidgetId ?? null, breadcrumb: [] });
   },
   duplicateElement: (value) => {
     const project = get().currentProject();

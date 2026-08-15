@@ -74,20 +74,20 @@ export function ColorControl({
 
   return (
     <div className="space-y-2">
-      <label className="text-[11px] font-medium text-slate-500">{label}</label>
+      <label className="text-[11px] font-medium text-[#969696]">{label}</label>
 
       <div className="flex items-center gap-2">
         <button
           ref={triggerRef}
           type="button"
           onClick={() => setOpen((prev) => !prev)}
-          className="h-8 w-8 rounded-md border border-slate-200"
+          className="h-8 w-8 rounded-lg border border-[#363636]"
           style={{ background: normalizedValue }}
           aria-label="Open color picker"
         />
 
         <input
-          className="h-8 flex-1 rounded-md border border-slate-200 bg-white px-2.5 text-[13px] text-slate-700 outline-none focus:border-slate-300 focus:ring-1 focus:ring-slate-200"
+          className="h-8 flex-1 rounded-lg border border-[#363636] bg-[#171717] px-2.5 text-[13px] text-[#F5F5F5] outline-none focus:border-[#FACC15] focus:ring-2 focus:ring-[#FACC15]/20"
           value={normalizedValue}
           onChange={(e) => onChange(e.target.value || "#2563eb")}
         />

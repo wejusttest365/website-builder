@@ -1,25 +1,44 @@
 import { doc, getDoc, serverTimestamp, updateDoc, setDoc } from "firebase/firestore";
 import { db } from "@/firebase/firebase";
 
-export function sanitizeForFirestore(value: any): any {
+export function sanitizeForFirestore(value: any, seen?: WeakSet<any>): any {
   if (value === undefined) return undefined;
 
   if (value === null) return null;
 
-  if (Array.isArray(value)) {
-    return value
-      .map(sanitizeForFirestore)
-      .filter(v => v !== undefined);
+  if (typeof value === "string" || typeof value === "boolean") {
+    return value;
   }
 
-  if (
-    typeof value === "object" &&
-    value.constructor === Object
-  ) {
+  if (typeof value === "number") {
+    if (isNaN(value) || !isFinite(value)) {
+      return null;
+    }
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeForFirestore(item, seen))
+      .filter((v) => v !== undefined);
+  }
+
+  if (typeof value === "object" && value.constructor === Object) {
+    if (seen && seen.has(value)) {
+      return null;
+    }
+
+    const nextSeen = seen || new WeakSet();
+    nextSeen.add(value);
+
     const result: Record<string, any> = {};
 
     Object.entries(value).forEach(([key, val]) => {
-      const cleaned = sanitizeForFirestore(val);
+      const cleaned = sanitizeForFirestore(val, nextSeen);
 
       if (cleaned !== undefined) {
         result[key] = cleaned;
@@ -29,7 +48,19 @@ export function sanitizeForFirestore(value: any): any {
     return result;
   }
 
-  return value;
+  if (value instanceof Map) {
+    return sanitizeForFirestore(Object.fromEntries(value), seen);
+  }
+
+  if (value instanceof Set) {
+    return sanitizeForFirestore(Array.from(value), seen);
+  }
+
+  if (value instanceof RegExp) {
+    return value.toString();
+  }
+
+  return null;
 }
 
  export async function createUserIfNotExists(user: any) {

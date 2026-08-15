@@ -51,6 +51,7 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
   const addSection = useBuilder((s) => s.addSection);
   const setLeftPanelView = useBuilder((s) => s.setLeftPanelView);
   const setLeftPanelOpen = useBuilder((s) => s.setLeftPanelOpen);
+  const setBreadcrumb = useBuilder((s) => s.setBreadcrumb);
   const [screenshotPending, setScreenshotPending] = useState(false);
   const [draggingLibrarySection, setDraggingLibrarySection] = useState(false);
   const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
@@ -194,6 +195,62 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
       iframeWindow.postMessage({ __wto: true, type: 'set-selected-section', payload: { sectionId: selectedId } }, '*');
     } catch (_) {}
   }, [mounted, selectedId]);
+
+  useEffect(() => {
+    if (!mounted || !selectedId) {
+      setBreadcrumb([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      try {
+        const iframe = iframeRefToUse.current;
+        const doc = iframe?.contentDocument;
+        if (!doc) return;
+        const selectedEl = doc.querySelector('.wto-sel-selected, .wto-sel-parent') as HTMLElement | null;
+        if (!selectedEl) {
+          setBreadcrumb([]);
+          return;
+        }
+        const parts: string[] = [];
+        let cur: HTMLElement | null = selectedEl;
+        while (cur && cur !== doc.body) {
+          const tag = cur.tagName.toLowerCase();
+          const sectionId = cur.getAttribute('data-wto-section');
+          if (sectionId) {
+            parts.push('Section');
+            break;
+          }
+          const widgetId = cur.getAttribute('data-widget-id');
+          if (widgetId) {
+            parts.push('Container');
+            cur = cur.parentElement;
+            continue;
+          }
+          const label = getTagLabel(tag);
+          if (label) parts.push(label);
+          cur = cur.parentElement;
+        }
+        parts.push('Body');
+        setBreadcrumb(parts.reverse());
+      } catch (_) {}
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [mounted, selectedId, selectedElement, srcDoc, setBreadcrumb]);
+
+  function getTagLabel(tag: string): string {
+    const map: Record<string, string> = {
+      h1: 'H1', h2: 'H2', h3: 'H3', h4: 'H4', h5: 'H5', h6: 'H6',
+      p: 'Paragraph', span: 'Span', div: 'Container', section: 'Section',
+      header: 'Header', footer: 'Footer', nav: 'Navigation', main: 'Main',
+      article: 'Article', aside: 'Aside', a: 'Link', button: 'Button',
+      img: 'Image', ul: 'List', ol: 'List', li: 'List Item',
+      form: 'Form', input: 'Input', textarea: 'Textarea', label: 'Label',
+      figure: 'Figure', figcaption: 'Caption', table: 'Table',
+      blockquote: 'Quote', pre: 'Code Block', code: 'Code',
+      strong: 'Strong', em: 'Emphasis', br: 'Line Break', hr: 'Divider',
+    };
+    return map[tag] || tag.toUpperCase();
+  }
 
   useEffect(() => {
     if (!draggingLibrarySection) {
@@ -540,18 +597,20 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         const columnId = data.payload?.columnId ? String(data.payload.columnId) : null;
         const nextSelection = elementKind === "section"
           ? null
-          : {
-              kind: elementKind as any,
-              index: Number.isFinite(index) ? index : null,
-              tag,
-              sectionId: sectionId || null,
-              widgetId,
-              parentWidgetId,
-              childId,
-              elementKey,
-              elementType,
-              columnId,
-            };
+          : elementKind === "dom"
+            ? { kind: "dom" as any, index: Number.isFinite(index) ? index : null, tag, sectionId: sectionId || null }
+            : {
+                kind: elementKind as any,
+                index: Number.isFinite(index) ? index : null,
+                tag,
+                sectionId: sectionId || null,
+                widgetId,
+                parentWidgetId,
+                childId,
+                elementKey,
+                elementType,
+                columnId,
+              };
         selectElement(nextSelection);
         setSelectedElementStyle(style);
       }
@@ -740,7 +799,7 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
         if (act === "hide") state.toggleHidden(sid);
         if (act === "template") {
           state.setLeftPanelView("templates");
-          state.setLeftPanelOpen(true);
+          state.setLeftPanelOpen("widgets");
         }
       }
       if (data.type === "element-action") {
@@ -1026,9 +1085,9 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
   const frameMaxWidth = device === "desktop" ? "100%" : "100%";
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex h-full min-h-0 w-full flex-col">
       <div
-        className="relative flex-1 overflow-hidden"
+        className="relative flex-1 min-h-0 overflow-hidden bg-[#111111]"
         onDragEnter={(e) => e.preventDefault()}
         onDragOver={(e) => {
           e.preventDefault();
@@ -1055,47 +1114,50 @@ export function Canvas({ editable = true, disablePointerEvents = false, iframeRe
           handleDrop(e);
         }}
       >
-        <div ref={wrapperRef} className="w-full h-full min-h-0 flex items-stretch justify-start overflow-y-auto overflow-x-auto bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.08),_transparent_42%)] p-1 pb-4">
+        <div className="flex h-full w-full items-center justify-center p-2">
           <div
-            className="relative flex h-full min-h-0 flex-col overflow-hidden border border-black/5 bg-white shadow-[0_20px_80px_-28px_rgba(15,23,42,0.35)] transition-all duration-200"
-            style={{ width: frameWidth, maxWidth: frameMaxWidth, minWidth: 0, margin: 0, overflowX: "hidden" }}
+            className="relative h-full w-full  overflow-hidden rounded-lg border border-[#2B2B2B] bg-white shadow-2xl"
+            style={{ width: frameWidth, maxWidth: frameMaxWidth, minWidth: 0, margin: 0 }}
           >
             {mounted ? (
               <iframe
                 ref={iframeRefToUse}
                 title="preview"
                 srcDoc={srcDoc}
-                onLoad={restoreSavedScroll}
-                className={`w-full h-full border-0 ${(disablePointerEvents || draggingLibrarySection) ? "pointer-events-none" : ""}`}
+                onLoad={() => {
+                  restoreSavedScroll();
+                  try { window.dispatchEvent(new CustomEvent("wto-iframe-loaded")); } catch {}
+                }}
+                className={`h-full w-full border-0 ${(disablePointerEvents || draggingLibrarySection) ? "pointer-events-none" : ""}`}
               />
             ) : null}
             {mounted && project && pageOf(project)?.sections.length === 0 && !project.sharedHeader && !project.sharedFooter ? (
               <div
                 className={`absolute inset-0 flex flex-col items-center justify-center gap-4 border px-6 py-10 text-center text-sm ${
                   draggingLibrarySection
-                    ? "border-dashed border-sky-400 bg-sky-100/80 text-sky-700"
-                    : "border-dashed border-slate-300/80 bg-[radial-gradient(circle_at_top,_rgba(124,58,237,0.10),_transparent_55%),rgba(255,255,255,0.96)] text-slate-600"
+                    ? "border-dashed border-[#FACC15] bg-[#FACC15]/10 text-[#FACC15]"
+                    : "border-dashed border-[#363636] bg-white text-[#969696]"
                 }`}
               >
                 {draggingLibrarySection ? (
                   <div className="max-w-[320px] space-y-2">
-                    <div className="text-base font-semibold text-sky-800">Drop widget here</div>
-                    <div className="text-sm leading-6 text-sky-700/80">Release to add this widget to the canvas.</div>
+                    <div className="text-base font-semibold text-[#FACC15]">Drop widget here</div>
+                    <div className="text-sm leading-6 text-[#FACC15]/80">Release to add this widget to the canvas.</div>
                   </div>
                 ) : (
                   <>
-                    <div className="inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-violet-600/10 text-violet-600 shadow-sm">
+                    <div className="inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-[#FACC15]/10 text-[#FACC15] shadow-sm">
                       <UploadCloud className="h-8 w-8" />
                     </div>
                     <div className="max-w-[280px] space-y-2">
-                      <div className="text-base font-semibold text-slate-900">Start building your website.</div>
-                      <div className="text-sm leading-6 text-slate-500">Open the widget library and drop in a hero, navbar, or content block to begin.</div>
+                      <div className="text-base font-semibold text-[#F5F5F5]">Start building your website.</div>
+                      <div className="text-sm leading-6 text-[#969696]">Open the widget library and drop in a hero, navbar, or content block to begin.</div>
                     </div>
                     <button
-                      className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                      className="inline-flex items-center gap-2 rounded-full bg-[#FACC15] px-4 py-2 text-xs font-semibold text-[#111111] shadow-sm transition hover:bg-[#FDE047]"
                       onClick={() => {
                         setLeftPanelView("widgets");
-                        setLeftPanelOpen(true);
+                        setLeftPanelOpen("widgets");
                       }}
                     >
                       <span>Open Widgets</span>

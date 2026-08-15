@@ -93,20 +93,20 @@ export function Toolbar() {
   }
 
   return (
-    <div className="flex h-14 items-center gap-2 overflow-visible border-b border-slate-200/80 bg-white/90 px-3 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur">
-      <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50/70 px-3 py-1.5 pr-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-600/10 text-violet-600">
+    <div className="flex h-14 items-center gap-2 overflow-visible border-b border-[#363636] bg-[#1F1F1F] px-3 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+      <div className="flex items-center gap-2 rounded-full border border-[#363636] bg-[#171717] px-3 py-1.5 pr-4">
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FACC15]/10 text-[#FACC15]">
           <Sparkles className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Builder</div>
-          <div className="truncate text-xs font-semibold text-slate-900 max-w-[180px]">{project?.name ?? "Untitled project"}</div>
+          <div className="text-[10px] uppercase tracking-[0.28em] text-[#969696]">Builder</div>
+          <div className="truncate text-xs font-semibold text-[#F5F5F5] max-w-[180px]">{project?.name ?? "Untitled project"}</div>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
         <button
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-[#363636] bg-[#1F1F1F] text-[#969696] transition hover:bg-[#242424] hover:text-[#F5F5F5]"
           title="Undo"
           onClick={undo}
         >
@@ -114,14 +114,14 @@ export function Toolbar() {
         </button>
 
         <button
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-[#363636] bg-[#1F1F1F] text-[#969696] transition hover:bg-[#242424] hover:text-[#F5F5F5]"
           title="Redo"
           onClick={redo}
         >
           <Redo2 className="h-4 w-4" />
         </button>
 
-        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700 shadow-sm transition">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[#363636] bg-[#1F1F1F] px-3 py-1 text-[11px] font-medium text-[#D0D0D0] shadow-sm transition">
           <Save className="h-4 w-4" />
           <button
             className="text-left"
@@ -138,7 +138,7 @@ export function Toolbar() {
 
       <div className="ml-auto flex items-center gap-2">
         <SaveStatus status={saveStatus} errorMessage={saveErrorMessage ?? undefined} onRetry={persistWithStatus} />
-        <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white p-0.5 shadow-sm">
+        <div className="inline-flex items-center gap-1 rounded-full border border-[#363636] bg-[#1F1F1F] p-0.5 shadow-sm">
           {[
             { d: "desktop", Icon: Monitor },
             { d: "tablet", Icon: Tablet },
@@ -147,7 +147,7 @@ export function Toolbar() {
             <button
               key={d}
               onClick={() => setDevice(d as "desktop" | "tablet" | "mobile")}
-              className={`flex h-7 w-8 items-center justify-center rounded-full transition ${device === d ? "bg-violet-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
+              className={`flex h-7 w-8 items-center justify-center rounded-full transition ${device === d ? "bg-[#FACC15] text-[#111111] shadow-sm" : "text-[#969696] hover:bg-[#242424] hover:text-[#F5F5F5]"}`}
               title={d}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -156,7 +156,7 @@ export function Toolbar() {
         </div>
 
         <button
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-[#363636] bg-[#1F1F1F] text-[#969696] transition hover:bg-[#242424] hover:text-[#F5F5F5]"
           title="Toggle dark mode"
           onClick={toggleDark}
         >
@@ -166,14 +166,14 @@ export function Toolbar() {
         {showCanvasControls ? (
           <div className="relative">
             <button
-              className="mr-2 flex h-8 items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 text-[11px] font-medium text-violet-700 transition hover:bg-violet-100"
+              className="mr-2 flex h-8 items-center gap-2 rounded-full border border-[#363636] bg-[#1F1F1F] px-3 text-[11px] font-medium text-[#D0D0D0] transition hover:bg-[#242424]"
               onClick={openPreview}
               title="Open Preview"
             >
               <Monitor className="h-3.5 w-3.5" /> Preview
             </button>
             <button
-              className="flex h-8 items-center gap-2 rounded-full bg-slate-900 px-3 text-[11px] font-medium text-white transition hover:bg-slate-800"
+              className="flex h-8 items-center gap-2 rounded-full bg-[#FACC15] px-3 text-[11px] font-medium text-[#111111] transition hover:bg-[#FDE047]"
               onClick={downloadZip}
             >
               <Download className="h-3.5 w-3.5" /> Export ZIP

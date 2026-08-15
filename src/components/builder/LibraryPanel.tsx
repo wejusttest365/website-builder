@@ -53,7 +53,7 @@ type DashboardMenuKey = (typeof MAIN_MENU_ITEMS)[number]["key"];
 type ExtraPanelKey = (typeof EXTRA_PANEL_KEYS)[number];
 type PanelViewKey = CanvasMenuKey | DashboardMenuKey | ExtraPanelKey;
 
-export function LibraryPanel() {
+export function LibraryPanel({ variant = "editor" }: { variant?: "editor" | "dashboard" } = {}) {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [openWidgetId, setOpenWidgetId] = useState<string | null>(null);
@@ -77,6 +77,19 @@ export function LibraryPanel() {
   const setLeftPanelViewRaw = useBuilder((s) => s.setLeftPanelView);
   const showProjectDashboard = useBuilder((s) => s.showProjectDashboard);
   const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
+  const isPanelOpen = leftPanelOpen !== null;
+  const openLeftPanel = (view: "widgets" | "pages") => {
+    setLeftPanelOpen(view);
+    setLeftPanelViewRaw(view);
+  };
+  const closeLeftPanel = () => setLeftPanelOpen(null);
+  const toggleLeftPanel = () => {
+    if (leftPanelOpen === null) {
+      openLeftPanel(variant === "dashboard" ? "pages" : "widgets");
+    } else {
+      closeLeftPanel();
+    }
+  };
   const setLeftPanelView: (view: PanelViewKey) => void = (view) => {
     setLeftPanelViewRaw(view as any);
   };
@@ -254,11 +267,11 @@ const activePanelKey = showProjectDashboard
   const [overlayView, setOverlayView] = useState<PanelViewKey | null>(null);
   const overlayLabel = overlayView ? [...primaryMenuItems, ...editorMenuItems].find((item) => item.key === overlayView)?.label ?? overlayView : "";
   const isOverlayOpen = Boolean(overlayView);
-  const prevLeftPanelOpenRef = useRef(false);
+  const prevLeftPanelOpenRef = useRef<"widgets" | "pages" | "layers" | null>(null);
   const prevLeftPanelViewRef = useRef(leftPanelView);
 
   useEffect(() => {
-    if (!leftPanelOpen) {
+    if (!isPanelOpen) {
       setOverlayView(null);
     }
     prevLeftPanelOpenRef.current = leftPanelOpen;
@@ -266,18 +279,19 @@ const activePanelKey = showProjectDashboard
   }, [leftPanelOpen, leftPanelView]);
 
   useEffect(() => {
-    const becameOpen = !prevLeftPanelOpenRef.current && leftPanelOpen;
+    const becameOpen = prevLeftPanelOpenRef.current === null && leftPanelOpen !== null;
     const viewChanged = prevLeftPanelViewRef.current !== leftPanelView;
 
     if (
-      leftPanelOpen &&
+      isPanelOpen &&
       !showProjectDashboard &&
       isCanvasMenuKey(leftPanelView) &&
       (becameOpen || viewChanged)
     ) {
       setOverlayView(leftPanelView);
     }
-  }, [leftPanelOpen, leftPanelView, showProjectDashboard, isCanvasMenuKey]);
+  }, [leftPanelOpen, leftPanelView, showProjectDashboard, isCanvasMenuKey, isPanelOpen]);
+
 
   useEffect(() => {
     if (leftPanelOpen && !showProjectDashboard && leftPanelView === "widgets") {
@@ -389,44 +403,9 @@ const handleLogout = async () => {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="relative h-full min-h-0 flex flex-col bg-background/50">
-        {leftPanelOpen ? (
-          <div className="border-b border-border/70 px-2 py-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Workspace</p>
-                <div className="text-sm font-semibold text-foreground">Sidebar Controls</div>
-              </div>
-              <button
-                type="button"
-                className="inline-flex h-9 items-center rounded-md border border-border/70 bg-background/90 px-3 text-xs font-medium text-foreground transition hover:bg-muted"
-                onClick={() => setLeftPanelOpen(!leftPanelOpen)}
-              >
-                <Menu className="h-4 w-4" />
-                <span className="ml-2 hidden sm:inline">Collapse</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex h-24 flex-col items-center justify-center gap-3 border-b border-border/70 px-2 py-3">
-            <button
-              type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-background/90 text-foreground transition hover:bg-muted"
-              onClick={() => setLeftPanelOpen(!leftPanelOpen)}
-              aria-label="Expand sidebar"
-            >
-              <Menu className="h-4 w-4" />
-            </button>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-sm font-semibold text-white shadow-sm">
-              W
-            </div>
-          </div>
-        )}
-
+      <div className={`relative h-full min-h-0 flex flex-col ${variant === "dashboard" ? "bg-[#202020]" : "bg-[#202020]"}`}>
         <div className="px-2 py-2">
-           
-
-          <div className={`${leftPanelOpen ? "space-y-2" : "space-y-1"}`}>
+          <div className={`${isPanelOpen ? "space-y-2" : "space-y-1"}`}>
             {primaryMenuItems.map(({ key, label, Icon }) => {
               const active = activePanelKey === key;
               const badgeCount = key === "projects"
@@ -447,40 +426,40 @@ const handleLogout = async () => {
                         const destination = dashboardPathMap[key as DashboardMenuKey];
                         if (destination) {
                           setShowProjectDashboard(true);
-                          setLeftPanelOpen(true);
+                          openLeftPanel("pages");
                           setOverlayView(null);
                           navigate({ to: destination as never });
                         }
                       }}
-                      className={`group flex w-full ${leftPanelOpen ? "items-center gap-2 px-2.5 py-2 text-left" : "justify-center px-0 py-2"} rounded-md text-sm font-semibold transition ${
-                        active ? "bg-violet-50 text-violet-900" : "bg-white text-slate-700 hover:bg-slate-50"
+                      className={`group flex w-full ${isPanelOpen ? "items-center gap-2 px-2.5 py-2 text-left" : "justify-center px-0 py-2"} rounded-md text-sm font-semibold transition ${
+                        active ? "bg-[#303030] text-[#F5F5F5]" : "text-[#969696] hover:bg-[#242424] hover:text-[#F5F5F5]"
                       }`}
                     >
-                      <div className={`relative flex ${leftPanelOpen ? "w-full items-center gap-2" : "items-center justify-center"}`}>
+                      <div className={`relative flex ${isPanelOpen ? "w-full items-center gap-2" : "items-center justify-center"}`}>
                         <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${
-                          active ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-600"
+                          active ? "bg-[#FACC15]/15 text-[#FACC15]" : "bg-[#2B2B2B] text-[#969696]"
                         }`}>
                           <Icon className="h-4 w-4" />
                         </span>
-                        {leftPanelOpen ? <span className="truncate flex-1">{label}</span> : null}
+                        {isPanelOpen ? <span className="truncate flex-1">{label}</span> : null}
                         {badgeCount > 0 ? (
-                          <span className={leftPanelOpen ? "ml-auto mr-1" : "absolute -right-1 -top-1"}>
+                          <span className={isPanelOpen ? "ml-auto mr-1" : "absolute -right-1 -top-1"}>
                             <SidebarBadge count={badgeCount} active={active} />
                           </span>
                         ) : null}
                       </div>
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side={leftPanelOpen ? "bottom" : "right"}>{label}</TooltipContent>
+                  <TooltipContent side={isPanelOpen ? "bottom" : "right"}>{label}</TooltipContent>
                 </Tooltip>
               );
             })}
           </div>
 
-          {showEditorMenuSection ? (
+          {showEditorMenuSection && variant !== "dashboard" ? (
             <>
-              {leftPanelOpen ? <div className="my-3 border-t border-border/70" /> : null}
-              <div className={`${leftPanelOpen ? "space-y-2" : "space-y-1"}`}>
+              {isPanelOpen ? <div className="my-3 border-t border-[#363636]" /> : null}
+              <div className={`${isPanelOpen ? "space-y-2" : "space-y-1"}`}>
                 {editorMenuItems.map(({ key, label, Icon }) => {
                   const active = activePanelKey === key;
                   return (
@@ -491,7 +470,13 @@ const handleLogout = async () => {
                           onClick={() => {
                             setShowProjectDashboard(false);
                             setLeftPanelView(key);
-                            setLeftPanelOpen(true);
+                            if (key === "widgets") {
+                              openLeftPanel("widgets");
+                            } else if (key === "pages") {
+                              setLeftPanelOpen("pages");
+                            } else {
+                              openLeftPanel("widgets");
+                            }
                             setOverlayView(key);
 
                             if (currentProjectId) {
@@ -501,85 +486,85 @@ const handleLogout = async () => {
                               }
                             }
                           }}
-                          className={`group flex w-full ${leftPanelOpen ? "items-center gap-2 px-2.5 py-2 text-left" : "justify-center px-0 py-2"} rounded-md text-sm font-semibold transition ${
-                            active ? "bg-violet-50 text-violet-900" : "bg-white text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${
-                            active ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-600"
-                          }`}>
-                            <Icon className="h-4 w-4" />
-                          </span>
-                          {leftPanelOpen ? <span className="truncate">{label}</span> : null}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side={leftPanelOpen ? "bottom" : "right"}>{label}</TooltipContent>
-                    </Tooltip>
-                  );
-                })}
-              </div>
-            </>
-          ) : null}
+                           className={`group flex w-full ${isPanelOpen ? "items-center gap-2 px-2.5 py-2 text-left" : "justify-center px-0 py-2"} rounded-md text-sm font-semibold transition ${
+                             active ? "bg-[#303030] text-[#F5F5F5]" : "text-[#969696] hover:bg-[#242424] hover:text-[#F5F5F5]"
+                           }`}
+                         >
+                           <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${
+                             active ? "bg-[#FACC15]/15 text-[#FACC15]" : "bg-[#2B2B2B] text-[#969696]"
+                           }`}>
+                             <Icon className="h-4 w-4" />
+                           </span>
+                           {isPanelOpen ? <span className="truncate">{label}</span> : null}
+                         </button>
+                       </TooltipTrigger>
+                       <TooltipContent side={isPanelOpen ? "bottom" : "right"}>{label}</TooltipContent>
+                     </Tooltip>
+                   );
+                 })}
+               </div>
+             </>
+           ) : null}
 
-          {toolMenuItems.length > 0 ? (
-            <>
-              {leftPanelOpen ? (
-                <div className="mt-5 mb-2 px-3 text-[10px] uppercase tracking-[0.24em] text-slate-400">Tools</div>
-              ) : null}
-              <div className={`${leftPanelOpen ? "space-y-2" : "space-y-1"}`}>
-                {toolMenuItems.map(({ key, label, Icon }) => {
-                  const active = activePanelKey === key;
-                  const badge = undefined;
-                  return (
-                    <Tooltip key={key}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLeftPanelView(key);
-                            if (showProjectDashboard) {
-                              const destination = dashboardPathMap[key as DashboardMenuKey];
-                              if (destination) {
-                                navigate({ to: destination as never });
-                              }
-                            } else {
-                              setOverlayView(key);
-                            }
-                          }}
-                          className={`group flex w-full ${leftPanelOpen ? "items-center justify-between gap-2 px-2.5 py-2 text-left" : "justify-center px-0 py-2"} rounded-md text-sm font-semibold transition ${
-                            active ? "bg-violet-50 text-violet-900" : "bg-white text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          <span className={`flex ${leftPanelOpen ? "items-center gap-2" : "items-center justify-center"}`}>
-                            <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${
-                              active ? "bg-violet-100 text-violet-900" : "bg-slate-100 text-slate-600"
-                            }`}>
-                              <Icon className="h-4 w-4" />
-                            </span>
-                            {leftPanelOpen ? <span className="truncate">{label}</span> : null}
-                          </span>
-                          {leftPanelOpen && badge ? (
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                              badge === "Beta" ? "bg-slate-100 text-slate-700" : "bg-violet-100 text-violet-700"
-                            }`}>
-                              {badge}
-                            </span>
-                          ) : null}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side={leftPanelOpen ? "bottom" : "right"}>{label}</TooltipContent>
-                    </Tooltip>
-                  );
-                })}
-              </div>
-            </>
-          ) : null}
-        </div>
+           {toolMenuItems.length > 0 && variant !== "dashboard" ? (
+             <>
+               {isPanelOpen ? (
+                 <div className="mt-5 mb-2 px-3 text-[10px] uppercase tracking-[0.24em] text-[#969696]">Tools</div>
+               ) : null}
+               <div className={`${isPanelOpen ? "space-y-2" : "space-y-1"}`}>
+                 {toolMenuItems.map(({ key, label, Icon }) => {
+                   const active = activePanelKey === key;
+                   const badge = undefined;
+                   return (
+                     <Tooltip key={key}>
+                       <TooltipTrigger asChild>
+                         <button
+                           type="button"
+                           onClick={() => {
+                             setLeftPanelView(key);
+                             if (showProjectDashboard) {
+                               const destination = dashboardPathMap[key as DashboardMenuKey];
+                               if (destination) {
+                                 navigate({ to: destination as never });
+                               }
+                             } else {
+                               setOverlayView(key);
+                             }
+                           }}
+                           className={`group flex w-full ${isPanelOpen ? "items-center justify-between gap-2 px-2.5 py-2 text-left" : "justify-center px-0 py-2"} rounded-md text-sm font-semibold transition ${
+                             active ? "bg-[#303030] text-[#F5F5F5]" : "text-[#969696] hover:bg-[#242424] hover:text-[#F5F5F5]"
+                           }`}
+                         >
+                           <span className={`flex ${isPanelOpen ? "items-center gap-2" : "items-center justify-center"}`}>
+                             <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${
+                               active ? "bg-[#FACC15]/15 text-[#FACC15]" : "bg-[#2B2B2B] text-[#969696]"
+                             }`}>
+                               <Icon className="h-4 w-4" />
+                             </span>
+                             {isPanelOpen ? <span className="truncate">{label}</span> : null}
+                           </span>
+                           {isPanelOpen && badge ? (
+                             <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                               badge === "Beta" ? "bg-[#2B2B2B] text-[#969696]" : "bg-[#FACC15]/15 text-[#FACC15]"
+                             }`}>
+                               {badge}
+                             </span>
+                           ) : null}
+                         </button>
+                       </TooltipTrigger>
+                       <TooltipContent side={isPanelOpen ? "bottom" : "right"}>{label}</TooltipContent>
+                     </Tooltip>
+                   );
+                 })}
+               </div>
+             </>
+           ) : null}
+         </div>
 
-        {leftPanelOpen ? (
+         {isPanelOpen ? (
           <div className="flex-1 min-h-0 overflow-hidden px-3 pb-3">
-            <div className={`absolute inset-0 z-20 flex flex-col bg-white shadow-2xl transition-transform duration-300 ${isOverlayOpen ? "translate-x-0" : "-translate-x-full"}`}>
-              <div className="flex items-center gap-3 border-b border-border/70 bg-slate-50 px-4 py-3">
+            <div className={`absolute inset-0 z-20 flex flex-col bg-[#1F1F1F] shadow-2xl transition-transform duration-300 ${isOverlayOpen ? "translate-x-0" : "-translate-x-full"}`}>
+              <div className="flex items-center gap-3 border-b border-[#363636] bg-[#1F1F1F] px-4 py-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -588,14 +573,14 @@ const handleLogout = async () => {
                       setLeftPanelView("pages");
                     }
                   }}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border/70 bg-white text-slate-700 transition hover:border-primary hover:bg-primary/10 hover:text-primary"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[#363636] bg-[#1F1F1F] text-[#D0D0D0] transition hover:border-[#FACC15] hover:text-[#FACC15]"
                   aria-label="Back to menu"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <div className="text-sm font-semibold text-foreground">{overlayLabel}</div>
+                <div className="text-sm font-semibold text-[#F5F5F5]">{overlayLabel}</div>
               </div>
-              <div className="flex-1 overflow-y-auto" style={{ scrollbarGutter: "stable" }}>
+              <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarGutter: "stable" }}>
                 {overlayView ? (
                   showProjectDashboard ? (
                     <DashboardPanel view={overlayView as DashboardPanelView} setLeftPanelOpen={setLeftPanelOpen} setLeftPanelView={setLeftPanelView} />
@@ -603,14 +588,14 @@ const handleLogout = async () => {
                     <>
                       {overlayView === "pages" ? (
                         <section className="space-y-3">
-                          <div className="bg-slate-50 p-2">
+                          <div className="bg-[#1F1F1F] p-2">
                             <div className="flex items-center justify-between gap-2">
                               <div>
-                                <div className="text-[9px] uppercase tracking-[0.3em] text-black">Pages</div>
-                                <div className="mt-1 text-sm font-semibold text-foreground">{pages.length} page{pages.length === 1 ? "" : "s"}</div>
+                                <div className="text-[9px] uppercase tracking-[0.3em] text-[#969696]">Pages</div>
+                                <div className="mt-1 text-sm font-semibold text-[#F5F5F5]">{pages.length} page{pages.length === 1 ? "" : "s"}</div>
                               </div>
                               <button
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-border/70 bg-white text-muted-foreground transition hover:border-primary hover:bg-primary/10 hover:text-primary"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[#363636] bg-[#1F1F1F] text-[#D0D0D0] transition hover:border-[#FACC15] hover:text-[#FACC15]"
                                 onClick={() => addPage()}
                                 title="New page"
                               >
@@ -641,11 +626,11 @@ const handleLogout = async () => {
                                     }
                                   }
                                 }}
-                                className={`group flex w-full cursor-pointer items-center gap-2 rounded justify-between px-2.5 py-2 text-left text-sm font-semibold transition ${pg.id === currentPageId ? "bg-violet-50 text-violet-900" : "text-foreground "}`}
+                                className={`group flex w-full cursor-pointer items-center gap-2 rounded justify-between px-2.5 py-2 text-left text-sm font-semibold transition ${pg.id === currentPageId ? "bg-[#303030] text-[#F5F5F5]" : "text-[#D0D0D0] hover:bg-[#242424]"}`}
                               >
                                 <div className="min-w-0">
-                                  <div className="truncate font-medium text-black">{pg.name}</div>
-                                  <div className="text-[10px] text-muted-foreground text-black">/{pg.slug}</div>
+                                  <div className="truncate font-medium text-[#F5F5F5]">{pg.name}</div>
+                                  <div className="text-[10px] text-[#969696]">/{pg.slug}</div>
                                 </div>
 
                                 <div onClick={(event) => event.stopPropagation()}>
@@ -667,17 +652,17 @@ const handleLogout = async () => {
 
                       {overlayView === "templates" ? (
                         <section className="space-y-3">
-                          <div className="rounded-3xl border border-border/70 bg-slate-50 p-4">
-                            <div className="text-[9px] uppercase tracking-[0.3em] text-muted-foreground">Templates</div>
-                            <p className="mt-2 text-sm text-foreground">Browse templates in a full-screen gallery experience. Select a design to replace the current page content.</p>
+                          <div className="rounded-3xl border border-[#363636] bg-[#1F1F1F] p-4">
+                            <div className="text-[9px] uppercase tracking-[0.3em] text-[#969696]">Templates</div>
+                            <p className="mt-2 text-sm text-[#D0D0D0]">Browse templates in a full-screen gallery experience. Select a design to replace the current page content.</p>
                             <button
-                              className="mt-4 w-full rounded-2xl bg-primary px-4 py-3 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90"
+                              className="mt-4 w-full rounded-2xl bg-[#FACC15] px-4 py-3 text-xs font-semibold text-[#111111] transition hover:bg-[#FDE047]"
                               onClick={() => {
-                                setLeftPanelOpen(true);
+                                openLeftPanel("widgets");
                                 setLeftPanelView("templates");
                               }}
                             >
-                              Open full gallery
+                              Open template gallery
                             </button>
                           </div>
                         </section>
@@ -685,36 +670,36 @@ const handleLogout = async () => {
 
                       {overlayView === "shared" ? (
                         <section className="space-y-3">
-                          <div className="rounded-3xl border border-border/70 bg-slate-50 p-3">
+                          <div className="rounded-3xl border border-[#363636] bg-[#1F1F1F] p-3">
                             <div className="relative">
-                              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+                              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-[#969696]" />
                               <input
                                 value={q}
                                 onChange={(e) => setQ(e.target.value)}
                                 placeholder="Search sections…"
-                                className="w-full rounded-2xl border border-input/80 bg-white py-3 pl-11 pr-4 text-sm shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/10"
+                                className="w-full rounded-2xl border border-[#363636] bg-[#1F1F1F] py-3 pl-11 pr-4 text-sm text-[#F5F5F5] shadow-sm outline-none transition focus:border-[#FACC15] focus:ring-2 focus:ring-[#FACC15]/10"
                               />
                             </div>
                           </div>
 
                           <div className="space-y-3">
                             {groupedSections.length === 0 ? (
-                              <div className="rounded-3xl border border-dashed border-border/70 bg-slate-50 p-4 text-center text-xs text-muted-foreground">No sections match.</div>
+                              <div className="rounded-3xl border border-dashed border-[#363636] bg-[#1F1F1F] p-4 text-center text-xs text-[#969696]">No sections match.</div>
                             ) : (
                               groupedSections.map(([cat, items]) => {
                                 const open = q.trim() ? true : openCats[cat] ?? false;
                                 return (
-                                  <div key={cat} className="overflow-hidden rounded-3xl border border-border/70 bg-slate-50">
+                                  <div key={cat} className="overflow-hidden rounded-3xl border border-[#363636] bg-[#1F1F1F]">
                                     <button
                                       onClick={() => setOpenCats((s) => ({ ...s, [cat]: !open }))}
-                                      className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground transition hover:bg-muted/50"
+                                      className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#969696] transition hover:bg-[#242424]"
                                     >
                                       {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                                       <span>{cat}</span>
-                                      <span className="ml-auto text-[9px] font-normal text-slate-500">{items.length}</span>
+                                      <span className="ml-auto text-[9px] font-normal text-[#6F6F6F]">{items.length}</span>
                                     </button>
                                     {open ? (
-                                      <div className="space-y-2 border-t border-border/70 px-3 py-3">
+                                      <div className="space-y-2 border-t border-[#363636] px-3 py-3">
                                         {items.map((tpl) => (
                                           <SectionCard key={tpl.id} tpl={tpl} onAdd={() => addSection(tpl)} />
                                         ))}
@@ -729,24 +714,24 @@ const handleLogout = async () => {
                       ) : null}
 
                       {overlayView === "widgets" ? (
-                        <section className="flex h-full flex-col overflow-hidden bg-slate-50">
-                          <div className="sticky top-0 z-10 border-b border-slate-200/70 bg-slate-50 px-3 py-3">
+                        <section className="flex h-full flex-col overflow-hidden bg-[#1F1F1F]">
+                          <div className="sticky top-0 z-10 border-b border-[#363636] bg-[#1F1F1F] px-3 py-3">
                             <div className="space-y-3"> 
                               <div className="relative">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#969696]" />
                                 <input
                                   value={q}
                                   onChange={(e) => setQ(e.target.value)}
                                   placeholder="Search widgets..."
-                                  className="h-9 w-full rounded-[7px] border border-slate-300 bg-white pl-10 pr-3 text-[13px] text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-200"
+                                  className="h-9 w-full rounded-[7px] border border-[#363636] bg-[#1F1F1F] pl-10 pr-3 text-[13px] text-[#F5F5F5] outline-none transition focus:border-[#FACC15] focus:ring-2 focus:ring-[#FACC15]/10"
                                 />
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex-1 overflow-y-auto px-2 py-2">
+                          <div className="flex-1" id="widgetScroll">
                             {visibleWidgets.length === 0 ? (
-                              <div className="rounded-[12px] border border-dashed border-slate-300 bg-white p-3 text-center text-xs text-slate-500">No widgets match.</div>
+                              <div className="rounded-[12px] border border-dashed border-[#363636] bg-[#1F1F1F] p-3 text-center text-xs text-[#969696]">No widgets match.</div>
                             ) : (
                               <div className="space-y-1">
                                 {visibleWidgets.map((widget, index) => {
@@ -754,7 +739,7 @@ const handleLogout = async () => {
                                   return (
                                     <div
                                       key={widget.id}
-                                      className={`overflow-hidden ${index < visibleWidgets.length - 1 ? "border-b border-slate-200/70" : ""} bg-white`}
+                                      className={`overflow-hidden ${index < visibleWidgets.length - 1 ? "border-b border-[#363636]" : ""} bg-[#1F1F1F]`}
                                       draggable
                                       onDragStart={(event) => beginWidgetDrag(event, widget)}
                                       onDragEnd={endLibraryDrag}
@@ -762,7 +747,7 @@ const handleLogout = async () => {
                                       <div
                                         role="button"
                                         tabIndex={0}
-                                        className="flex h-[52px] w-full cursor-grab items-center gap-3 px-3 text-left text-sm text-slate-800 transition hover:bg-slate-50 active:cursor-grabbing"
+                                        className="flex h-[52px] w-full cursor-grab items-center gap-3 px-3 text-left text-sm text-[#D0D0D0] transition hover:bg-[#242424] active:cursor-grabbing"
                                         onClick={() => {
                                           if (q.trim()) return;
                                           setOpenWidgetId((prev) => (prev === widget.id ? null : widget.id));
@@ -774,21 +759,21 @@ const handleLogout = async () => {
                                           setOpenWidgetId((prev) => (prev === widget.id ? null : widget.id));
                                         }}
                                       >
-                                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-[9px] bg-sky-100 text-sky-700">
+                                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-[9px] bg-[#2B2B2B] text-[#969696]">
                                           <FontAwesomeIcon icon={widget.icon as any} className="h-4 w-4" />
                                         </span>
                                         <div className="min-w-0 flex-1">
                                           <div className="flex items-center gap-2">
-                                            <span className="truncate text-[13px] font-medium text-slate-900">{widget.displayName}</span>
-                                            <span className="truncate text-[11px] text-slate-500">{widget.supportedVariants.length} styles</span>
+                                            <span className="truncate text-[13px] font-medium text-[#F5F5F5]">{widget.displayName}</span>
+                                            <span className="truncate text-[11px] text-[#969696]">{widget.supportedVariants.length} styles</span>
                                           </div>
                                         </div>
-                                        <span className="text-slate-400">
+                                        <span className="text-[#969696]">
                                           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                         </span>
                                       </div>
                                       {open ? (
-                                        <div className="border-t border-slate-200/80 px-3 pb-3 pt-2">
+                                        <div className="border-t border-[#363636] px-3 pb-3 pt-2">
                                           <div className="flex flex-wrap gap-2">
                                             {widget.supportedVariants.map((variant) => {
                                               const variantKey = `${widget.id}-${variant}`;
@@ -806,7 +791,7 @@ const handleLogout = async () => {
                                                     endLibraryDrag();
                                                   }}
                                                   onClick={() => addWidgetVariant(widget, variant)}
-                                                  className="min-h-[28px] cursor-grab rounded-[7px] border border-slate-300 bg-slate-100 px-3 text-[11px] font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-200 active:cursor-grabbing"
+                                                  className="min-h-[28px] cursor-grab rounded-[7px] border border-[#363636] bg-[#2B2B2B] px-3 text-[11px] font-medium text-[#D0D0D0] transition hover:border-[#FACC15] hover:text-[#FACC15] active:cursor-grabbing"
                                                 >
                                                   {variant}
                                                 </button>
@@ -823,7 +808,7 @@ const handleLogout = async () => {
                           </div>
                         </section>
                       ) : (
-                        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Select a menu item to open a panel.</div>
+                        <div className="flex h-full items-center justify-center text-sm text-[#969696]">Select a menu item to open a panel.</div>
                       )}
                     </>
                   )
@@ -842,12 +827,12 @@ const handleLogout = async () => {
           onInteractOutside={(event) => event.preventDefault()}
           onEscapeKeyDown={(event) => event.preventDefault()}
         >
-          <div className="overflow-hidden rounded-[26px] bg-white shadow-[0_20px_60px_-24px_rgba(15,23,42,0.25)] ring-1 ring-slate-200">
-            <div className="border-b border-slate-200 px-5 py-4 sm:px-6 sm:py-4">
-              <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+          <div className="overflow-hidden rounded-[26px] bg-[#1F1F1F] shadow-[0_20px_60px_-24px_rgba(15,23,42,0.25)] ring-1 ring-[#363636]">
+            <div className="border-b border-[#363636] px-5 py-4 sm:px-6 sm:py-4">
+              <DialogTitle className="text-2xl font-semibold tracking-tight text-[#F5F5F5]">
                 {authMode === "sign-in" ? "Welcome back" : "Create your account"}
               </DialogTitle>
-              <DialogDescription className="mt-1 text-sm leading-6 text-slate-500">
+              <DialogDescription className="mt-1 text-sm leading-6 text-[#969696]">
                 {authMode === "sign-in"
                   ? "Sign in to continue your projects."
                   : "Create your account to keep building."}
@@ -874,7 +859,7 @@ const handleLogout = async () => {
       toast.error("Google sign in failed");
     }
   }}
-  className="group flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+  className="group flex w-full items-center justify-center gap-2 rounded-2xl border border-[#363636] bg-[#1F1F1F] px-4 py-2.5 text-sm font-semibold text-[#F5F5F5] transition hover:bg-[#242424]"
 >
   <GoogleLogo className="h-5 w-5" />
   Continue with Google
@@ -884,8 +869,8 @@ const handleLogout = async () => {
               </div>
 
               <div className="relative my-4">
-                <div className="absolute left-0 right-0 top-1/2 h-px bg-slate-200" />
-                <div className="relative mx-auto w-max bg-white px-3 text-[10px] uppercase tracking-[0.35em] text-slate-400">
+                <div className="absolute left-0 right-0 top-1/2 h-px bg-[#363636]" />
+                <div className="relative mx-auto w-max bg-[#1F1F1F] px-3 text-[10px] uppercase tracking-[0.35em] text-[#969696]">
                   or continue with email
                 </div>
               </div>
@@ -894,11 +879,11 @@ const handleLogout = async () => {
                 {authMode === "sign-up" ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500" htmlFor="auth-first-name">
+                      <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#969696]" htmlFor="auth-first-name">
                         First name
                       </label>
                       <div className="relative">
-                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#969696]">
                           <User className="h-4 w-4" />
                         </span>
                         <Input
@@ -908,16 +893,16 @@ const handleLogout = async () => {
                           onChange={(event) => setCredentials((prev) => ({ ...prev, firstName: event.target.value }))}
                           placeholder="First name"
                           required
-                          className="bg-slate-50 border-slate-200 pl-11"
+                          className="bg-[#1F1F1F] border-[#363636] pl-11"
                         />
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500" htmlFor="auth-last-name">
+                      <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#969696]" htmlFor="auth-last-name">
                         Last name
                       </label>
                       <div className="relative">
-                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#969696]">
                           <User className="h-4 w-4" />
                         </span>
                         <Input
@@ -927,7 +912,7 @@ const handleLogout = async () => {
                           onChange={(event) => setCredentials((prev) => ({ ...prev, lastName: event.target.value }))}
                           placeholder="Last name"
                           required
-                          className="bg-slate-50 border-slate-200 pl-11"
+                          className="bg-[#1F1F1F] border-[#363636] pl-11"
                         />
                       </div>
                     </div>
@@ -935,11 +920,11 @@ const handleLogout = async () => {
                 ) : null}
 
                 <div className="space-y-1.5">
-                  <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500" htmlFor="auth-email">
+                  <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#969696]" htmlFor="auth-email">
                     Email address
                   </label>
                   <div className="relative">
-                    <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                    <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#969696]">
                       <Mail className="h-4 w-4" />
                     </span>
                     <Input
@@ -949,17 +934,17 @@ const handleLogout = async () => {
                       onChange={(event) => setCredentials((prev) => ({ ...prev, email: event.target.value }))}
                       placeholder="you@example.com"
                       required
-                      className="bg-slate-50 border-slate-200 pl-11"
+                      className="bg-[#1F1F1F] border-[#363636] pl-11"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500" htmlFor="auth-password">
+                  <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#969696]" htmlFor="auth-password">
                     Password
                   </label>
                   <div className="relative">
-                    <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                    <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#969696]">
                       <Lock className="h-4 w-4" />
                     </span>
                     <Input
@@ -969,12 +954,12 @@ const handleLogout = async () => {
                       onChange={(event) => setCredentials((prev) => ({ ...prev, password: event.target.value }))}
                       placeholder={authMode === "sign-up" ? "Create a strong password" : "Enter your password"}
                       required
-                      className="bg-slate-50 border-slate-200 pl-11 pr-11"
+                      className="bg-[#1F1F1F] border-[#363636] pl-11 pr-11"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((visible) => !visible)}
-                      className="absolute inset-y-0 right-3 flex items-center text-slate-500"
+                      className="absolute inset-y-0 right-3 flex items-center text-[#969696]"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -982,40 +967,38 @@ const handleLogout = async () => {
                   </div>
                 </div>
 
-                {authMode === "sign-up" ? null : null}
-
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-slate-500">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-[#969696]">
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={credentials.remember}
                       onChange={(event) => setCredentials((prev) => ({ ...prev, remember: event.target.checked }))}
-                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                      className="h-4 w-4 rounded border-[#363636] text-[#FACC15] focus:ring-[#FACC15]"
                     />
                     Remember me
                   </label>
-                  <button type="button" className="text-slate-600 font-semibold hover:text-slate-900">
+                  <button type="button" className="text-[#FACC15] font-semibold hover:text-[#FDE047]">
                     Forgot password?
                   </button>
                 </div>
 
-                <Button type="submit" className="w-full rounded-2xl bg-slate-950 py-2.5 text-base font-semibold text-white hover:bg-slate-900">
+                <Button type="submit" className="w-full rounded-2xl bg-[#FACC15] py-2.5 text-base font-semibold text-[#111111] hover:bg-[#FDE047]">
                   {signingIn ? (authMode === "sign-in" ? "Signing in…" : "Creating account…") : (authMode === "sign-in" ? "Sign In" : "Create Account")}
                 </Button>
               </form>
 
-              <div className="mt-3 border-t border-slate-200 pt-3 text-center text-sm text-slate-500">
+              <div className="mt-3 border-t border-[#363636] pt-3 text-center text-sm text-[#969696]">
                 {authMode === "sign-in" ? (
                   <>
                     Don&apos;t have an account?{' '}
-                    <button type="button" className="font-semibold text-slate-950 hover:text-slate-700" onClick={() => setAuthMode("sign-up")}>
+                    <button type="button" className="text-[#FACC15] font-semibold hover:text-[#FDE047]" onClick={() => setAuthMode("sign-up")}>
                       Sign up
                     </button>
                   </>
                 ) : (
                   <>
                     Already have an account?{' '}
-                    <button type="button" className="font-semibold text-slate-950 hover:text-slate-700" onClick={() => setAuthMode("sign-in") }>
+                    <button type="button" className="text-[#FACC15] font-semibold hover:text-[#FDE047]" onClick={() => setAuthMode("sign-in") }>
                       Sign in
                     </button>
                   </>
@@ -1038,23 +1021,23 @@ const handleLogout = async () => {
 
 function TemplateCard({ tpl, onUse }: { tpl: TemplateDefinition; onUse: () => void }) {
   return (
-    <div className="group overflow-hidden rounded-2xl border border-border/70 bg-background/90 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+    <div className="group overflow-hidden rounded-2xl border border-[#363636] bg-[#1F1F1F] shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
       <div className="relative h-28 overflow-hidden">
         <img src={tpl.thumbnail} alt={tpl.name} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-        <div className="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-700">
+        <div className="absolute left-3 top-3 rounded-full bg-[#1F1F1F]/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[#D0D0D0]">
           {tpl.category}
         </div>
       </div>
       <div className="p-3">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <div className="text-sm font-semibold text-foreground">{tpl.name}</div>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">{tpl.description}</p>
+            <div className="text-sm font-semibold text-[#F5F5F5]">{tpl.name}</div>
+            <p className="mt-1 text-xs leading-5 text-[#969696]">{tpl.description}</p>
           </div>
         </div>
         <div className="mt-4">
-          <button className="w-full rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90" onClick={() => { onUse(); toast.success(`${tpl.name} loaded into the canvas`); }}>
+          <button className="w-full rounded-lg bg-[#FACC15] px-3 py-2 text-xs font-semibold text-[#111111] hover:bg-[#FDE047]" onClick={() => { onUse(); toast.success(`${tpl.name} loaded into the canvas`); }}>
             Use Template
           </button>
         </div>
@@ -1066,7 +1049,7 @@ function TemplateCard({ tpl, onUse }: { tpl: TemplateDefinition; onUse: () => vo
 function SectionCard({ tpl, onAdd }: { tpl: SectionTemplate; onAdd: () => void }) {
   return (
     <div
-      className="group rounded-lg border border-border/70 bg-background/90 hover:border-primary/50 hover:shadow-md transition overflow-hidden cursor-grab"
+      className="group rounded-lg border border-[#363636] bg-[#1F1F1F] hover:border-[#FACC15]/50 hover:shadow-md transition overflow-hidden cursor-grab"
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData("application/x-wto-section", tpl.id);
@@ -1084,16 +1067,16 @@ function SectionCard({ tpl, onAdd }: { tpl: SectionTemplate; onAdd: () => void }
         {tpl.category.toUpperCase()}
       </div>
       <div className="px-2 py-1.5 flex items-center gap-1">
-        <div className="text-[9px] font-medium truncate flex-1">{tpl.name}</div>
+        <div className="text-[9px] font-medium truncate flex-1 text-[#F5F5F5]">{tpl.name}</div>
         <button
-          className="p-0.5 rounded hover:bg-accent"
+          className="p-0.5 rounded hover:bg-[#242424] text-[#969696]"
           title="Add to canvas"
           onClick={onAdd}
         >
           <Plus className="w-3 h-3" />
         </button>
         <button
-          className="p-0.5 rounded hover:bg-accent"
+          className="p-0.5 rounded hover:bg-[#242424] text-[#969696]"
           title="Copy HTML"
           onClick={async () => {
             await navigator.clipboard.writeText(tpl.html);
@@ -1112,23 +1095,23 @@ type DashboardPanelView = Extract<
   "dashboard" | "projects" | "templates" | "favorites" | "shared" | "trash"
 >;
 
-function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: DashboardPanelView; setLeftPanelOpen: (open: boolean) => void; setLeftPanelView: (view: PanelViewKey) => void; }) {
+function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: DashboardPanelView; setLeftPanelOpen: (open: "widgets" | "pages" | null) => void; setLeftPanelView: (view: PanelViewKey) => void; }) {
   const projects = useBuilder((s) => s.projects);
   const projectEntries = useMemo(() => Object.values(projects), [projects]);
   const totalProjects = projectEntries.length;
 
   const sectionCard = (title: string, subtitle: string, description: string, action?: { label: string; onClick: () => void }) => (
-    <div className="rounded-2xl border border-border/70 bg-background/90 p-4 shadow-sm">
+    <div className="rounded-2xl border border-[#363636] bg-[#1F1F1F] p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[9px] uppercase tracking-[0.24em] text-muted-foreground">{title}</p>
-          <h3 className="mt-2 text-sm font-semibold text-foreground">{subtitle}</h3>
-          <p className="mt-2 text-xs leading-5 text-muted-foreground">{description}</p>
+          <p className="text-[9px] uppercase tracking-[0.24em] text-[#969696]">{title}</p>
+          <h3 className="mt-2 text-sm font-semibold text-[#F5F5F5]">{subtitle}</h3>
+          <p className="mt-2 text-xs leading-5 text-[#969696]">{description}</p>
         </div>
         {action ? (
           <button
             type="button"
-            className="rounded-full bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
+            className="rounded-full bg-[#FACC15] px-3 py-2 text-[11px] font-semibold text-[#111111] transition hover:bg-[#FDE047]"
             onClick={action.onClick}
           >
             {action.label}
@@ -1142,19 +1125,19 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
     <>
       {view === "projects" ? (
         <section className="w-full space-y-4">
-          <div className="rounded-3xl border border-border/70 bg-background/90 p-4 shadow-sm">
+          <div className="rounded-3xl border border-[#363636] bg-[#1F1F1F] p-4 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <div className="text-[9px] uppercase tracking-[0.24em] text-muted-foreground">Projects</div>
-                <div className="mt-2 text-sm font-semibold text-foreground">{totalProjects} project{totalProjects === 1 ? "" : "s"}</div>
-                <p className="mt-1 text-xs text-muted-foreground">Quickly manage your active websites and open your latest project.</p>
+                <div className="text-[9px] uppercase tracking-[0.24em] text-[#969696]">Projects</div>
+                <div className="mt-2 text-sm font-semibold text-[#F5F5F5]">{totalProjects} project{totalProjects === 1 ? "" : "s"}</div>
+                <p className="mt-1 text-xs text-[#969696]">Quickly manage your active websites and open your latest project.</p>
               </div>
               <button
                 type="button"
-                className="h-10 rounded-full bg-primary px-4 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90"
+                className="h-10 rounded-full bg-[#FACC15] px-4 text-xs font-semibold text-[#111111] transition hover:bg-[#FDE047]"
                 onClick={() => {
                   setLeftPanelView("pages");
-                  setLeftPanelOpen(true);
+                  setLeftPanelOpen("pages");
                 }}
               >
                 New
@@ -1165,20 +1148,20 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
           <div className="space-y-2">
             {projectEntries.length > 0 ? (
               projectEntries.slice(0, 3).map((project) => (
-                <div key={project.id} className="rounded-2xl border border-border/70 bg-white p-3 text-sm text-foreground shadow-sm">
+                <div key={project.id} className="rounded-2xl border border-[#363636] bg-[#1F1F1F] p-3 text-sm text-[#D0D0D0] shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate font-medium">{project.name}</div>
-                      <div className="text-[10px] text-muted-foreground">
+                      <div className="truncate font-medium text-[#F5F5F5]">{project.name}</div>
+                      <div className="text-[10px] text-[#969696]">
                         Updated <ClientOnly>{new Date(project.updatedAt).toLocaleDateString()}</ClientOnly>
                       </div>
                     </div>
                     <button
                       type="button"
-                      className="rounded-full border border-border/70 bg-background px-2 py-1 text-[10px] font-semibold text-foreground transition hover:bg-muted"
+                      className="rounded-full border border-[#363636] bg-[#1F1F1F] px-2 py-1 text-[10px] font-semibold text-[#D0D0D0] transition hover:border-[#FACC15] hover:text-[#FACC15]"
                       onClick={() => {
                         setLeftPanelView("templates");
-                        setLeftPanelOpen(true);
+                        setLeftPanelOpen("pages");
                       }}
                     >
                       Open
@@ -1187,7 +1170,7 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
                 </div>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-border/70 bg-background/80 p-4 text-xs text-muted-foreground">
+              <div className="rounded-2xl border border-dashed border-[#363636] bg-[#1F1F1F]/80 p-4 text-xs text-[#969696]">
                 No projects found. Create a new project to start building.
               </div>
             )}
@@ -1203,7 +1186,7 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
               label: "Explore",
               onClick: () => {
                 setLeftPanelView("templates");
-                setLeftPanelOpen(true);
+                setLeftPanelOpen("pages");
               },
             }
           )}
@@ -1218,7 +1201,7 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
               label: "View",
               onClick: () => {
                 setLeftPanelView("sections");
-                setLeftPanelOpen(true);
+                setLeftPanelOpen("pages");
               },
             }
           )}
@@ -1233,7 +1216,7 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
               label: "Sync",
               onClick: () => {
                 setLeftPanelView("sections");
-                setLeftPanelOpen(true);
+                setLeftPanelOpen("pages");
               },
             }
           )}
@@ -1248,7 +1231,7 @@ function DashboardPanel({ view, setLeftPanelOpen, setLeftPanelView }: { view: Da
               label: "Review",
               onClick: () => {
                 setLeftPanelView("widgets");
-                setLeftPanelOpen(true);
+                setLeftPanelOpen("pages");
               },
             }
           )}

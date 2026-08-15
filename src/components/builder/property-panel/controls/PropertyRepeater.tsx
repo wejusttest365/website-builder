@@ -92,19 +92,19 @@ export function PropertyRepeater({
   };
 
   const actionBtnClass =
-    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400";
+    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#969696] transition hover:bg-[#242424] hover:text-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#969696]";
 
   return (
     <div className="min-w-0 w-full">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#969696]">
           {title}
         </div>
         {onAdd ? (
           <button
             type="button"
             onClick={onAdd}
-            className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-violet-600 hover:text-violet-700"
+            className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-[#FACC15] hover:text-[#FDE047]"
           >
             <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
             Add
@@ -124,8 +124,8 @@ export function PropertyRepeater({
               onDragOver={(event) => handleDragOver(event, index)}
               onDrop={(event) => handleDrop(event, index)}
               className={[
-                "min-w-0 overflow-hidden rounded-lg border bg-white transition",
-                isDropTarget ? "border-violet-300 bg-violet-50/40" : "border-slate-200",
+                "min-w-0 overflow-hidden rounded-lg border bg-[#1F1F1F] transition",
+                isDropTarget ? "border-[#FACC15] bg-[#FACC15]/10" : "border-[#363636]",
                 isDragging ? "opacity-60" : "",
               ].join(" ")}
             >
@@ -136,7 +136,7 @@ export function PropertyRepeater({
                   onDragEnd={handleDragEnd}
                   onClick={stop}
                   onMouseDown={(event) => event.stopPropagation()}
-                  className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 ${onReorder ? "cursor-grab active:cursor-grabbing hover:bg-slate-50 hover:text-slate-600" : ""}`}
+                  className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#969696] ${onReorder ? "cursor-grab active:cursor-grabbing hover:bg-[#242424] hover:text-[#F5F5F5]" : ""}`}
                   title="Drag to reorder"
                   aria-label="Drag to reorder"
                 >
@@ -146,7 +146,7 @@ export function PropertyRepeater({
                 <button
                   type="button"
                   onClick={() => setExpandedIndex(isExpanded ? null : index)}
-                  className="min-w-0 flex-1 truncate px-1 py-1 text-left text-[13px] font-medium text-slate-700"
+                  className="min-w-0 flex-1 truncate px-1 py-1 text-left text-[13px] font-medium text-[#F5F5F5]"
                 >
                   {item.label || `Item ${index + 1}`}
                 </button>
@@ -204,30 +204,19 @@ export function PropertyRepeater({
                   </button>
                   <button
                     type="button"
-                    title="Delete"
-                    aria-label="Delete"
-                    className={`${actionBtnClass} hover:text-red-500`}
+                    title="Remove"
+                    aria-label="Remove"
+                    disabled={!onRemove}
+                    className={actionBtnClass}
                     onClick={(event) => {
                       stop(event);
                       onRemove?.(item.id);
-                      setExpandedIndex((current) => {
-                        if (current == null) return current;
-                        if (current === index) return null;
-                        if (current > index) return current - 1;
-                        return current;
-                      });
                     }}
                   >
                     <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
                   </button>
                 </div>
               </div>
-
-              {isExpanded ? (
-                <div className="space-y-2 border-t border-slate-100 px-2.5 pb-2.5 pt-2">
-                  {renderItem ? renderItem(item, index) : item.content}
-                </div>
-              ) : null}
             </div>
           );
         })}

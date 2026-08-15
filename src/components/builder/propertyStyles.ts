@@ -1,2 +1,2 @@
 export const inputCls =
-  "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none transition-all focus:border-violet-500 focus:ring-2 focus:ring-violet-100";
+  "h-10 w-full rounded-xl border border-[#363636] bg-[#171717] px-3 text-sm text-[#F5F5F5] shadow-sm outline-none transition-all focus:border-[#FACC15] focus:ring-2 focus:ring-[#FACC15]/20";
