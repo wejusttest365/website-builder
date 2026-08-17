@@ -28,9 +28,7 @@ export function DemoView({ projectId }: { projectId: string }) {
   }, []);
 
   useEffect(() => {
-    if (!mounted) return;
     const handleResponse = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin && event.origin !== 'null') return;
       const data = event.data as {
         __lovablePreviewPayload?: true;
         projectId?: string;
@@ -42,11 +40,26 @@ export function DemoView({ projectId }: { projectId: string }) {
       if (!data.project) return;
       setProj(data.project);
       projRef.current = data.project;
-      setActivePageId(data.pageId ?? data.project.currentPageId ?? data.project.pages?.[0]?.id ?? null);
+      const requestedPageId = data.pageId ?? data.project.currentPageId ?? data.project.pages?.[0]?.id ?? null;
+      const fallbackPageId = requestedPageId ?? data.project.pages?.[0]?.id ?? null;
+      setActivePageId(fallbackPageId);
     };
 
     window.addEventListener("message", handleResponse);
 
+    if (window.opener) {
+      try {
+        window.opener.postMessage({ __previewReady: true }, "*");
+      } catch {
+        // preview may be opened without opener (e.g., refreshed tab)
+      }
+    }
+
+    return () => window.removeEventListener("message", handleResponse);
+  }, [actualProjectId]);
+
+  useEffect(() => {
+    if (!mounted) return;
     let loadedFromStorage = false;
     try {
       const raw =
@@ -62,28 +75,29 @@ export function DemoView({ projectId }: { projectId: string }) {
           const matchedPage = pageParam
             ? p.pages.find((pg) => pg.id === pageParam || pg.slug === pageParam)
             : null;
+          const requestedPageId = matchedPage?.id ?? p.currentPageId ?? p.pages?.[0]?.id ?? null;
+          const fallbackPageId = requestedPageId ?? p.pages?.[0]?.id ?? null;
           setProj(p);
           projRef.current = p;
-          setActivePageId(matchedPage?.id ?? p.currentPageId ?? p.pages?.[0]?.id ?? null);
+          setActivePageId(fallbackPageId);
           loadedFromStorage = true;
         }
       }
     } catch {
-      // storage not available, use opener message instead
+      // storage may be unavailable
     }
-
-    return () => window.removeEventListener("message", handleResponse);
   }, [mounted, actualProjectId]);
 
   useEffect(() => {
-    if (!authReady || user?.id) return;
+    if (!mounted || proj || notFound) return;
     const timeout = window.setTimeout(() => {
       if (!projRef.current && !notFound) {
         setNotFound(true);
+        setCloudError("Preview failed to load. Open this page from the builder, or check that you are signed in.");
       }
-    }, 2000);
+    }, 8000);
     return () => window.clearTimeout(timeout);
-  }, [authReady, user?.id, notFound]);
+  }, [mounted, proj, notFound]);
 
   useEffect(() => {
     if (!mounted || !authReady) return;
@@ -91,7 +105,11 @@ export function DemoView({ projectId }: { projectId: string }) {
 
     let cancelled = false;
     async function loadFromCloud() {
-      if (!user?.id) return;
+      if (!user?.id) {
+        setCloudError("Sign in required to preview this project.");
+        setNotFound(true);
+        return;
+      }
       setCloudLoading(true);
       setCloudError(null);
       try {
@@ -102,13 +120,14 @@ export function DemoView({ projectId }: { projectId: string }) {
         const matchedPage = pageParam
           ? project.pages.find((pg) => pg.id === pageParam || pg.slug === pageParam)
           : null;
+        const requestedPageId = matchedPage?.id ?? project.currentPageId ?? project.pages?.[0]?.id ?? null;
+        const fallbackPageId = requestedPageId ?? project.pages?.[0]?.id ?? null;
         setProj(project);
         projRef.current = project;
-        setActivePageId(matchedPage?.id ?? project.currentPageId ?? project.pages?.[0]?.id ?? null);
+        setActivePageId(fallbackPageId);
         setNotFound(false);
       } catch (err) {
         if (cancelled) return;
-        console.error("DemoView cloud load failed:", err);
         setCloudError(err instanceof Error ? err.message : "Unable to load project");
         setNotFound(true);
       } finally {
@@ -169,8 +188,13 @@ export function DemoView({ projectId }: { projectId: string }) {
 
   const previewHtml = useMemo(() => {
     const currentProj = projRef.current || proj;
-    if (!currentProj || activePageId === null) return lastPreviewHtmlRef.current;
+    if (!currentProj || activePageId === null) {
+      return lastPreviewHtmlRef.current;
+    }
     const page = currentProj.pages.find((pg) => pg.id === activePageId) ?? currentProj.pages[0];
+    if (!page) {
+      return lastPreviewHtmlRef.current;
+    }
     const html = buildPreviewHTML({
       sections: composePageSections(currentProj, page),
       globalCss: currentProj.globalCss || "",

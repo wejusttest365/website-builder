@@ -181,24 +181,42 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
                         <ProjectActionsMenu
                           project={project as any}
                           onOpen={(id) => openProject(id)}
-                          onPreview={async (id) => {
-                            await loadCloudProject(id);
-                            const p = useBuilder.getState().projects[id];
-                            if (!p) return;
-                            const currentPage = p.pages.find((pg: any) => pg.id === p.currentPageId) || p.pages[0];
-                            if (!currentPage) return;
-                            const previewSlug = `${p.name.replace(/\s+/g, '-').toLowerCase()}-${p.id}`;
-                            const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
-                            const win = window.open(previewUrl, '_blank');
-                            if (!win) return;
-                            const payload = { __lovablePreviewPayload: true, projectId: p.id, project: p, pageId: currentPage.id };
-                            const postInterval = window.setInterval(() => {
-                              if (win.closed) { window.clearInterval(postInterval); return; }
-                              try { win.postMessage(payload, window.location.origin); } catch (_) {}
-                            }, 250);
-                            window.setTimeout(() => window.clearInterval(postInterval), 2000);
-                            win.focus();
-                          }}
+                           onPreview={async (id) => {
+                             await loadCloudProject(id);
+                             const p = useBuilder.getState().projects[id];
+                             if (!p) {
+                               console.warn("[PREVIEW:SENDER] skipped: project not found after loadCloudProject", { projectId: id });
+                               return;
+                             }
+                             const currentPage = p.pages.find((pg: any) => pg.id === p.currentPageId) || p.pages[0];
+                             if (!currentPage) {
+                               console.warn("[PREVIEW:SENDER] skipped: no current page", { projectId: id, pageCount: p.pages?.length });
+                               return;
+                             }
+                             const previewSlug = `${p.name.replace(/\s+/g, '-').toLowerCase()}-${p.id}`;
+                             const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
+                             console.log("[PREVIEW:SENDER] opening preview", { previewUrl, projectId: p.id, pageId: currentPage.id, pageSlug: currentPage.slug });
+                             const win = window.open(previewUrl, '_blank');
+                             if (!win) {
+                               console.error("[PREVIEW:SENDER] window.open returned null: popup blocked?");
+                               return;
+                             }
+                             console.log("[PREVIEW:SENDER] window.opened", { href: win.location?.href, closed: win.closed });
+                             const payload = { __lovablePreviewPayload: true, projectId: p.id, project: p, pageId: currentPage.id };
+                             console.log("[PREVIEW:SENDER] sending payload", { keys: Object.keys(payload), projectId: payload.projectId, hasProject: !!payload.project });
+                             try {
+                               win.postMessage(payload, window.location.origin);
+                               console.log("[PREVIEW:SENDER] first postMessage sent", { targetOrigin: window.location.origin });
+                             } catch (err) {
+                               console.error("[PREVIEW:SENDER] first postMessage failed", err);
+                             }
+                             const postInterval = window.setInterval(() => {
+                               if (win.closed) { window.clearInterval(postInterval); console.log("[PREVIEW:SENDER] preview window closed"); return; }
+                               try { win.postMessage(payload, window.location.origin); console.log("[PREVIEW:SENDER] retry postMessage sent"); } catch (_) { console.warn("[PREVIEW:SENDER] retry postMessage failed"); }
+                             }, 250);
+                             window.setTimeout(() => window.clearInterval(postInterval), 2000);
+                             win.focus();
+                           }}
                         />
                       </div>
                     </div>

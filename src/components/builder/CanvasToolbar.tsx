@@ -97,11 +97,6 @@ export function CanvasToolbar({
 
     const previewSlug = `${slugifyName(project.name)}-${project.id}`;
     const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
-    const previewWindow = window.open(previewUrl, '_blank');
-    if (!previewWindow) {
-      toast.error('Preview failed: Unable to open preview window');
-      return;
-    }
 
     const payload = {
       __lovablePreviewPayload: true,
@@ -110,21 +105,41 @@ export function CanvasToolbar({
       pageId: currentPage.id,
     };
 
-    previewWindow.postMessage(payload, window.location.origin);
-    const postInterval = window.setInterval(() => {
-      if (previewWindow.closed) {
-        window.clearInterval(postInterval);
-        return;
-      }
+    let payloadSent = false;
+    const sendPayload = () => {
+      if (payloadSent) return;
+      payloadSent = true;
       try {
-        previewWindow.postMessage(payload, window.location.origin);
-      } catch (_) {
-        // ignore while the preview window loads
+        previewWindow.postMessage(payload, "*");
+      } catch (err) {
+        console.error("Preview postMessage failed", err);
       }
-    }, 250);
-    window.setTimeout(() => window.clearInterval(postInterval), 2000);
-    previewWindow.focus();
+    };
 
+    const handlePreviewReady = (event: MessageEvent) => {
+      if (event.data && event.data.__previewReady) {
+        sendPayload();
+        window.removeEventListener("message", handlePreviewReady);
+      }
+    };
+
+    window.addEventListener("message", handlePreviewReady);
+
+    const previewWindow = window.open(previewUrl, '_blank');
+    if (!previewWindow) {
+      window.removeEventListener("message", handlePreviewReady);
+      toast.error('Preview failed: Unable to open preview window');
+      return;
+    }
+
+    const closedCheck = window.setInterval(() => {
+      if (previewWindow.closed) {
+        window.clearInterval(closedCheck);
+        window.removeEventListener("message", handlePreviewReady);
+      }
+    }, 1000);
+
+    previewWindow.focus();
     toast.success('Preview opened', { duration: 2000, position: 'top-center' });
   }
 

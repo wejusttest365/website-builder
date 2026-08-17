@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/lib/auth.tsx";
 import { Toaster } from "@/components/ui/sonner";
+import { GoogleAnalytics } from "@/components/layout/GoogleAnalytics";
 
 function NotFoundComponent() {
   return (
@@ -102,9 +103,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     scripts: [
       { src: "https://www.googletagmanager.com/gtag/js?id=G-W14JC88EV7", async: true },
-      {
-        children: `window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-W14JC88EV7');`,
-      },
     ],
   }),
   shellComponent: RootShell,
@@ -137,6 +135,7 @@ function RootComponent() {
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
         <Toaster richColors position="bottom-right" />
+        <GoogleAnalytics />
       </AuthProvider>
     </QueryClientProvider>
   );

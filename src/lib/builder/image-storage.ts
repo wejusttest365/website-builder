@@ -71,9 +71,14 @@ function getExtension(filename?: string, mimeType?: string) {
   return extensionFromMime(mimeType ?? "image/png");
 }
 
-function createFilename(ext: string, hint?: string, seed = nanoid(6)) {
+function createFilename(ext: string, hint?: string, seed?: string) {
+  const actualSeed =
+    seed ??
+    (typeof window !== "undefined"
+      ? nanoid(6)
+      : "static");
   const hintBase = getBaseName(hint);
-  const base = sanitizeAssetName(hintBase || hint || `image-${seed}`) || `image-${seed}`;
+  const base = sanitizeAssetName(hintBase || hint || `image-${actualSeed}`) || `image-${actualSeed}`;
   return `${base}.${ext}`;
 }
 

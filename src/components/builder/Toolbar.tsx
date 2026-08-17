@@ -51,21 +51,29 @@ export function Toolbar() {
   }
 
   async function openPreview() {
-    if (!project || !mounted) return;
+    if (!project || !mounted) {
+      console.warn("[PREVIEW:SENDER] skipped: missing project or mounted", { project: !!project, mounted });
+      return;
+    }
 
     const currentPage = project.pages.find((p) => p.id === project.currentPageId) || project.pages[0];
     if (!currentPage) {
+      console.warn("[PREVIEW:SENDER] skipped: no current page", { pageCount: project.pages?.length });
       toast.error('Preview failed: No current page available for preview');
       return;
     }
 
     const previewSlug = `${slugifyName(project.name)}-${project.id}`;
     const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
+    console.log("[PREVIEW:SENDER] opening preview", { previewUrl, projectId: project.id, pageId: currentPage.id, pageSlug: currentPage.slug });
+
     const previewWindow = window.open(previewUrl, '_blank');
     if (!previewWindow) {
+      console.error("[PREVIEW:SENDER] window.open returned null: popup blocked?");
       toast.error('Preview failed: Unable to open preview window');
       return;
     }
+    console.log("[PREVIEW:SENDER] window.opened", { href: previewWindow.location?.href, closed: previewWindow.closed });
 
     const payload = {
       __lovablePreviewPayload: true,
@@ -73,17 +81,26 @@ export function Toolbar() {
       project,
       pageId: currentPage.id,
     };
+    console.log("[PREVIEW:SENDER] sending payload", { keys: Object.keys(payload), projectId: payload.projectId, hasProject: !!payload.project });
 
-    previewWindow.postMessage(payload, window.location.origin);
+    try {
+      previewWindow.postMessage(payload, window.location.origin);
+      console.log("[PREVIEW:SENDER] first postMessage sent", { targetOrigin: window.location.origin });
+    } catch (err) {
+      console.error("[PREVIEW:SENDER] first postMessage failed", err);
+    }
+
     const postInterval = window.setInterval(() => {
       if (previewWindow.closed) {
         window.clearInterval(postInterval);
+        console.log("[PREVIEW:SENDER] preview window closed, stopped retries");
         return;
       }
       try {
         previewWindow.postMessage(payload, window.location.origin);
+        console.log("[PREVIEW:SENDER] retry postMessage sent");
       } catch (_) {
-        // ignore while the preview window loads
+        console.warn("[PREVIEW:SENDER] retry postMessage failed");
       }
     }, 250);
     window.setTimeout(() => window.clearInterval(postInterval), 2000);

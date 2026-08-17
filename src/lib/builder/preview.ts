@@ -205,7 +205,7 @@ function normalizeAssetRef(ref: string) {
 }
 
 function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 }
 
 function escapeInlineScript(js: string) {
@@ -2905,10 +2905,15 @@ function previewNavScript(pages?: { id: string; slug: string }[], currentPageSlu
     try { window.parent.postMessage({ __wto: true, type: 'navigate-page', payload: { slug: slug } }, '*'); } catch(e) {}
   }
   function resolveSlug(href) {
-    var path = href.split('?')[0].split('#')[0].replace(/^\/+/, '').replace(/\.html$/i, '') || 'index';
+    var path = href.split('?')[0].split('#')[0];
+    try { path = path.replace(new RegExp('^/+', 'g'), ''); } catch (_) {}
+    try { path = path.replace(new RegExp('\\.html$', 'i'), ''); } catch (_) {}
+    path = path || 'index';
     var idx = knownSlugs.indexOf(path);
     if (idx !== -1) return knownSlugs[idx];
-    var clean = path.replace(/^[./]+/, '').replace(/\.html$/i, '');
+    var clean = path;
+    try { clean = clean.replace(new RegExp('^[./]+', 'g'), ''); } catch (_) {}
+    try { clean = clean.replace(new RegExp('\\.html$', 'i'), ''); } catch (_) {}
     for (var i = 0; i < knownSlugs.length; i++) { if (knownSlugs[i] === clean) return knownSlugs[i]; }
     return null;
   }

@@ -177,7 +177,7 @@ function TemplatesPage() {
 
                     <div className="mt-4">
                       <Button
-                        onClick={handleUseTemplate}
+                        onClick={() => handleUseTemplate(tpl)}
                         disabled={loading === tpl.id}
                         className="w-full bg-[#FACC15] text-[#111111] hover:bg-[#FDE047]"
                       >
