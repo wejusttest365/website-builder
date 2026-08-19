@@ -1,13 +1,14 @@
  import { auth } from "@/firebase/firebase";
-import { saveBuilderProject as saveBuilderProjectState, getBuilderProject } from "@/services/builderProject";
-import { saveProjectMetadata } from "@/services/project";
-import type { ProjectMetadata } from "@/services/project";
-import { create } from "zustand";
-import { nanoid } from "nanoid"; 
-import type { SectionTemplate } from "./sections";
-import type { WidgetInstance } from "@/components/builder/widgets/widgetRegistry";
-import { createWidgetElementDuplicateEntry } from "@/components/builder/widgets/elementDuplication";
-import { getWidgetChildItems, mergeWidgetChildData, setWidgetChildItems, type WidgetChildLocation } from "@/components/builder/widgets/childWidgetUtils";
+ import { saveBuilderProject as saveBuilderProjectState, getBuilderProject } from "@/services/builderProject";
+ import { saveProjectMetadata } from "@/services/project";
+ import type { ProjectMetadata } from "@/services/project";
+ import { create } from "zustand";
+ import { nanoid } from "nanoid"; 
+ import type { SectionTemplate } from "./sections";
+ import type { WidgetInstance } from "@/components/builder/widgets/widgetRegistry";
+ import { createWidgetElementDuplicateEntry } from "@/components/builder/widgets/elementDuplication";
+ import { getWidgetChildItems, mergeWidgetChildData, setWidgetChildItems, type WidgetChildLocation } from "@/components/builder/widgets/childWidgetUtils";
+ import { useCloudProjectsStore } from "./cloudProjectsStore";
 import { normalizeFontSizeToPx } from "@/components/builder/widgets/fontSize";
 import type { TemplateDefinition } from "./templates";
 import { createImageAssetReference, normalizeAssetMap, saveImageBlob, type BuilderAssetEntry } from "./image-storage";
@@ -776,6 +777,12 @@ export const useBuilder = create<BuilderState>((set, get) => ({
   get().persist();
   void get().saveProjectToCloud().catch((error) => {
     console.error("Failed to save new project to Firestore", error);
+  }).then(() => {
+    try {
+      useCloudProjectsStore.getState().refreshProjects();
+    } catch (err) {
+      // ignore
+    }
   });
   return p.id;
 },
