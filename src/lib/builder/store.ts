@@ -226,6 +226,7 @@ interface BuilderState {
   loadCloudProject: (id: string) => Promise<void>;
 
   renameProject: (id: string, name: string) => void;
+  updateProjectStatus: (id: string, status: string, updatedAt: number) => void;
   duplicateProject: (id: string) => string;
   deleteProject: (id: string) => void;
   publishProject: (id: string) => void;
@@ -569,7 +570,6 @@ async function persistProjectToCloud(project: Project): Promise<boolean> {
 
   const firebaseUser = auth.currentUser;
   if (!firebaseUser) {
-    console.error("No authenticated user");
     return false;
   }
 
@@ -847,6 +847,15 @@ export const useBuilder = create<BuilderState>((set, get) => ({
         console.error("Failed to sync renamed project to Firestore", error);
       });
     }
+  },
+
+  updateProjectStatus: (id, status, updatedAt) => {
+    set((s) => {
+      const p = s.projects[id];
+      if (!p) return s;
+      return { projects: { ...s.projects, [id]: { ...p, status, updatedAt: updatedAt ?? Date.now() } } };
+    });
+    get().persist();
   },
 
   duplicateProject: (id) => {

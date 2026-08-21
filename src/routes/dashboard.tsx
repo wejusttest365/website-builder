@@ -26,14 +26,8 @@ function DashboardLayout() {
 
   useEffect(() => {
     if (!authReady) return;
-
-    if (!user) {
-      navigate({ to: "/" });
-      return;
-    }
-
     setShowProjectDashboard(true);
-  }, [authReady, navigate, setShowProjectDashboard, user]);
+  }, [authReady, setShowProjectDashboard]);
 
   if (!authReady) {
     return (
@@ -42,8 +36,6 @@ function DashboardLayout() {
       </MainLayout>
     );
   }
-
-  if (!user) return null;
 
   return (
     <MainLayout hideHeader hasSidebar>

@@ -132,12 +132,12 @@ export function RightContextPanel() {
     }
   };
 
-  if (!mounted || !user) {
+  if (!mounted) {
     return null;
   }
 
   return (
-    <aside className={`flex h-full flex-col border-l border-[#2B2B2B] bg-[#1F1F1F] transition-all duration-300 ease-in-out ${collapsed ? "w-[48px]" : "w-[320px]"}`}>
+    <aside className={`flex h-full flex-col border-l border-[#2B2B2B] bg-[#1F1F1F] transition-all duration-300 ease-in-out ${collapsed ? "w-[48px]" : "w-[280px]"}`}>
       <div className="flex h-10 shrink-0 items-center justify-between border-b border-[#2B2B2B] px-2">
         {!collapsed ? (
           <div className="flex items-center gap-1">

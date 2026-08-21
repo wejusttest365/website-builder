@@ -20,6 +20,7 @@ import { SaveStatus } from "@/components/builder/SaveStatus";
 import { toast } from "sonner";
 import { nanoid } from 'nanoid';
 import { useMounted } from "@/hooks/use-mounted";
+import { useRequireAuth } from "@/lib/builder/useRequireAuth";
 
 // CanvasToolbar - builder top bar
 
@@ -38,6 +39,9 @@ export function CanvasToolbar({
   const mounted = useMounted();
   const [pageSelectorOpen, setPageSelectorOpen] = useState(false);
   const { user } = useAuth();
+  const requireExportAuth = useRequireAuth("export");
+  const requirePublishAuth = useRequireAuth("publish");
+  const requirePreviewAuth = useRequireAuth("preview");
 
   const device = useBuilder((s) => s.device);
   const undo = useBuilder((s) => s.undo);
@@ -46,7 +50,6 @@ export function CanvasToolbar({
   const saveStatus = useBuilder((s) => s.saveStatus);
   const saveErrorMessage = useBuilder((s) => s.saveErrorMessage);
   const setDevice = useBuilder((s) => s.setDevice);
-  const publishProject = useBuilder((s) => s.publishProject);
 
   const activePage = project?.pages?.find((p: any) => p.id === currentPageId) ?? project?.pages?.[0] ?? null;
 
@@ -88,64 +91,72 @@ export function CanvasToolbar({
 
   async function openPreview() {
     if (!project || !mounted) return;
-
-    const currentPage = project.pages.find((p: any) => p.id === project.currentPageId) || project.pages[0];
-    if (!currentPage) {
-      toast.error('Preview failed: No current page available for preview');
-      return;
-    }
-
-    const previewSlug = `${slugifyName(project.name)}-${project.id}`;
-    const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
-
-    const payload = {
-      __lovablePreviewPayload: true,
-      projectId: project.id,
-      project,
-      pageId: currentPage.id,
-    };
-
-    let payloadSent = false;
-    const sendPayload = () => {
-      if (payloadSent) return;
-      payloadSent = true;
-      try {
-        previewWindow.postMessage(payload, "*");
-      } catch (err) {
-        console.error("Preview postMessage failed", err);
+    await requirePreviewAuth(() => {
+      const currentPage = project.pages.find((p: any) => p.id === project.currentPageId) || project.pages[0];
+      if (!currentPage) {
+        toast.error('Preview failed: No current page available for preview');
+        return;
       }
-    };
 
-    const handlePreviewReady = (event: MessageEvent) => {
-      if (event.data && event.data.__previewReady) {
-        sendPayload();
-        window.removeEventListener("message", handlePreviewReady);
+      const previewSlug = `${slugifyName(project.name)}-${project.id}`;
+      const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
+
+      const payload = {
+        __lovablePreviewPayload: true,
+        projectId: project.id,
+        project,
+        pageId: currentPage.id,
+      };
+
+      const previewWindow = window.open(previewUrl, '_blank');
+      if (!previewWindow) {
+        console.error("[PREVIEW:SENDER] window.open returned null: popup blocked?");
+        toast.error('Preview failed: Unable to open preview window');
+        return;
       }
-    };
 
-    window.addEventListener("message", handlePreviewReady);
+      let payloadSent = false;
+      const sendPayload = () => {
+        if (payloadSent) return;
+        payloadSent = true;
+        try {
+          previewWindow.postMessage(payload, "*");
+        } catch (err) {
+          console.error("Preview postMessage failed", err);
+        }
+      };
 
-    const previewWindow = window.open(previewUrl, '_blank');
-    if (!previewWindow) {
-      window.removeEventListener("message", handlePreviewReady);
-      toast.error('Preview failed: Unable to open preview window');
-      return;
-    }
+      const handlePreviewReady = (event: MessageEvent) => {
+        if (event.data && event.data.__previewReady) {
+          console.log("[PREVIEW:SENDER] received __previewReady, sending payload");
+          sendPayload();
+          window.removeEventListener("message", handlePreviewReady);
+        }
+      };
 
-    const closedCheck = window.setInterval(() => {
-      if (previewWindow.closed) {
-        window.clearInterval(closedCheck);
-        window.removeEventListener("message", handlePreviewReady);
-      }
-    }, 1000);
+      window.addEventListener("message", handlePreviewReady);
 
-    previewWindow.focus();
-    toast.success('Preview opened', { duration: 2000, position: 'top-center' });
+      console.log("[PREVIEW:SENDER] opening preview", { previewUrl, projectId: project.id, pageId: currentPage.id, pageSlug: currentPage.slug });
+      console.log("[PREVIEW:SENDER] window.opened", { href: previewWindow.location?.href, closed: previewWindow.closed });
+
+      const closedCheck = window.setInterval(() => {
+        if (previewWindow.closed) {
+          window.clearInterval(closedCheck);
+          window.removeEventListener("message", handlePreviewReady);
+        }
+      }, 1000);
+
+      previewWindow.focus();
+      toast.success('Preview opened', { duration: 2000, position: 'top-center' });
+    });
   }
 
   async function handlePublish() {
     if (!project || !currentPageId || !mounted) return;
-    await publishProject(currentPageId);
+    await requirePublishAuth(async () => {
+      const publishProject = useBuilder.getState().publishProject;
+      await publishProject(currentPageId);
+    });
   }
 
   if (!mounted || !project) {
@@ -279,7 +290,7 @@ export function CanvasToolbar({
         <button
           type="button"
           className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#363636] bg-[#1F1F1F] px-3 text-sm font-medium text-[#F5F5F5] transition hover:border-[#FACC15] hover:text-[#FACC15]"
-          onClick={downloadZip}
+          onClick={async () => { await requireExportAuth(() => downloadZip()); }}
           title="Export ZIP"
         >
           <Download className="w-4 h-4" />

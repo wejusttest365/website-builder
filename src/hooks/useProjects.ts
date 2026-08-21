@@ -79,7 +79,16 @@ export function useProjects() {
         // ignore
       }
 
-      // Refresh cloud projects store so dashboard and other views update immediately
+      // Optimistically update cloud projects store so Recent Projects updates immediately,
+      // then refresh from Firestore to ensure the store matches the server.
+      try {
+        useCloudProjectsStore.setState((state) => ({
+          projects: state.projects.filter((p) => p.id !== projectId),
+        }));
+      } catch (err) {
+        // ignore
+      }
+
       try {
         useCloudProjectsStore.getState().refreshProjects();
       } catch (err) {

@@ -10,6 +10,8 @@ import { ClientOnly } from "./ClientOnly";
 import { ProjectActionsMenu } from "./ProjectActionsMenu";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { useRequireAuth } from "@/lib/builder/useRequireAuth";
 import { TEMPLATE_LIBRARY } from "@/lib/builder/templates";
 interface ProjectDashboardProps {
   onOpenEditor?: (projectId: string) => void;
@@ -30,6 +32,8 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
   const { user } = useAuth();
   const { projects, loading, refresh } = useCloudProjects();
   const loadCloudProject = useBuilder((s) => s.loadCloudProject);
+  const projectsMap = useBuilder((s) => s.projects);
+  const localProjects = useMemo(() => Object.values(projectsMap), [projectsMap]);
   const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
   const { deleteExistingProject } = useProjects();
   const [createOpen, setCreateOpen] = useState(false);
@@ -39,14 +43,97 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
     void refresh();
   }, [refresh]);
 
+  const visibleProjects = useMemo(() => {
+    const source = user ? projects : localProjects;
+    return source.filter((p: any) => p.status !== "trashed").slice(0, 4);
+  }, [user, projects, localProjects]);
+  const recentTemplates = TEMPLATE_LIBRARY.slice(0, 4);
+
   const openProject = async (projectId: string) => {
-    await loadCloudProject(projectId);
-    setShowProjectDashboard(false);
-    navigate({
-      to: "/editor/$projectId",
-      params: { projectId },
+    const builderState = useBuilder.getState();
+    const localProject = builderState.projects[projectId];
+    
+    if (localProject) {
+      builderState.loadProject(projectId);
+      setShowProjectDashboard(false);
+      navigate({
+        to: "/editor/$projectId",
+        params: { projectId },
+      });
+      onOpenEditor?.(projectId);
+      return;
+    }
+    
+    if (user) {
+      await loadCloudProject(projectId);
+      setShowProjectDashboard(false);
+      navigate({
+        to: "/editor/$projectId",
+        params: { projectId },
+      });
+      onOpenEditor?.(projectId);
+    }
+  };
+
+  const requirePreviewAuth = useRequireAuth("preview");
+
+  const openPreviewWindow = (project: any) => {
+    const currentPage = project.pages.find((p: any) => p.id === project.currentPageId) || project.pages[0];
+    if (!currentPage) {
+      toast.error("Preview failed: No page available for preview");
+      return;
+    }
+
+    const previewSlug = `${project.name.replace(/\s+/g, '-').toLowerCase()}-${project.id}`;
+    const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
+    const win = window.open(previewUrl, '_blank');
+    if (!win) {
+      toast.error("Preview failed: popup blocked");
+      return;
+    }
+
+    const payload = {
+      __lovablePreviewPayload: true,
+      projectId: project.id,
+      project,
+      pageId: currentPage.id,
+    };
+
+    try {
+      win.postMessage(payload, window.location.origin);
+    } catch (err) {
+      console.error("Preview postMessage failed", err);
+    }
+
+    const postInterval = window.setInterval(() => {
+      if (win.closed) { window.clearInterval(postInterval); return; }
+      try { win.postMessage(payload, window.location.origin); } catch (_) { console.warn("Preview retry postMessage failed"); }
+    }, 250);
+    window.setTimeout(() => window.clearInterval(postInterval), 2000);
+    win.focus();
+    toast.success("Preview opened", { duration: 2000, position: "top-center" });
+  };
+
+  const handlePreviewProject = async (id: string) => {
+    await requirePreviewAuth(async () => {
+      const builderState = useBuilder.getState();
+      const localProject = builderState.projects[id];
+      
+      if (localProject) {
+        openPreviewWindow(localProject);
+        return;
+      }
+      
+      if (user) {
+        await loadCloudProject(id);
+        const p = useBuilder.getState().projects[id];
+        if (p) {
+          openPreviewWindow(p);
+        } else {
+          toast.error("Preview failed: Unable to load project for preview");
+        }
+      }
     });
-    onOpenEditor?.(projectId);
   };
 
   const createNewProject = () => {
@@ -61,17 +148,7 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
     setCreateOpen(false);
   };
 
-  if (!user) {
-    return (
-      <div className="flex min-h-[450px] items-center justify-center p-8 text-center text-sm text-muted-foreground">
-        Sign in to view your dashboard.
-      </div>
-    );
-  }
-
-  const firstName = user.name?.split(" ")[0] || "there";
-  const visibleProjects = useMemo(() => projects.slice(0, 4), [projects]);
-  const recentTemplates = TEMPLATE_LIBRARY.slice(0, 4);
+  const firstName = user ? (user.name?.split(" ")[0] || "there") : "Guest";
 
   return (
     <div className="mx-auto min-h-[calc(100vh-100px)] max-w-[1580px] px-3 py-4 sm:px-4 lg:px-6">
@@ -192,42 +269,7 @@ export function ProjectDashboard({ onOpenEditor }: ProjectDashboardProps) {
                         <ProjectActionsMenu
                           project={project as any}
                           onOpen={(id) => openProject(id)}
-                           onPreview={async (id) => {
-                              await loadCloudProject(id);
-                              const p = useBuilder.getState().projects[id];
-                              if (!p) {
-                                console.warn("[PREVIEW:SENDER] skipped: project not found after loadCloudProject", { projectId: id });
-                                return;
-                              }
-                              const currentPage = p.pages.find((pg: any) => pg.id === p.currentPageId) || p.pages[0];
-                              if (!currentPage) {
-                                console.warn("[PREVIEW:SENDER] skipped: no current page", { projectId: id, pageCount: p.pages?.length });
-                                return;
-                              }
-                              const previewSlug = `${p.name.replace(/\s+/g, '-').toLowerCase()}-${p.id}`;
-                              const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
-                              console.log("[PREVIEW:SENDER] opening preview", { previewUrl, projectId: p.id, pageId: currentPage.id, pageSlug: currentPage.slug });
-                              const win = window.open(previewUrl, '_blank');
-                              if (!win) {
-                                console.error("[PREVIEW:SENDER] window.open returned null: popup blocked?");
-                                return;
-                              }
-                              console.log("[PREVIEW:SENDER] window.opened", { href: win.location?.href, closed: win.closed });
-                              const payload = { __lovablePreviewPayload: true, projectId: p.id, project: p, pageId: currentPage.id };
-                              console.log("[PREVIEW:SENDER] sending payload", { keys: Object.keys(payload), projectId: payload.projectId, hasProject: !!payload.project });
-                              try {
-                                win.postMessage(payload, window.location.origin);
-                                console.log("[PREVIEW:SENDER] first postMessage sent", { targetOrigin: window.location.origin });
-                              } catch (err) {
-                                console.error("[PREVIEW:SENDER] first postMessage failed", err);
-                              }
-                              const postInterval = window.setInterval(() => {
-                                if (win.closed) { window.clearInterval(postInterval); console.log("[PREVIEW:SENDER] preview window closed"); return; }
-                                try { win.postMessage(payload, window.location.origin); console.log("[PREVIEW:SENDER] retry postMessage sent"); } catch (_) { console.warn("[PREVIEW:SENDER] retry postMessage failed"); }
-                              }, 250);
-                              window.setTimeout(() => window.clearInterval(postInterval), 2000);
-                              win.focus();
-                            }}
+                           onPreview={handlePreviewProject}
                         />
                       </div>
                     </div>

@@ -25,10 +25,16 @@ export function DemoView({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     setMounted(true);
+    console.log("[PREVIEW:WINDOW] DemoView mounted", { projectId, actualProjectId, mounted: true, authReady: !!authReady, userId: user?.id });
   }, []);
 
   useEffect(() => {
     const handleResponse = (event: MessageEvent) => {
+      console.log("[PREVIEW:RECEIVER] message received", {
+        origin: event.origin,
+        source: typeof event.source,
+        data: typeof event.data === 'object' && event.data !== null ? Object.keys(event.data as any) : typeof event.data,
+      });
       const data = event.data as {
         __lovablePreviewPayload?: true;
         projectId?: string;
@@ -36,8 +42,15 @@ export function DemoView({ projectId }: { projectId: string }) {
         pageId?: string | null;
       };
       if (!data || data.__lovablePreviewPayload !== true) return;
-      if (data.projectId !== actualProjectId) return;
-      if (!data.project) return;
+      if (data.projectId !== actualProjectId) {
+        console.warn("[PREVIEW:RECEIVER] rejected: projectId mismatch", { received: data.projectId, expected: actualProjectId });
+        return;
+      }
+      if (!data.project) {
+        console.warn("[PREVIEW:RECEIVER] rejected: missing project", { projectId: data.projectId });
+        return;
+      }
+      console.log("[PREVIEW:RECEIVER] payload accepted", { projectId: data.projectId, pageId: data.pageId, projectName: data.project.name, pages: data.project.pages?.length });
       setProj(data.project);
       projRef.current = data.project;
       const requestedPageId = data.pageId ?? data.project.currentPageId ?? data.project.pages?.[0]?.id ?? null;
@@ -49,10 +62,13 @@ export function DemoView({ projectId }: { projectId: string }) {
 
     if (window.opener) {
       try {
+        console.log("[PREVIEW:WINDOW] sending __previewReady to opener", { openerOrigin: window.opener.location?.origin, currentOrigin: window.location.origin });
         window.opener.postMessage({ __previewReady: true }, "*");
-      } catch {
-        // preview may be opened without opener (e.g., refreshed tab)
+      } catch (e) {
+        console.log("[PREVIEW:WINDOW] __previewReady send failed", e);
       }
+    } else {
+      console.warn("[PREVIEW:WINDOW] window.opener is null, cannot send __previewReady");
     }
 
     return () => window.removeEventListener("message", handleResponse);
@@ -66,9 +82,11 @@ export function DemoView({ projectId }: { projectId: string }) {
         localStorage.getItem("wto-builder-v2") ??
         localStorage.getItem("wto-builder-v1") ??
         localStorage.getItem("wto-builder-state");
+      console.log("[PREVIEW:RECEIVER] localStorage check", { keys: ["wto-builder-v2", "wto-builder-v1", "wto-builder-state"], hasRaw: !!raw, rawLength: raw?.length });
       if (raw) {
         const data = JSON.parse(raw) as { projects: Record<string, Project> };
         const p = data.projects?.[actualProjectId];
+        console.log("[PREVIEW:RECEIVER] localStorage project lookup", { actualProjectId, hasProject: !!p, projectIds: Object.keys(data.projects || {}).slice(0, 5) });
         if (p) {
           const urlParams = new URLSearchParams(window.location.search);
           const pageParam = urlParams.get("page")?.replace(/^[./]+/, "").replace(/\.html$/i, "");
@@ -77,15 +95,17 @@ export function DemoView({ projectId }: { projectId: string }) {
             : null;
           const requestedPageId = matchedPage?.id ?? p.currentPageId ?? p.pages?.[0]?.id ?? null;
           const fallbackPageId = requestedPageId ?? p.pages?.[0]?.id ?? null;
+          console.log("[PREVIEW:RECEIVER] localStorage project loaded", { projectId: p.id, pageParam, matchedPageId: matchedPage?.id, pageCount: p.pages?.length, requestedPageId, fallbackPageId });
           setProj(p);
           projRef.current = p;
           setActivePageId(fallbackPageId);
           loadedFromStorage = true;
         }
       }
-    } catch {
-      // storage may be unavailable
+    } catch (err) {
+      console.warn("[PREVIEW:RECEIVER] localStorage load failed", err);
     }
+    console.log("[PREVIEW:RECEIVER] localStorage loadedFromStorage", { loadedFromStorage });
   }, [mounted, actualProjectId]);
 
   useEffect(() => {
@@ -105,7 +125,9 @@ export function DemoView({ projectId }: { projectId: string }) {
 
     let cancelled = false;
     async function loadFromCloud() {
+      console.log("[PREVIEW:RECEIVER] cloud load starting", { actualProjectId, userId: user?.id, authReady });
       if (!user?.id) {
+        console.warn("[PREVIEW:RECEIVER] cloud load skipped: no user");
         setCloudError("Sign in required to preview this project.");
         setNotFound(true);
         return;
@@ -115,6 +137,7 @@ export function DemoView({ projectId }: { projectId: string }) {
       try {
         const project = await getBuilderProject(actualProjectId);
         if (cancelled) return;
+        console.log("[PREVIEW:RECEIVER] cloud load success", { projectId: project.id, pageCount: project.pages?.length });
         const urlParams = new URLSearchParams(window.location.search);
         const pageParam = urlParams.get("page")?.replace(/^[./]+/, "").replace(/\.html$/i, "");
         const matchedPage = pageParam
@@ -128,6 +151,7 @@ export function DemoView({ projectId }: { projectId: string }) {
         setNotFound(false);
       } catch (err) {
         if (cancelled) return;
+        console.error("[PREVIEW:RECEIVER] cloud load failed:", err);
         setCloudError(err instanceof Error ? err.message : "Unable to load project");
         setNotFound(true);
       } finally {
@@ -188,15 +212,24 @@ export function DemoView({ projectId }: { projectId: string }) {
 
   const previewHtml = useMemo(() => {
     const currentProj = projRef.current || proj;
+    console.log("[PREVIEW:HTML] buildPreviewHTML called", { hasProject: !!currentProj, activePageId, projId: currentProj?.id });
     if (!currentProj || activePageId === null) {
+      console.log("[PREVIEW:HTML] no project or page yet, keeping previous html", { hasProject: !!currentProj, activePageId });
       return lastPreviewHtmlRef.current;
     }
     const page = currentProj.pages.find((pg) => pg.id === activePageId) ?? currentProj.pages[0];
     if (!page) {
+      console.warn("[PREVIEW:HTML] no page found for activePageId", { activePageId, pageCount: currentProj.pages?.length, projectId: currentProj.id });
       return lastPreviewHtmlRef.current;
     }
+    const composedSections = composePageSections(currentProj, page);
+    console.log("[PREVIEW:HTML] composed sections", {
+      composedCount: composedSections.length,
+      composedIds: composedSections.map((s) => s.id),
+      firstComposedSectionKeys: composedSections[0] ? Object.keys(composedSections[0]) : 'empty',
+    });
     const html = buildPreviewHTML({
-      sections: composePageSections(currentProj, page),
+      sections: composedSections,
       globalCss: currentProj.globalCss || "",
       globalJs: currentProj.globalJs || "",
       editable: false,
@@ -211,6 +244,7 @@ export function DemoView({ projectId }: { projectId: string }) {
       customHead: currentProj.customHead,
       previewCssHref: APP_CSS_HREF,
     });
+    console.log("[PREVIEW:HTML] built", { htmlLength: html.length, title: currentProj.name });
     lastPreviewHtmlRef.current = html;
     return html;
   }, [proj, activePageId]);
@@ -234,6 +268,8 @@ export function DemoView({ projectId }: { projectId: string }) {
 
   const hasProject = !!projRef.current || !!proj;
 
+  console.log("[PREVIEW:IFRAME] render check", { mounted, hasProject, activePageId, previewHtmlLength: previewHtml?.length, notFound, cloudLoading, cloudError });
+
   if (!hasProject || activePageId === null || !previewHtml) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-center p-8">
@@ -245,6 +281,7 @@ export function DemoView({ projectId }: { projectId: string }) {
     );
   }
 
+  console.log("[PREVIEW:IFRAME] rendering iframe", { title: (projRef.current || proj)?.name, htmlLength: previewHtml.length });
   return (
     <iframe
       title={(projRef.current || proj)?.name || "Preview"}

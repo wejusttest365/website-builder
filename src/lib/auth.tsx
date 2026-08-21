@@ -8,6 +8,9 @@ import {
   subscribeToAuth,
   logout as firebaseLogout,
 } from "@/services/auth";
+import { useBuilder } from "@/lib/builder/store";
+import { saveBuilderProject, getBuilderProject } from "@/services/builderProject";
+import { saveProjectMetadata } from "@/services/project";
 
 type AuthUser = {
   id: string;
@@ -72,6 +75,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       latestUserId.current = firebaseUser.uid;
       await createUserIfNotExists(firebaseUser);
+
+      const builderState = useBuilder.getState();
+      const currentProject = builderState.currentProject();
+      
+      if (currentProject) {
+        try {
+          await saveBuilderProject(currentProject);
+          await saveProjectMetadata({
+            id: currentProject.id,
+            name: currentProject.name,
+            templateId: currentProject.selectedTemplateId,
+            thumbnail: currentProject.thumbnail || "",
+            description: currentProject.description || "",
+            favorite: false,
+            status: "draft",
+            createdAt: currentProject.createdAt ?? Date.now(),
+            updatedAt: currentProject.updatedAt ?? Date.now(),
+            pages: currentProject.pages.map((p) => ({ id: p.id, slug: p.slug })),
+            isPublic: false,
+          });
+        } catch (error) {
+          console.error("Failed to migrate local project to cloud after login:", error);
+        }
+      }
 
       setUser({
         id: firebaseUser.uid,

@@ -5,7 +5,6 @@ import { BuilderShell } from '@/components/builder/BuilderShell';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { CenteredLoader } from '@/components/ui/CenteredLoader';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { LandingPage } from '@/components/landing/LandingPage';
 import { useAuth } from '@/lib/auth';
 import { getStoredBuilderState, useBuilder } from '@/lib/builder/store';
 import { getBuilderProject } from "@/services/builderProject";
@@ -17,7 +16,7 @@ export const Route = createFileRoute('/editor/$projectId')({
 function EditorRoute() {
   const { projectId } = Route.useParams();
   const navigate = useNavigate();
-  const { user, authReady } = useAuth();
+  const { authReady } = useAuth();
   const loadCloudProject = useBuilder((s) => s.loadCloudProject);
   const selectPage = useBuilder((s) => s.selectPage);
   const hydrate = useBuilder((s) => s.hydrate);
@@ -30,7 +29,7 @@ function EditorRoute() {
   }, [projectId]);
 
   useEffect(() => {
-    if (!authReady || !user || hasLoadedProjectRef.current) {
+    if (!authReady || hasLoadedProjectRef.current) {
       return;
     }
 
@@ -70,15 +69,6 @@ function EditorRoute() {
         useBuilder.setState({ leftPanelOpen: null });
       }
 
-      // console.log("EditorRoute loadProject", {
-      //   projectId,
-      //   hydrated: builderState.hydrated,
-      //   localProject: Boolean(localProject),
-      //   currentProjectId: builderState.currentProjectId,
-      //   projectIds: Object.keys(builderState.projects),
-      //   showProjectDashboard: builderState.showProjectDashboard,
-      // });
-
       if (localProject) {
         builderState.loadProject(projectId);
         builderState.setShowProjectDashboard(false);
@@ -109,7 +99,7 @@ function EditorRoute() {
     };
 
     void loadProject();
-  }, [authReady, hydrated, hydrate, loadCloudProject, navigate, projectId, selectPage, setShowProjectDashboard, user]);
+  }, [authReady, hydrated, hydrate, loadCloudProject, navigate, projectId, selectPage, setShowProjectDashboard]);
 
   if (!authReady) {
     return (
@@ -117,10 +107,6 @@ function EditorRoute() {
         <CenteredLoader message="Preparing your website builder…" details="This will only take a moment." />
       </div>
     );
-  }
-
-  if (!user) {
-    return <LandingPage />;
   }
 
   return (

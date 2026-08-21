@@ -4,6 +4,8 @@ import { buildSiteExport } from "@/lib/builder/preview";
 import JSZip from "jszip";
 import { SaveStatus } from "./SaveStatus";
 import { Undo2, Redo2, Monitor, Tablet, Smartphone, Download, Save, Moon, Sun, Sparkles } from "lucide-react";
+import { useRequireAuth } from "@/lib/builder/useRequireAuth";
+import { toast } from "sonner";
 
 export function Toolbar() {
   const mounted = useMounted();
@@ -19,6 +21,7 @@ export function Toolbar() {
   const device = useBuilder((s) => s.device);
   const toggleDark = useBuilder((s) => s.toggleDark);
   const dark = useBuilder((s) => s.dark);
+  const requireExportAuth = useRequireAuth("export");
 
   async function downloadZip() {
     if (!project || !mounted) return;
@@ -40,6 +43,11 @@ export function Toolbar() {
     a.download = `${project.name.replace(/\s+/g, "-").toLowerCase()}.zip`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleExportClick() {
+    if (!project || !mounted) return;
+    await requireExportAuth(() => downloadZip());
   }
 
   function slugifyName(name: string) {
@@ -191,7 +199,7 @@ export function Toolbar() {
             </button>
             <button
               className="flex h-8 items-center gap-2 rounded-full bg-[#FACC15] px-3 text-[11px] font-medium text-[#111111] transition hover:bg-[#FDE047]"
-              onClick={downloadZip}
+              onClick={handleExportClick}
             >
               <Download className="h-3.5 w-3.5" /> Export ZIP
             </button>

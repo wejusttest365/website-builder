@@ -17,6 +17,7 @@ import { useCloudProjectsStore } from '@/lib/builder/cloudProjectsStore';
 import { deleteBuilderProject, getBuilderProject, saveBuilderProject } from "@/services/builderProject";
 import { buildSiteExport } from "@/lib/builder/preview";
 import { useNavigate } from "@tanstack/react-router";
+import { useRequireAuth } from "@/lib/builder/useRequireAuth";
 import { ClientOnly } from "./ClientOnly";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { PremiumThumbnailPlaceholder } from "./PremiumThumbnailPlaceholder";
@@ -39,16 +40,14 @@ export function MyProjects({
 }: MyProjectsProps) {
   const { user } = useAuth();
   const { projects, loading, error, refresh } = useCloudProjects();
-//   console.log("loading =", loading);
-// console.log("error =", error);
-// console.log("projects =", projects);
-// console.log("projects.length =", projects.length);
   const loadCloudProject = useBuilder((s) => s.loadCloudProject);
+  const projectsMap = useBuilder((s) => s.projects);
+  const localProjects = useMemo(() => Object.values(projectsMap), [projectsMap]);
   const newProject = useBuilder((s) => s.newProject);
   const currentProjectId = useBuilder((s) => s.currentProjectId);
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("newest" as "newest" | "oldest" | "az" | "recent");
-  const [localProjects, setLocalProjects] = useState(projects);
+  const [localProjectsState, setLocalProjectsState] = useState<any[]>([]);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -64,16 +63,41 @@ export function MyProjects({
   const setShowProjectDashboard = useBuilder((s) => s.setShowProjectDashboard);
   const { deleteExistingProject } = useProjects();
 
-  useEffect(() => setLocalProjects(projects), [projects]);
+  const requireExportAuth = useRequireAuth("export");
+  const requirePublishAuth = useRequireAuth("publish");
+  const requirePreviewAuth = useRequireAuth("preview");
+
+  const allProjects = useMemo(() => {
+    if (user) {
+      return localProjectsState;
+    }
+    return localProjects;
+  }, [user, localProjectsState, localProjects]);
+
+  useEffect(() => {
+    if (user) {
+      setLocalProjectsState(projects);
+    }
+  }, [user, projects]);
 
   async function handleRenameSave() {
     if (!activeProject) return;
     try {
-      await updateCloudProject(activeProject.id, { name: renameValue });
-      setLocalProjects((prev: any[]) => prev.map((p) => (p.id === activeProject.id ? { ...p, name: renameValue } : p)));
-      refresh();
+      if (user) {
+        await updateCloudProject(activeProject.id, { name: renameValue });
+        setLocalProjectsState((prev: any[]) => prev.map((p) => (p.id === activeProject.id ? { ...p, name: renameValue } : p)));
+        refresh();
+      } else {
+        const builderState = useBuilder.getState();
+        const project = builderState.projects[activeProject.id];
+        if (project) {
+          builderState.renameProject(activeProject.id, renameValue);
+          setLocalProjectsState((prev: any[]) => prev.map((p) => (p.id === activeProject.id ? { ...p, name: renameValue } : p)));
+        }
+      }
     } catch (err) {
       console.error(err);
+      toast.error("Failed to rename project");
     } finally {
       setRenameOpen(false);
       setActiveProject(null);
@@ -85,23 +109,35 @@ export function MyProjects({
     setDeleteLoading(true);
 
     try {
-      // Use centralized deletion to ensure all stores and caches are updated
-      if (deleteMode === 'delete-forever') {
-        await deleteExistingProject(activeProject.id);
-        setLocalProjects((prev: any[]) => prev.filter((p) => p.id !== activeProject.id));
-        toast.success('Project permanently deleted');
-      } else {
-        const now = Date.now();
-        // Move to trash via cloud update and refresh
-        await updateCloudProject(activeProject.id, { status: 'trashed', updatedAt: now });
-        setLocalProjects((prev: any[]) => prev.map((p) => (p.id === activeProject.id ? { ...p, status: 'trashed', updatedAt: now } : p)));
-        useCloudProjectsStore.getState().refreshProjects();
+      if (user) {
+        if (deleteMode === 'delete-forever') {
+          await deleteExistingProject(activeProject.id);
+          setLocalProjectsState((prev: any[]) => prev.filter((p) => p.id !== activeProject.id));
+          toast.success('Project permanently deleted');
+        } else {
+          const now = Date.now();
+          await updateCloudProject(activeProject.id, { status: 'trashed', updatedAt: now });
+          setLocalProjectsState((prev: any[]) => prev.map((p) => (p.id === activeProject.id ? { ...p, status: 'trashed', updatedAt: now } : p)));
+          useCloudProjectsStore.getState().refreshProjects();
 
-        if (currentProjectId === activeProject.id) {
-          navigate({ to: "/dashboard" as never });
+          if (currentProjectId === activeProject.id) {
+            navigate({ to: "/dashboard" as never });
+          }
+
+          toast.success('Project moved to Trash');
         }
-
-        toast.success('Project moved to Trash');
+      } else {
+        const builderState = useBuilder.getState();
+        if (deleteMode === 'delete-forever') {
+          builderState.deleteProject(activeProject.id);
+          setLocalProjectsState((prev: any[]) => prev.filter((p) => p.id !== activeProject.id));
+          toast.success('Project permanently deleted');
+        } else {
+          const now = Date.now();
+          builderState.updateProjectStatus?.(activeProject.id, 'trashed', now);
+          setLocalProjectsState((prev: any[]) => prev.map((p) => (p.id === activeProject.id ? { ...p, status: 'trashed', updatedAt: now } : p)));
+          toast.success('Project moved to Trash');
+        }
       }
     } catch (err) {
       console.error(err);
@@ -124,7 +160,49 @@ export function MyProjects({
 
   async function handleDuplicateProject(projectRecord: any) {
     try {
-      // Load the full builder project
+      const builderState = useBuilder.getState();
+      const localProject = builderState.projects[projectRecord.id];
+      
+      if (localProject) {
+        const newId = nanoid(8);
+        const newName = `${localProject.name || "Untitled"} (copy)`;
+        const now = Date.now();
+        const copy = {
+          ...JSON.parse(JSON.stringify(localProject)),
+          id: newId,
+          name: newName,
+          createdAt: now,
+          updatedAt: now,
+        };
+        builderState.duplicateProject(projectRecord.id);
+        
+        if (user) {
+          await saveBuilderProject(copy);
+          await createCloudProject({
+            id: newId,
+            name: newName,
+            templateId: projectRecord.templateId || null,
+            thumbnail: projectRecord.thumbnail || "",
+            description: projectRecord.description || "",
+            favorite: false,
+            status: projectRecord.status || "draft",
+            isPublic: projectRecord.isPublic || false,
+            createdAt: now,
+            updatedAt: now,
+            pages: copy.pages.map((p: any) => p.slug),
+          });
+          refresh();
+        }
+        
+        toast.success("Project duplicated successfully");
+        return;
+      }
+
+      if (!user) {
+        toast.error("Please sign in to duplicate cloud projects");
+        return;
+      }
+
       const fullProject = await getBuilderProject(projectRecord.id);
       if (!fullProject) {
         toast.error("Could not load project to duplicate");
@@ -135,7 +213,6 @@ export function MyProjects({
       const newName = `${fullProject.name || "Untitled"} (copy)`;
       const now = Date.now();
 
-      // Create duplicated builder project
       const duplicatedProject = {
         ...fullProject,
         id: newId,
@@ -144,10 +221,8 @@ export function MyProjects({
         updatedAt: now,
       };
 
-      // Save full builder project
       await saveBuilderProject(duplicatedProject);
 
-      // Create cloud metadata
       await createCloudProject({
         id: newId,
         name: newName,
@@ -162,8 +237,7 @@ export function MyProjects({
         pages: duplicatedProject.pages.map((p: any) => p.slug),
       });
 
-      // Update local state
-      setLocalProjects((prev: any[]) => [
+      setLocalProjectsState((prev: any[]) => [
         {
           ...projectRecord,
           id: newId,
@@ -184,73 +258,125 @@ export function MyProjects({
   }
 
   async function handlePreviewProject(projectId: string) {
-    await loadCloudProject(projectId);
-    const project = useBuilder.getState().projects[projectId];
-    if (!project) {
-      console.warn("[PREVIEW:SENDER] skipped: project not found after loadCloudProject", { projectId });
-      toast.error("Preview failed: Unable to load project for preview");
-      return;
-    }
+    await requirePreviewAuth(async () => {
+      const builderState = useBuilder.getState();
+      const localProject = builderState.projects[projectId];
+      
+      if (localProject) {
+        const project = localProject;
+        const currentPage = project.pages.find((p: Page) => p.id === project.currentPageId) || project.pages[0];
+        if (!currentPage) {
+          toast.error("Preview failed: No page available for preview");
+          return;
+        }
 
-    const currentPage = project.pages.find((p: Page) => p.id === project.currentPageId) || project.pages[0];
-    if (!currentPage) {
-      console.warn("[PREVIEW:SENDER] skipped: no current page", { projectId, pageCount: project.pages?.length });
-      toast.error("Preview failed: No page available for preview");
-      return;
-    }
+        const previewSlug = `${slugifyName(project.name)}-${project.id}`;
+        const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
 
-    const previewSlug = `${slugifyName(project.name)}-${project.id}`;
-    const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
-    console.log("[PREVIEW:SENDER] opening preview", { previewUrl, projectId: project.id, pageId: currentPage.id, pageSlug: currentPage.slug });
+        const previewWindow = window.open(previewUrl, "_blank");
+        if (!previewWindow) {
+          toast.error("Preview failed: Unable to open preview window");
+          return;
+        }
 
-    const previewWindow = window.open(previewUrl, "_blank");
-    if (!previewWindow) {
-      console.error("[PREVIEW:SENDER] window.open returned null: popup blocked?");
-      toast.error("Preview failed: Unable to open preview window");
-      return;
-    }
-    console.log("[PREVIEW:SENDER] window.opened", { href: previewWindow.location?.href, closed: previewWindow.closed });
+        const payload = {
+          __lovablePreviewPayload: true,
+          projectId: project.id,
+          project,
+          pageId: currentPage.id,
+        };
 
-    const payload = {
-      __lovablePreviewPayload: true,
-      projectId,
-      project,
-      pageId: currentPage.id,
-    };
-    console.log("[PREVIEW:SENDER] sending payload", { keys: Object.keys(payload), projectId: payload.projectId, hasProject: !!payload.project });
+        try {
+          previewWindow.postMessage(payload, window.location.origin);
+        } catch (err) {
+          console.error("Preview postMessage failed", err);
+        }
 
-    try {
-      previewWindow.postMessage(payload, window.location.origin);
-      console.log("[PREVIEW:SENDER] first postMessage sent", { targetOrigin: window.location.origin });
-    } catch (err) {
-      console.error("[PREVIEW:SENDER] first postMessage failed", err);
-    }
-
-    const postInterval = window.setInterval(() => {
-      if (previewWindow.closed) {
-        window.clearInterval(postInterval);
-        console.log("[PREVIEW:SENDER] preview window closed, stopped retries");
+        const postInterval = window.setInterval(() => {
+          if (previewWindow.closed) {
+            window.clearInterval(postInterval);
+            return;
+          }
+          try {
+            previewWindow.postMessage(payload, window.location.origin);
+          } catch (_) {
+            console.warn("Preview retry postMessage failed");
+          }
+        }, 250);
+        window.setTimeout(() => window.clearInterval(postInterval), 2000);
+        previewWindow.focus();
+        toast.success("Preview opened", { duration: 2000, position: "top-center" });
         return;
       }
-      try {
-        previewWindow.postMessage(payload, window.location.origin);
-        console.log("[PREVIEW:SENDER] retry postMessage sent");
-      } catch (_) {
-        console.warn("[PREVIEW:SENDER] retry postMessage failed");
-      }
-    }, 250);
 
-    window.setTimeout(() => window.clearInterval(postInterval), 2000);
-    previewWindow.focus();
-    toast.success("Preview opened", { duration: 2000, position: "top-center" });
+      if (user) {
+        await loadCloudProject(projectId);
+        const project = useBuilder.getState().projects[projectId];
+        if (!project) {
+          toast.error("Preview failed: Unable to load project for preview");
+          return;
+        }
+
+        const currentPage = project.pages.find((p: Page) => p.id === project.currentPageId) || project.pages[0];
+        if (!currentPage) {
+          toast.error("Preview failed: No page available for preview");
+          return;
+        }
+
+        const previewSlug = `${slugifyName(project.name)}-${project.id}`;
+        const previewUrl = `${window.location.origin}/demo/${encodeURIComponent(previewSlug)}?page=${encodeURIComponent(currentPage.slug)}`;
+
+        const previewWindow = window.open(previewUrl, "_blank");
+        if (!previewWindow) {
+          toast.error("Preview failed: Unable to open preview window");
+          return;
+        }
+
+        const payload = {
+          __lovablePreviewPayload: true,
+          projectId: project.id,
+          project,
+          pageId: currentPage.id,
+        };
+
+        try {
+          previewWindow.postMessage(payload, window.location.origin);
+        } catch (err) {
+          console.error("Preview postMessage failed", err);
+        }
+
+        const postInterval = window.setInterval(() => {
+          if (previewWindow.closed) {
+            window.clearInterval(postInterval);
+            return;
+          }
+          try {
+            previewWindow.postMessage(payload, window.location.origin);
+          } catch (_) {
+            console.warn("Preview retry postMessage failed");
+          }
+        }, 250);
+        window.setTimeout(() => window.clearInterval(postInterval), 2000);
+        previewWindow.focus();
+        toast.success("Preview opened", { duration: 2000, position: "top-center" });
+      }
+    });
   }
 
   async function handleRestoreProject(projectRecord: any) {
     const now = Date.now();
     try {
-      await updateCloudProject(projectRecord.id, { status: "draft", updatedAt: now });
-      setLocalProjects((prev: any[]) => prev.map((p) => (p.id === projectRecord.id ? { ...p, status: "draft", updatedAt: now } : p)));
-      refresh();
+      if (user) {
+        await updateCloudProject(projectRecord.id, { status: "draft", updatedAt: now });
+        setLocalProjectsState((prev: any[]) => prev.map((p) => (p.id === projectRecord.id ? { ...p, status: "draft", updatedAt: now } : p)));
+      } else {
+        const builderState = useBuilder.getState();
+        const project = builderState.projects[projectRecord.id];
+        if (project) {
+          builderState.updateProjectStatus?.(projectRecord.id, "draft", now);
+          setLocalProjectsState((prev: any[]) => prev.map((p) => (p.id === projectRecord.id ? { ...p, status: "draft", updatedAt: now } : p)));
+        }
+      }
       toast.success("Project restored successfully");
     } catch (err) {
       console.error(err);
@@ -263,15 +389,23 @@ export function MyProjects({
     const projectId = projectRecord.id;
 
     setAnimatingFavoriteId(projectId);
-    setLocalProjects((prev: any[]) => prev.map((p) => (p.id === projectId ? { ...p, favorite: nextValue } : p)));
+    setLocalProjectsState((prev: any[]) => prev.map((p) => (p.id === projectId ? { ...p, favorite: nextValue } : p)));
 
     try {
-      await updateCloudProject(projectId, { favorite: nextValue });
-      refresh();
+      if (user) {
+        await updateCloudProject(projectId, { favorite: nextValue });
+        refresh();
+      } else {
+        const builderState = useBuilder.getState();
+        const project = builderState.projects[projectId];
+        if (project) {
+          builderState.updateProjectStatus?.(projectId, (project as any).status ?? "draft", Date.now());
+        }
+      }
       toast.success(nextValue ? "Added to favorites" : "Removed from favorites");
     } catch (err) {
       console.error(err);
-      setLocalProjects((prev: any[]) => prev.map((p) => (p.id === projectId ? { ...p, favorite: !nextValue } : p)));
+      setLocalProjectsState((prev: any[]) => prev.map((p) => (p.id === projectId ? { ...p, favorite: !nextValue } : p)));
       toast.error("Failed to update favorites. Please try again.");
     } finally {
       window.setTimeout(() => {
@@ -281,10 +415,16 @@ export function MyProjects({
   }
 
   async function handleExportProject(projectId: string) {
-    setExportLoading(true);
-    try {
-      await loadCloudProject(projectId);
-      const project = useBuilder.getState().projects[projectId];
+    const allowed = await requireExportAuth(async () => {
+      const builderState = useBuilder.getState();
+      const localProject = builderState.projects[projectId];
+      
+      let project = localProject;
+      if (!project && user) {
+        await loadCloudProject(projectId);
+        project = useBuilder.getState().projects[projectId];
+      }
+      
       if (!project) {
         throw new Error("Unable to load project for export");
       }
@@ -307,17 +447,14 @@ export function MyProjects({
       link.click();
       URL.revokeObjectURL(url);
       toast.success("Project exported as HTML zip");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to export project");
-    } finally {
-      setExportLoading(false);
-    }
+    });
+
+    if (!allowed) return;
   }
 
   const filteredProjects = useMemo(() => {
     const search = q.trim().toLowerCase();
-    let list = (localProjects ?? []).filter((p: any) => {
+    let list = allProjects.filter((p: any) => {
       if (showOnlyTrashed) return p.status === "trashed";
       if (showOnlyFavorites) return p.favorite && p.status !== "trashed";
       return p.status !== "trashed";
@@ -355,7 +492,7 @@ export function MyProjects({
     }
 
     return list;
-  }, [localProjects, q, showOnlyFavorites, showOnlyTrashed, sort, statusFilter]);
+  }, [allProjects, q, showOnlyFavorites, showOnlyTrashed, sort, statusFilter]);
 
   if (loading) {
     return (
@@ -363,15 +500,6 @@ export function MyProjects({
         {[...Array(6)].map((_, index) => (
           <div key={index} className="animate-pulse rounded-sm border border-border/70 bg-card p-4 h-36" />
         ))}
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-900 shadow-sm">
-        <div className="text-base font-semibold text-rose-950">Sign in to view your projects</div>
-        <p className="mt-2 text-sm text-rose-700">Your saved projects are available once you sign in with your account.</p>
       </div>
     );
   }
@@ -519,7 +647,6 @@ export function MyProjects({
 
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
 
-  
 
         {filteredProjects.map((projectRecord: any) => {
           const isSelected = projectRecord.id === currentProjectId;
@@ -568,7 +695,26 @@ export function MyProjects({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent sideOffset={8} align="end" className="w-44">
                         <DropdownMenuItem onSelect={() => { setActiveProject(projectRecord); setRenameValue(projectRecord.name || ""); setRenameOpen(true); }}>Rename</DropdownMenuItem>
-                        <DropdownMenuItem onSelect={async () => { try { await updateCloudProject(projectRecord.id, { status: "published" }); setLocalProjects((prev: any[]) => prev.map((p) => p.id === projectRecord.id ? { ...p, status: "published" } : p)); } catch (err) { console.error(err); } }}>Publish</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={async () => {
+                          const allowed = await requirePublishAuth(async () => {
+                            try {
+                              if (user) {
+                                await updateCloudProject(projectRecord.id, { status: "published" });
+                                setLocalProjectsState((prev: any[]) => prev.map((p) => p.id === projectRecord.id ? { ...p, status: "published" } : p));
+                              } else {
+                                const builderState = useBuilder.getState();
+                                const project = builderState.projects[projectRecord.id];
+                                if (project) {
+                                  builderState.publishProject(projectRecord.id);
+                                  setLocalProjectsState((prev: any[]) => prev.map((p) => (p.id === projectRecord.id ? { ...p, status: "published" } : p)));
+                                }
+                              }
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          });
+                          if (!allowed) return;
+                        }}>Publish</DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => handleDuplicateProject(projectRecord)}>Duplicate</DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => {
                           setActiveProject(projectRecord);
@@ -620,7 +766,18 @@ export function MyProjects({
                     </>
                   ) : (
                     <>
-                      <Button size="sm" variant="outline" className="h-11 w-full flex items-center justify-center gap-2" onClick={async () => { await loadCloudProject(projectRecord.id); navigate({ to: "/editor/$projectId", params: { projectId: projectRecord.id } }); }}>
+                      <Button size="sm" variant="outline" className="h-11 w-full flex items-center justify-center gap-2" onClick={async () => { 
+                        const builderState = useBuilder.getState();
+                        const localProject = builderState.projects[projectRecord.id];
+                        if (localProject) {
+                          builderState.loadProject(projectRecord.id);
+                          setShowProjectDashboard(false);
+                          navigate({ to: "/editor/$projectId", params: { projectId: projectRecord.id } });
+                        } else if (user) {
+                          await loadCloudProject(projectRecord.id);
+                          navigate({ to: "/editor/$projectId", params: { projectId: projectRecord.id } });
+                        }
+                      }}>
                         <Edit2 className="h-4 w-4" /> Edit
                       </Button>
                       <Button size="sm" className="h-11 w-full bg-[#FACC15] text-[#111111] hover:bg-[#FDE047] flex items-center justify-center gap-2" onClick={async () => { await handlePreviewProject(projectRecord.id); }}>

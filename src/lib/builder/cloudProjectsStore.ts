@@ -48,7 +48,7 @@ export const useCloudProjectsStore = create<CloudProjectsState>((set, get) => ({
 
     const firebaseUser = auth.currentUser;
     if (!firebaseUser) {
-      set({ projects: [], loading: false, error: "Unable to load cloud projects without an active Firebase session." });
+      set({ projects: [], loading: false, error: null });
       return;
     }
 
@@ -57,8 +57,9 @@ export const useCloudProjectsStore = create<CloudProjectsState>((set, get) => ({
       return;
     }
 
-    if (get().loadPromise) {
-      return get().loadPromise;
+    const existingPromise = get().loadPromise;
+    if (existingPromise) {
+      return existingPromise;
     }
 
     set({ loading: true, error: null });
@@ -88,6 +89,6 @@ export const useCloudProjectsStore = create<CloudProjectsState>((set, get) => ({
     return promise;
   },
   refreshProjects: () => {
-    set((state) => ({ refreshVersion: state.refreshVersion + 1 }));
+    set((state) => ({ refreshVersion: state.refreshVersion + 1, loadPromise: null }));
   },
 }));
